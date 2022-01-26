@@ -8,11 +8,42 @@
 library(lubridate)
 library(dplyr)
 library(ggplot2)
+library(rgdal)   # for spatial data
 
 
 # get data
 path = 'C:/Users/ge45lep/Documents/2022_BarkBeetles_Bavaria/rawData/Fwd__Borkenkäferforschung__Datentransfer'
+
+# Load RData table
 load(paste(path, 'BoMo_2015_2021_Rohdaten.RData', sep = "/"))
+
+# Read XY coordinates
+xy <- read.csv2(paste(path, "BoMo_Fallenstandorte_Lage_Laufzeit.csv", sep = '/'))
+
+head(xy)
+
+xy <- read.delim(paste(path, "BoMo_Fallenstandorte_Lage_Laufzeit2.txt", sep = '/'), 
+               sep = ';', dec = ".")
+
+head(xy)
+
+
+xy <- read.csv(paste(path, "BoMo_Fallenstandorte_Lage_Laufzeit2.csv", sep = '/'), 
+                 sep = ',', dec = ",",skip = 0, encoding = "UTF-16LE")
+
+head(xy)
+
+str(xy)
+
+
+
+
+# Test decimals reading
+xy <- read.delim(paste(path, "test_decimals2.txt", sep = '/'), 
+               sep = '\t', dec = ",",skip = 0)
+head(xy)
+
+
 # Investigate beetle data: Bavaria
 
 # Change name of the table
@@ -38,8 +69,8 @@ dat$kont_dat <- as.Date(dat$kont_dat)
 str(dat)
 
 # Species
-# Buchdrucker      
-# Kupferstecher      
+# Buchdrucker  : Ips typographus 
+# Kupferstecher: Pityogenes chalcographus      
 # Variation within a year?
 # yes, need to split in year, months, dates
 dat <- dat %>% 
@@ -66,5 +97,8 @@ dat %>%
 
 # 
 summary(dat)
+
+# 
+
 
 
