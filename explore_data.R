@@ -3,6 +3,8 @@
 # -----------------------------------
 # Explore bark beetle data
 # -----------------------------------
+rm(list=ls()) 
+
 
 # Libs -----------------------------------------------------------
 library(lubridate)
@@ -18,33 +20,17 @@ path = 'C:/Users/ge45lep/Documents/2022_BarkBeetles_Bavaria/rawData/Fwd__Borkenk
 load(paste(path, 'BoMo_2015_2021_Rohdaten.RData', sep = "/"))
 
 # Read XY coordinates
-xy <- read.csv2(paste(path, "BoMo_Fallenstandorte_Lage_Laufzeit.csv", sep = '/'))
+# need to save the csv fil as a new file, otherwise it did not work
+# or use teh  version 3: now it worked with the original one! 
+xy <- read.table(paste(path, "BoMo_Fallenstandorte_Lage_Laufzeit.csv", sep = '/'), 
+                 dec=',', sep = ';', 
+                 header = T, quote="\"", 
+                 skip = 1, #header = T,
+                 skipNul = TRUE) # ,fileEncoding="UTF-16LE"
 
-head(xy)
-
-xy <- read.delim(paste(path, "BoMo_Fallenstandorte_Lage_Laufzeit2.txt", sep = '/'), 
-               sep = ';', dec = ".")
-
-head(xy)
-
-
-xy <- read.csv(paste(path, "BoMo_Fallenstandorte_Lage_Laufzeit2.csv", sep = '/'), 
-                 sep = ',', dec = ",",skip = 0, encoding = "UTF-16LE")
-
-head(xy)
-
-str(xy)
-
-
-
-
-# Test decimals reading
-xy <- read.delim(paste(path, "test_decimals2.txt", sep = '/'), 
-               sep = '\t', dec = ",",skip = 0)
-head(xy)
-
-
+#readLines(paste(path, "BoMo_Fallenstandorte_Lage_Laufzeit.csv", sep = '/'))
 # Investigate beetle data: Bavaria
+head(xy)
 
 # Change name of the table
 dat <- Daten_B01
@@ -69,6 +55,8 @@ dat$kont_dat <- as.Date(dat$kont_dat)
 str(dat)
 
 # Species
+
+# -----------------------------------
 # Buchdrucker  : Ips typographus 
 # Kupferstecher: Pityogenes chalcographus      
 # Variation within a year?
