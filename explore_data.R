@@ -233,24 +233,48 @@ xy_sf <-
   mutate(globalid = toupper(globalid))
 
 
+
+
+
+
+# Get totaa sum of buchdrucker over year --------------------------------------------------------
+#dat_sum <- 
+  dat %>%  
+  dplyr::filter(doy > 91  & year != 2014) %>%  # & art == 'Buchdrucker'
+  group_by(year, art) %>% 
+  mutate(bav_sum = sum(fangmenge, na.rm =T)) %>% 
+  ggplot(aes(y = bav_sum,
+             x = year,
+             color = art)) + 
+  geom_line()
+  
+
+# get the summary data to merge with XY coordinates!  
+dat.sum.IT <-   dat %>%  
+  dplyr::filter(doy > 91  & year != 2014 & art == 'Buchdrucker') %>%  # & art == 'Buchdrucker'
+  group_by(year, art, globalid) %>% 
+  mutate(bav_sum = sum(fangmenge, na.rm =T)) %>% 
+  select(bav_sum, globalid, year)
+
+
+
 # Merge data by globalid
-# 
-merged_df <- xy_sf %>% 
-  right_join(dat, 'globalid')
+buch_df <- xy_sf %>% 
+  right_join(dat.sum.IT, 'globalid')
 
 
 
 
 
 
-# Plots spatial data ------------------------------------
+# Plot spatial data ------------------------------------
 
 # 
 windows()
-merged_df %>% 
-  filter(art == 'Buchdrucker') %>% 
+buch_df %>% 
+  filter(year == 2021) %>% 
   ggplot() + 
-  geom_sf(aes(color = fangmenge ))  + # , size = 0.5 , size = AREA
+  geom_sf(aes(color = bav_sum ))  + # , size = 0.5 , size = AREA
   scale_color_continuous(low = "lightgreen", 
                          high = "darkgreen",
                          space = "Lab", 
@@ -260,19 +284,6 @@ merged_df %>%
 
 
 # R animate: ------------------------------------------------
-
-# Sums by months and years
-
-buch_sum_ysr <- dat %>%
-  filter(art == 'Buchdrucker') %>% 
-  group_by(globalid, year) %>% 
-  summarize(sum = sum(fangmenge, na.rm = T))
-
-# Merge summarized data with XY 
-buch_df <- xy_sf %>% 
-  right_join(buch_sum_ysr, 'globalid')
-
-
 
 
 # Get data:
@@ -284,21 +295,40 @@ library(gganimate)
 library(transformr)
 
 
-# need to recheck!! 
-ggplot(buch_df) +   # base map
+library(rnaturalearth) # for map data
+library(ggspatial)
+
+
+# get spatial data: 
+# get and bind country data
+de_sf <- ne_states(country = "germany", returnclass = "sf")
+
+# Get only bavaria
+bav_sf <- de_sf %>% 
+  dplyr::filter(name_en == "Bavaria")
+
+
+
+
+
+
+
+
+# need to recheck!! gg anime makes a png, but not a video 
+ggplot(bav_sf) +   # base map
   geom_sf(color = 'black', 
           fill  = 'grey93') + 
   geom_sf(data = buch_df,
-          aes(color = sum)) + # , size = Age, size = 0.8size by factor itself!
+          aes(color = bav_sum)) + # , size = Age, size = 0.8size by factor itself!
   viridis::scale_color_viridis(discrete = FALSE, option = "viridis",
                                na.value = "red") +
- # annotation_scale(location = "bl", width_hint = 0.4) +
+  annotation_scale(location = "bl", width_hint = 0.4) +
   theme_bw() +
   xlab("Longitude") + 
   ylab("Latitude") +
   # gganimate specific bits: ------------------
-labs(title = 'Changes in Tree Height over years {current_frame}',
-     color  = "Tree height [m]") +
+  labs(title = 'beetle population counts {current_frame}',
+       color  = "Beetle [count]") +
   transition_manual(year) +
   #transition_time(year) +
   ease_aes('linear')
