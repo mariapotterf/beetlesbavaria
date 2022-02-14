@@ -9,7 +9,6 @@ rm(list=ls())
 # Libs -----------------------------------------------------------
 library(lubridate)
 library(dplyr)
-#library(rgdal)   # for spatial data
 library(sf)
 library(tidyverse)
 library(ggplot2)
@@ -186,7 +185,7 @@ dat %>%
     facet_wrap(art~., scales = 'free')
   
   
-# Get the rolling averages & and plot population counts by DOY over years
+# Get the rolling averages & and plot population counts by DOY over years --------------
   
   # April 1st  = DOY 91
  dat %>%  
@@ -337,3 +336,31 @@ ggplot(bav_sf) +   # base map
 
 
 
+# Try if the gganimate actually works: now works widh gifski renderer!!!
+
+library(ggplot2)
+library(gganimate)
+theme_set(theme_bw())
+
+library(gapminder)
+head(gapminder)
+
+# make a plot
+p <- ggplot(
+  gapminder, 
+  aes(x = gdpPercap, y=lifeExp, size = pop, colour = country)
+) +
+  geom_point(show.legend = FALSE, alpha = 0.7) +
+  scale_color_viridis_d() +
+  scale_size(range = c(2, 12)) +
+  scale_x_log10() +
+  labs(x = "GDP per capita", y = "Life expectancy")
+p
+
+p<-  p + transition_time(year) +
+  labs(title = "Year: {frame_time}")
+
+install.packages("gifski")
+library(gifski)
+
+animate(p, renderer = gifski_renderer())
