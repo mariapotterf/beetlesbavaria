@@ -124,7 +124,7 @@ out_df <-
   #  tail()
 
 
-# Need to check out this part!!! how to merge teh data! keep the id as buff_)id!
+# Need to check out this part!!! how to merge teh data! keep the id as buff_id!
 #out_df <- 
   out_df %>% 
   left_join(dat, by = c('globalid', 'year', 'falsto_name', 'aelf'))
