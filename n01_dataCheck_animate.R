@@ -13,10 +13,11 @@ library(sf)
 library(tidyverse)
 library(ggplot2)
 library(zoo)
+library(data.table)
 
 # get data
 path = 'C:/Users/ge45lep/Documents/2022_BarkBeetles_Bavaria/rawData/Fwd__Borkenkäferforschung__Datentransfer'
-out_path = 'C:/Users/ge45lep/Documents/2022_BarkBeetles_Bavaria/outSpatial'
+out_path = 'C:/Users/ge45lep/Documents/2022_BarkBeetles_Bavaria'
 
 # Load RData table
 load(paste(path, 'BoMo_2015_2021_Rohdaten.RData', sep = "/"))
@@ -45,9 +46,6 @@ xy_sf <- st_transform(xy_sf, crs = 3035)
 
 # Export as gpkg file
 # 
-# Make a use of gpkg in R: https://inbo.github.io/tutorials/tutorials/spatial_standards_vector/
-xy_sf %>% 
-  st_write(paste(out_path, "xy_3035.gpkg", sep = '/'))
 
 
 # Get dynamics data -------------------------------------------------------------- 
@@ -185,6 +183,13 @@ dat %>%
     facet_wrap(art~., scales = 'free')
   
   
+  
+# ----------------------------------------------
+#              ROLLING AVERAGES
+# ----------------------------------------------
+  
+   
+  
 # Get the rolling averages & and plot population counts by DOY over years --------------
   
   # April 1st  = DOY 91
@@ -227,16 +232,27 @@ dat <- dat %>%
 
 # for coordinates table --------------------------------------------------------------------------
 
+# Get the letters to upper cases
 xy_sf <-
   xy_sf %>% 
   mutate(globalid = toupper(globalid))
 
 
 
+# Export XY and DAT table -------------------------------------------------
+
+
+# Make a use of gpkg in R: https://inbo.github.io/tutorials/tutorials/spatial_standards_vector/
+# Write the output XY files in 3035 coordinate
+xy_sf %>% 
+  st_write(paste(out_path, "outSpatial/xy_3035.gpkg", sep = '/'), append=FALSE)
+
+
+data.table::fwrite(dat, paste(out_path, 'outSpatial/dat.csv', sep = "/"))
 
 
 
-# Get totaa sum of buchdrucker over year --------------------------------------------------------
+# Get total sum of buchdrucker over year --------------------------------------------------------
 #dat_sum <- 
   dat %>%  
   dplyr::filter(doy > 91  & year != 2014) %>%  # & art == 'Buchdrucker'
@@ -292,10 +308,12 @@ library(gapminder)
 library(ggplot2)
 library(gganimate)
 library(transformr)
-
+library(gifski)  # needed for correct rendering of the animation
 
 library(rnaturalearth) # for map data
 library(ggspatial)
+
+
 
 
 # get spatial data: 
@@ -307,14 +325,9 @@ bav_sf <- de_sf %>%
   dplyr::filter(name_en == "Bavaria")
 
 
-
-
-
-
-
-
+# 
 # need to recheck!! gg anime makes a png, but not a video 
-ggplot(bav_sf) +   # base map
+p<-ggplot(bav_sf) +   # base map
   geom_sf(color = 'black', 
           fill  = 'grey93') + 
   geom_sf(data = buch_df,
@@ -332,6 +345,9 @@ ggplot(bav_sf) +   # base map
   #transition_time(year) +
   ease_aes('linear')
 
+
+# animate with the gifski renderer
+animate(p, renderer = gifski_renderer())
 
 
 
