@@ -50,8 +50,12 @@ buff_ras <- rast(buff_ras)   # convert to terra format
 #grid_values  <- values(grid_sel_ras)     # resolution is still 30 m, grid value for each pixel; this is a vector of values
 
 
+# Export raster to check it on the QGIS
+# writeRaster(buff_ras, paste(myPath, outFolder, 'buff_ras.tif', sep = '/'), overwrite=TRUE)
+
 
 # Resample forest raster to match/snap/align the disturbance raster
+# Buffer raster is already resampled
 for_type_resample <- terra::resample(for_type,  # raster to be resampled 
                                      dist,      # Master raster
                                      method = 'near')
@@ -61,6 +65,8 @@ for_type_resample <- terra::resample(for_type,  # raster to be resampled
 forest_ex <- terra::extract(for_type_resample, buff, list = F)
 dist_ex   <- terra::extract(dist,     buff, list = F)
 buff_ex   <- terra::extract(buff_ras, buff, list = F)
+
+
 
 # Does the extend fit?? YES
 nrow(forest_ex)
@@ -86,67 +92,122 @@ dist_df <-
   na.omit(.) %>%
   group_by(ID, disturbance_map_bavaria) %>%
   summarize(disturbance_ha = n() * 0.09) %>%
-  rename(dist_year = disturbance_map_bavaria ) %>% 
+  rename(year = disturbance_map_bavaria ) %>% 
   ungroup(.)
 
-# merge forest and disturbance data
-dist_df <- 
+
+# Compare two vectors to fond out which ones are missing? ----------------------------------
+#a <- 1:497
+
+
+setdiff(a, unique(buff_ex$layer))
+#  [1]  61  62 162 166 167 257 291 296 297 298 300 301 306 308 314 324 325 327 331 332 337 338 350 363    # in total, 24 traps (5% of all traps)
+# for now I can just proceed with the buffer_id/ or double the infos with the other databases?
+
+# Buffer:
+# - layer is a raster number
+# - id - the number in a list
+
+# Chck it for the buffer: 
+buff_ex %>% 
+  #filter(layer == 61)  # no rows to return
+  filter(layer == 370)  
+
+# Need to merge the data by the ID !
+# my ID is already in teh forest_df and dist_df, maybe I do not need to have also buffer indication?
+# just directly link with the XY value 
+  
+
+
+# Seems that some data have the same coordinates?
+# Eg. 61 and 370?
+# Check teh coordinates?
+xy %>% filter(OBJECTID == 61 | OBJECTID == 370) #%>% # They have exactly teh same geometry, but different globalid
+# Subset the data by the 
+duplic_globid_v <- xy %>% 
+  filter(OBJECTID == 61 | OBJECTID == 370) %>% 
+  distinct(globalid) %>% 
+  pull()
+  
+
+# Look at the beetle database, why the data can be duplicated
+dat %>% 
+ # filter(globalid == "A94A9D61-E305-495D-83E1-9DBCBD395977") %>% 
+  filter(globalid %in% duplic_globid_v) %>% 
+  filter(representativ != 'Ja') %>% 
+  print(n = 40)
+
+
+
+# Need to aggregate the buff values as well, as now they are for each pixel
+buff_df <- 
+  buff_ex %>% 
+    distinct()    # one ID can have several buffer numbers
+  
+  
+ # group_by(layer, ID) %>% 
+#  summarize(buff_id = mean(layer))
+  
+length(unique(buff_ex$ID))    # General ID, order,              497
+length(unique(buff_ex$layer)) # indicator of the XY OBJECTID    473
+
+# Merge forest and disturbance data by years, by the buff_id or ID - should be the same ------------------
+dist_for_df <- 
   forest_df %>% 
   right_join(dist_df, by = "ID") %>%
-  right_join(buff_ex, by = "ID") %>% 
-  rename(OBJECTID = layer)
+  #right_join(buff_ex, by = "ID") %>% 
+  rename(OBJECTID = ID)
     #print(n=40)
   
 # CHeck the location oif idd 446 and 1: 25 m, close to each other; therefore the values are recorded two times, for value of record
 #rename(OBJECTID = gridindex)
 
 unique(buff_ex$layer)
-sort(unique(dist_df$layer))
+sort(unique(dist_for_df$buff_id))
 unique(xy$OBJECTID)
 
 
+# The ID and buff_id are thow different things
+#dist_for_df$ID == dist_for_df$buff_id
 
-# Link to beetle data; first link to the XY data by layer and OBJECTID 
-# than add beetle data by globalid
-# the buffer 'layer' first links to FID for xy data
+length(unique(dist_for_df$ID))      # 497
+length(unique(dist_for_df$buff_id)) # 473
+
+
 
 # get rid of geometry
 xy_df <- xy %>%  
   st_drop_geometry() #%>% 
-  #rename(ID = OBJECTID)
+#rename(ID = OBJECTID)
 
 
-# Spatial join between XY data, RS mortality (by buffer ID) and beetle counts (globalid) 
+# Link disturbance data to geometry data:
+out_df <- dist_for_df %>% 
+  left_join(xy_df, by = "OBJECTID")
+
+
+# Link to beetle data, by globalid
+head(dat)
+
+
+
+
+# Standardize the beetle counts -------------------------------------------
+
+
+
+
+# Join between XY data, RS mortality (by buffer ID) and beetle counts (globalid) ---------------
 out_df <- 
   dist_df %>% 
   left_join(xy_df, by = "OBJECTID") %>%
   rename(year = dist_year )
-  #  tail()
-
-
-# Need to check out this part!!! how to merge teh data! keep the id as buff_id!
-#out_df <- 
-  out_df %>% 
-  left_join(dat, by = c('globalid', 'year', 'falsto_name', 'aelf'))
-  
+#  tail()
 
 
 
 
-
-
-
-
-
-
-
-
-
-
-# Join beetle count data with XY and grid attributes
-dat_df <- dat %>% 
-  full_join(xy_df, by = 'globalid')
-
+# Get number of traps by buffer - always one here, unless they were very close to each other
 
 # How many traps do I have per hexagon?
 # they vary by year;
@@ -163,14 +224,14 @@ trap_n <-
 #print(n = 40)
 
 
-# Let's see if the counts are right: 
-# filter just specific values:  Aldersbach          224  2017    23
-dat_df %>% 
-  filter(monsto_name == 'Aldersbach' & year == 2017 & art == 'Buchdrucker' & OBJECTID == 218 & representativ == 'Ja')
+# # Let's see if the counts are right: 
+# # filter just specific values:  Aldersbach          224  2017    23
+# dat_df %>% 
+#   filter(monsto_name == 'Aldersbach' & year == 2017 & art == 'Buchdrucker' & OBJECTID == 218 & representativ == 'Ja')
+# 
 
-
-dat_df %>% 
-  distinct(einheit)  # Stuck = number/count, NA?
+# dat_df %>% 
+#   distinct(einheit)  # Stuck = number/count, NA?
 
 
 # get number of beetles per hexagon by years
@@ -184,6 +245,44 @@ out_df <- beetle_n %>%
   mutate(beetle_by_trap = beetle_sum/trap_n) %>% 
   left_join(dist_df) #%>% 
 #mutate(lag_dist_sum = lag(dist_sum))
+
+
+# Need to check out this part!!! how to merge teh data! keep the id as buff_id!
+out_df2 <- 
+  out_df %>% 
+  right_join(dat, by = c('globalid', 'year', 'falsto_name', 'aelf'))  
+
+# the beetle data have 490 globalids
+# the XY has 497 ids
+
+# which ones are missing?
+setdiff(unique(xy$globalid), unique(dat$globalid))
+
+# [1] "CE935FFE-0B77-41E8-8B8A-A48338954BD3" "BF168CB3-750D-4135-866A-15C8477FEB28" "CAE0A588-C73D-4389-AF43-EA22E31B0117" "16622072-13C8-4CCD-9A11-501A19B7A0A8" "EC1B6963-339B-40AC-B87F-FC8DF8CD3566"
+# [6] "6CECBC3C-F69B-4A5C-9E41-B053F92DA5B4" "37E3B5F6-76E4-4CDA-91B4-FADA03A033DD"
+
+# Are those really missing from beetle data?
+dat %>% 
+  filter(globalid == "CE935FFE-0B77-41E8-8B8A-A48338954BD3")  # thisis explained the notes, that several sites have been moved, but have the same name, althought unique globalid
+
+
+# FINALIZE THE DATABASE!!
+
+# Questions: do counts corresponds to total yearly mortality?
+# -----------------------------------------------------------------------------
+
+# get beetle sums per year: IT, PC individually, and together
+# lag the RS data by one year
+# get beetle sums until/before july - need to calculate the daily counts from the dates?
+
+# Get yearly sums of beetle counts:
+out_df2 %>% 
+  group_by(OBJECTID,  # this is a buffer indicator
+           year,
+           art
+  )
+
+
 
 # Add lagged disturbance data by one year:
 # need to be correctly arranged;
