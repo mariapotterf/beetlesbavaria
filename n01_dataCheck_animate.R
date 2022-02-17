@@ -46,6 +46,8 @@ xy_sf <- st_transform(xy_sf, crs = 3035)
 
 # Export as gpkg file
 # 
+st_write(xy_sf, paste(myPath, outFolder, "xy_3035.gpkg", sep = "/"), 
+         layer = 'xy_3035') # write XY file
 
 
 # Get dynamics data -------------------------------------------------------------- 
