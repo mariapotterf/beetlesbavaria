@@ -1,4 +1,6 @@
 
+# here are my git changes in Home dir
+
 
 # -----------------------------------
 # Explore bark beetle data
