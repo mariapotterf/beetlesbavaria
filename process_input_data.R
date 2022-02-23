@@ -121,7 +121,6 @@ plot(xy_500['OBJECTID'])
 # Process raster data -----------------------------------------------------
 
 # Mask disturbances only to the coniferous forest
-# !!!!! complete here extract by mask!!!
 # limit the forest damage to the conifeorous forests, to corresponds to beetle data
 
 # convert first to terra format:
@@ -129,20 +128,36 @@ forest_terra  <- rast(forest_type)
 disturb_terra <- rast(disturbance)
 
 # # simply substitute the values by NA, keep only ceniferous = 2
-forest_terra <-subst(forest_terra, 1, NA) # change deciduous to NA
-forest_terra <-subst(forest_terra, 0, NA)# change background to NA
+forest_mask <-subst(forest_terra, 1, NA) # change deciduous to NA
+forest_mask <-subst(forest_terra, 0, NA)# change background to NA
 
 
 # Keep only disturbances > 2014, replace other values by NA
-disturbance14 <- disturbance
-values(disturbance14)[values(disturbance14) < 2013 ] <- NA
+disturb_terra14 <- disturb_terra
+values(disturb_terra14)[values(disturb_terra14) < 2013 ] <- NA
 
 
-# get extend and set correct projection
-ext <- as(extent(disturbance14), 'SpatialPolygons')
-ext <- st_as_sf(ext)
-st_crs(ext) <- st_crs(grid)
+
+# Make sure that the extend of both rasters fit:
+# Resample forest raster to match/snap/align the disturbance raster
+# Buffer raster is already resampled
+forest_mask_resample <- terra::resample(forest_mask,  # raster to be resampled 
+                                     disturb_terra14,      # Master raster
+                                     method = 'near')
 
 
+# Extract by mask; creates a list of datasets
+#forest_ex <- terra::extract(forest_mask_resample, buff, list = F)
+#dist_ex   <- terra::extract(dist,     buff, list = F)
+#buff_ex   <- terra::extract(buff_ras, buff, list = F)
+
+
+
+# Mask the disturbance data by the coniferous forest extent
+disturb13 <- mask(disturb_terra14, forest_mask_resample)
+
+
+windows()
+plot(disturb13)
 
 
