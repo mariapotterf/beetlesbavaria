@@ -89,7 +89,7 @@ dat      <- fread(paste(myPath, outFolder, "dat.csv", sep = "/"))
 # correlate teh values
 
 
-# Process input sf data ------------------------------------------------------
+# Process vector (sf) data ------------------------------------------------------
 
 # Simplify bavaria geometry, keep only geometry
 bav.simple <- st_simplify(bav.shp, preserveTopology = FALSE, dTolerance = 1000)
@@ -119,6 +119,19 @@ plot(xy_500['OBJECTID'])
 
 
 # Process raster data -----------------------------------------------------
+
+# Mask disturbances only to the coniferous forest
+# !!!!! complete here extract by mask!!!
+# limit the forest damage to the conifeorous forests, to corresponds to beetle data
+
+# convert first to terra format:
+forest_terra  <- rast(forest_type)
+disturb_terra <- rast(disturbance)
+
+# # simply substitute the values by NA, keep only ceniferous = 2
+forest_terra <-subst(forest_terra, 1, NA) # change deciduous to NA
+forest_terra <-subst(forest_terra, 0, NA)# change background to NA
+
 
 # Keep only disturbances > 2014, replace other values by NA
 disturbance14 <- disturbance
