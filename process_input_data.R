@@ -127,9 +127,9 @@ plot(xy_500['OBJECTID'])
 forest_terra  <- rast(forest_type)
 disturb_terra <- rast(disturbance)
 
-# # simply substitute the values by NA, keep only ceniferous = 2
+# # simply substitute the values by NA, keep only coniferous == 2
 forest_mask <-subst(forest_terra, 1, NA) # change deciduous to NA
-forest_mask <-subst(forest_terra, 0, NA)# change background to NA
+forest_mask <-subst(forest_terra, 0, NA) # change background to NA
 
 
 # Keep only disturbances > 2014, replace other values by NA
@@ -173,4 +173,37 @@ library(elevatr)
 
 class(xy)
 
-elev<- get_elev_raster(xy)
+#elev<- get_elev_point(xy)
+# get DTM raster for Bavaria
+elev<- get_elev_raster(xy, z = 12)
+
+# Calculate aspect, topography, slope, TRI = terrain roughness index
+slope     <- terra::terrain(elev, 'slope',     neighbors = 4)
+aspect    <- terra::terrain(elev, 'aspect',    neighbors = 4)
+tpi       <- terra::terrain(elev, 'TPI',       neighbors = 4)
+tri       <- terra::terrain(elev, 'TRI',       neighbors = 4)
+roughness <- terra::terrain(elev, 'roughness', neighbors = 4)
+
+
+# Extract values to XY points, creates a vector
+xy2 <- xy
+
+v_elev      <- extract(elev, xy)
+v_slope     <- extract(slope, xy)
+v_aspect    <- extract(aspect, xy)
+v_tpi       <- extract(tpi, xy)
+v_tri       <- extract(tri, xy)
+v_roughness <- extract(roughness, xy)
+
+# merge all vectors as a new column to XY data
+xy2 <- xy %>% 
+  mutate(elev =   v_elev,
+         slope =  v_slope,
+         aspect = v_aspect,
+         tpi =  v_tpi,
+         tri =  v_tri,
+         roughness =  v_roughness)
+
+# Export the file
+st_write(xy2, paste(myPath, outFolder, "xy_3035_topo.gpkg", sep = "/"), 
+                   layer = 'xy_3035_topo') # read watershed
