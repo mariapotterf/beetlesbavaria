@@ -160,4 +160,17 @@ disturb13 <- mask(disturb_terra14, forest_mask_resample)
 windows()
 plot(disturb13)
 
+# Export clean distrubance raster
+writeRaster(disturb13, paste(myPath, outFolder, 'disturbance13_conif.tif', sep = '/'), overwrite=TRUE)
 
+
+
+# ------------------------------------------------------------------------------
+#   Get terrain characteristics
+# ------------------------------------------------------------------------------
+
+library(elevatr)
+
+class(xy)
+
+elev<- get_elev_raster(xy)
