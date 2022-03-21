@@ -8,6 +8,8 @@
 rm(list=ls()) 
 
 
+source('myPaths.R')
+
 # Libs -----------------------------------------------------------
 library(lubridate)
 library(dplyr)
@@ -39,7 +41,8 @@ head(xy)
 
 
 # Convert coordinates to sf object
-xy_sf <- st_as_sf(xy, coords = c('x_coord', 'y_coord' ), crs = 32632 )  # What is a coordinate system??? for forestry in bavaria?
+xy_sf <- st_as_sf(xy, coords = c('x_coord', 'y_coord' ), 
+                  crs = 32632 )  # What is a coordinate system??? for forestry in bavaria?
 
 plot(xy_sf["OBJECTID"])
 
@@ -49,7 +52,8 @@ xy_sf <- st_transform(xy_sf, crs = 3035)
 # Export as gpkg file
 # 
 st_write(xy_sf, paste(myPath, outFolder, "xy_3035.gpkg", sep = "/"), 
-         layer = 'xy_3035') # write XY file
+         layer = 'xy_3035', # # write XY file 
+         append = FALSE)    # allow file to overwrite
 
 
 # Get dynamics data -------------------------------------------------------------- 
@@ -271,13 +275,15 @@ data.table::fwrite(dat, paste(out_path, 'outSpatial/dat.csv', sep = "/"))
 # get the summary data to merge with XY coordinates!  
 dat.sum.IT <-   dat %>%  
   dplyr::filter(doy > 91  & year != 2014 & art == 'Buchdrucker') %>%  # & art == 'Buchdrucker'
-  group_by(year, art, globalid) %>% 
-  mutate(bav_sum = sum(fangmenge, na.rm =T)) %>% 
-  select(bav_sum, globalid, year)
+  group_by(year, month, art, globalid) %>% 
+  mutate(bav_sum = sum(fangmenge, na.rm =T)) %>%  
+  mutate(time = paste(year, month, sep = '_')) %>% 
+  select(bav_sum, globalid, time) #%>% 
+ 
 
 
 
-# Merge data by globalid
+# Merge spatial data with sum data by globalid
 buch_df <- xy_sf %>% 
   right_join(dat.sum.IT, 'globalid')
 
@@ -335,7 +341,8 @@ p<-ggplot(bav_sf) +   # base map
   geom_sf(color = 'black', 
           fill  = 'grey93') + 
   geom_sf(data = buch_df,
-          aes(color = bav_sum)) + # , size = Age, size = 0.8size by factor itself!
+          aes(color = bav_sum,
+              size = bav_sum)) + # , size = Age, size = 0.8size by factor itself!
   viridis::scale_color_viridis(discrete = FALSE, option = "viridis",
                                na.value = "red") +
   annotation_scale(location = "bl", width_hint = 0.4) +
@@ -345,7 +352,7 @@ p<-ggplot(bav_sf) +   # base map
   # gganimate specific bits: ------------------
   labs(title = 'beetle population counts {current_frame}',
        color  = "Beetle [count]") +
-  transition_manual(year) +
+  transition_manual(time) +
   #transition_time(year) +
   ease_aes('linear')
 
