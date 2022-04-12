@@ -78,7 +78,9 @@ str(dat)
 # Species:
 # -----------------------------------
 # Buchdrucker  : Ips typographus 
-# Kupferstecher: Pityogenes chalcographus      
+# Kupferstecher: Pityogenes chalcographus   
+
+# The counts of Kupferstecher needs to be divided by 10!!
 
 
 # Variation within a year?
@@ -90,7 +92,7 @@ dat <- dat %>%
                 doy   =  lubridate::yday(kont_dat) + 1)  # as POXIT data has January 1st at 0
 
 
-# get basic stats: count by beetles over year, counts by records
+# get basic stats: count by beetles over year, counts by records/traps
 nrow(dat)
 
 # Some basic plotting
@@ -106,7 +108,6 @@ dat %>%
   facet_grid(.~art)
 
 
-
 # Split data between years: , until 2018, > 2018 - drought years, 
 # need to standardize data between years: get mean yearly counts?
 # maybe also standarziye by number of plots??? does number od plot vary over years?
@@ -119,22 +120,123 @@ dat %>%
             my_med = median(fangmenge, na.rm = T))# %>% 
   
 
+# Get number of traps per year to calculate the mean beetle count per trap
+#trap_n <- 
+  dat %>% 
+    group_by(art, year, globalid) %>% 
+    count()
+  
+# How may traps in total?  
+length(unique(dat$globalid)) # 490 traps
 
-# Make a boxplot of mean values between populations and years intervals:
+# how many traps per year?
+dat %>% 
+  group_by(art, year) %>% 
+  distinct(globalid) %>% 
+  count()
+
+
+# --------------------------------------------------------------------
+#              Standardize beetle counts/trap/year
+# --------------------------------------------------------------------
+
+
+# how to get the average number of beetles per trap per year?
+
+# Calculate sum of beetles/year
+# sum of traps/year
+# divide by frequency of recording: revisit time? : 
+# how many times the traps have been revisited? 'kont_dat': lenght(unique)..
+
+
+# Try on filtered data: globalid  == {0718EEEE-A45E-40C5-9BE6-83EDE98B7035}
+dat %>% 
+  filter(globalid == '{0718EEEE-A45E-40C5-9BE6-83EDE98B7035}') %>% 
+  group_by(art, year) %>% 
+  summarize(sum_beetle = sum(fangmenge, na.rm = T),
+            freq_visit  = length(unique(kont_dat))) #%>% 
+  #distinct(monsto_name, year)
+
+#     art            year sum_beetle freq_visit
+#   <chr>         <dbl>      <int>      <int>
+# 1 Buchdrucker    2015      12628         26
+# 2 Buchdrucker    2016      14907         23
+# 3 Kupferstecher  2015      19632         26
+# 4 Kupferstecher  2016      14506         23
+
+
+# Check if calculation corect of revisit times:
+dat %>% 
+  filter(globalid == '{0718EEEE-A45E-40C5-9BE6-83EDE98B7035}' & art == "Buchdrucker" & year == 2015) %>% 
+  #group_by(art, year) %>% 
+  distinct(kont_dat) %>% 
+  pull()
+
+# some sites have been reisited every 7 days!
+# calculation works great!
+
+# Calculate the mean number of beetles per trap over the season
+# corrected for revisit frequency
+dat_avg <- dat %>% 
+  group_by(art, year, globalid) %>% 
+  summarize(sum_beetles = sum(fangmenge, na.rm = T),
+            sum_trap    = length(unique(globalid)),
+            freq_visit  = length(unique(kont_dat)),
+            avg_beetles_trap = sum_beetles/freq_visit)
+
+# does the average number of beetles per trap differ between locations?
+# between years?
+dat_avg %>% 
+ggplot(aes(x = factor(year),
+           y = avg_beetles_trap,
+           fill = art)) +
+  geom_boxplot() +
+  facet_wrap(.~art , scales = 'free_y') +
+  theme(legend.position = 'bottom')
+
+
 dat <- dat %>% 
-  mutate(time_cl = case_when(
-    year < 2018 ~  '2014-2017',
-    year >= 2018 ~ '2018-2021')) %>% 
+  mutate(drought_period = case_when(
+    year < 2018 ~  'before',
+    year >= 2018 ~ 'after')) 
+
+# Correctly order levels
+dat <- dat %>% 
+  mutate(drought_period = factor(drought_period,
+                                 levels=c('before', 'after')))
+
+
+
+
+
+
+# 
+# Make a boxplot of mean values between populations and years intervals:
+dat_avg <- dat_avg %>% 
+  mutate(drought_period = case_when(
+    year < 2018 ~  'before',
+    year >= 2018 ~ 'after')) %>% #,
+                         
+    #) %>% 
   group_by(art, time_cl) # %>%
+
+# Correctly order levels
+dat_avg <- dat_avg %>% 
+  mutate(drought_period = factor(drought_period,
+                                 levels=c('before', 'after')))
+                                 
+     
 
 
 # geom smooth plot
-dat %>% 
+dat_avg %>% 
   ggplot() +
-  geom_boxplot(aes(x = time_cl,
-                   y = fangmenge,
+  geom_boxplot(aes(x = drought_period,
+                   y = avg_beetles_trap,
                    fill = art)) +
-  scale_y_continuous(limits = c(0,25000))
+#  scale_y_continuous(limits = c(0,25000)) +
+  facet_wrap(.~art, scales = 'free') +
+  theme(legend.position = 'bottom')
   # summarize(my_mean = mean(fangmenge, na.rm = T),
   #           my_med = median(fangmenge, na.rm = T))# %>% 
 
@@ -154,6 +256,27 @@ dat %>%
   scale_color_viridis_d() + 
   facet_grid(.~ art)
   #coord_trans(ytrans="pow10")
+
+
+# for overall counts:
+windows()
+dat %>% 
+  filter(month > 4 ) %>%             #  &  art == "Buchdrucker"
+  ggplot(aes(x = doy,                # DOY = Day of the Year
+             y = fangmenge,
+             color = drought_period )) +
+  #geom_point() +
+  geom_smooth(method = 'loess') +  #'gam' 
+  scale_y_log10()+
+  scale_color_viridis_d() + 
+  facet_grid(.~ art)
+#coord_trans(ytrans="pow10")
+
+
+
+
+
+
 
 
 
