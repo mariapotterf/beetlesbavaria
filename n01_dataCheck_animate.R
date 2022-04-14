@@ -49,12 +49,6 @@ plot(xy_sf["OBJECTID"])
 # Change projection to common european one: 3035
 xy_sf <- st_transform(xy_sf, crs = 3035)
 
-# Export as gpkg file
-# 
-st_write(xy_sf, paste(myPath, outFolder, "xy_3035.gpkg", sep = "/"), 
-         layer = 'xy_3035', # # write XY file 
-         append = FALSE)    # allow file to overwrite
-
 
 # Get dynamics data -------------------------------------------------------------- 
 
