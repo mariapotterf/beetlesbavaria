@@ -5,8 +5,8 @@
 #
 #######################################
 
-#-	Do beetle data correlate with Cornelius data? By hexagons??
-#    - 
+#-	Do beetle data correlate with Cornelius data? 
+# By hexagons??
 #    - 	Is there less beetles if there is more deciduous trees?
 # 
 #-	Effects of drought: 
@@ -63,7 +63,7 @@ library(terra)
 
 # Read my paths -----------------------------------------------------------
 source('myPaths.R')
-source('process_input_data.R')
+#source('process_spatial_input_data.R')
 
 
 
