@@ -154,14 +154,14 @@ forest_mask_resample <- terra::resample(forest_mask,  # raster to be resampled
 
 
 # Mask the disturbance data by the coniferous forest extent
-disturb13 <- mask(disturb_terra14, forest_mask_resample)
+disturb14 <- mask(disturb_terra14, forest_mask_resample)
 
 
 windows()
-plot(disturb13)
+plot(disturb14)
 
 # Export clean distrubance raster
-writeRaster(disturb13, paste(myPath, outFolder, 'disturbance13_conif.tif', sep = '/'), overwrite=TRUE)
+writeRaster(disturb14, paste(myPath, outFolder, 'disturbance14_conif.tif', sep = '/'), overwrite=TRUE)
 
 
 
