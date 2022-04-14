@@ -25,23 +25,170 @@
 # beetle data
 # raster species composition: deciduous/coniferous
 
+rm(list=ls()) 
 
 # Read my paths -----------------------------------------------------------
 source('myPaths.R')
-source('process_input_data.R')
 
 
-# Process:
+# Read libs  --------------------------------------------------------------
+
+library(sf)
+library(dplyr)
+library(data.table)
+library(tidyr)
+library(raster)
+library(rgdal)
+library(tidyverse)
+library(lubridate)
+library(patchwork)
+library(fasterize)
+library(ggpubr)
+library(terra)
+
+
+
+# Read data
+disturbance <- rast(paste(myPath, outFolder,  "disturbance14_conif.tif", sep = "/"))
+
+
+# Get beetle counts
+dat      <- fread(paste(myPath, outFolder, "dat.csv", sep = "/"))
+
+# Get beetle spatial data
+#bav.shp <- st_read(paste(myPath, inFolder, "outline_bavaria.gpkg", sep = "/"), 
+#                   layer = 'outline_bavaria') # read watershed
+#grid    <- st_read(paste(myPath, inFolder, 'grid_12.shp', sep = '/'))
+#xy      <- st_read(paste(myPath, outFolder, "xy_3035.gpkg", sep = "/"), 
+#                   layer = 'xy_3035') # read watershed
+
+xy      <- vect(paste(myPath, outFolder, "xy_3035.gpkg", sep = "/"), 
+                   layer = 'xy_3035') # read watershed
+
+
+# Project data to the same system ----------------------
+# better to project the vector than the raster as the vector maintains the geometry and precision for each vertex: not possible for each pixel
+
+
+#  ---------------------------------------------------------------------
+# How much mortality happened in each buffer? 
+# ----------------------------------------------------------------------
+
+# Check the projection systems: 
+# Get the correct projection: need to be a projected system! 
+
+# Get a dataframe of all EPSG code
+# Check EPSG 3035: 
+epsg_df <- make_EPSG()
+
+# view proj 4 string for the epsg code 4326
+epsg_df %>%
+  filter(code == 3035) # 4326
+
+
+# view proj 4 string for the epsg code 4326
+epsg_df %>%
+  filter(code == 4326)
+
+
+# Project the vector (XY) into raster data
+# Check if the CRS is the same
+crs(disturbance) == crs(xy)
+
+# change the projection of the XY data
+xy <- terra::project(xy, crs(disturbance))
+
+# Create buffers around XY point: r = 500 m to link the estimate RS damage
+buff_500 = xy %>% 
+  buffer(500)   # 500 m
+
+#windows()
+#plot(xy_500['OBJECTID'])
+#plot(xy['OBJECTID'], add = T, col = 'red')
+
+# Itrerate throught the vector's polygons:
+# To iterate through the feature class
+
+for(i in 1:nrow(buff_500)) { 
+  p <- buff_500[i,] 
+  return(p)
+  
+  }
+
+
+
+# Split each row into a sinlgle dataframe
+out <- split( buff_500 , f = buff_500$OBJECTID )
+
+# in total and for every year?
+# loop throught the buffers: over each row (fc)
+# convert to raster
+# make a df with forest and mortality data
+buff_1 <- buff_500[1,]
+
+# Crop the disturbance raster by the buffer
+r1 <-crop(disturbance, buff_1)
+
+# Get the sum of 
+rst_values <- values(r1)
+
+r1_df %>% 
+  filter(!is.na(r1_df)) %>%
+  group_by(disturbance_map_bavaria) %>% 
+    tally()
+    #summarize(dist_ha = count(disturbance_map_bavaria) * 0.09)
+
+
+buff_ls <- split(buff_500, 'OBJECTID')
+
+
+# ---------------------------------------------------------------
+#                       Process
+# ---------------------------------------------------------------
 
 # Make buffers
 # Intersect buffers with forest and disturbance maps
 # export as values from rasters to have a dataframe
 # for each trap: 
-# 
+
+mortality_by_buff <- function(spatVect, ...) {
+
+  # Crop the disturbance raster by the buffer
+  r <-crop(disturbance, 
+           spatVect)
+
+  # Get raster values
+  rst_values <- values(r)
+  
+  # Get a dataframe and count the disturbance cells
+  r_df <- data.frame(year = rst_values)
+  
+  r_df <- r_df %>%
+   filter(!is.na(r_df)) %>%
+    rename(year = disturbance_map_bavaria) %>% 
+   group_by(year) %>%
+   tally()
+  
+  return(r_df)
+}
+
+# Run the function across all buffers
+dist_ls <- 
+  lapply(buff_ls, mortality_by_buff)
+
+# Add OBJECTID to link data to XY beetle data
+dist_ls2 <- map2(dist_ls, buff_500$OBJECTID, ~.x %>% mutate(OBJECTID = .y))
+
+
+# Merge all dataframes in a single one:
+dist_df <- data <- do.call("rbind", dist_ls2)
+
+
+
 
 # Convert objects into terra formats to speed up extraction
 buff     <- vect(xy_500)
-for_type <- rast(forest_type)
+#for_type <- rast(forest_type)
 dist     <- rast(disturbance14)
 
 # Convert buffers to raster
