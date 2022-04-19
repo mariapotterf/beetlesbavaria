@@ -77,8 +77,8 @@ dat <- dat %>%
 
 # Project the vector (XY) into raster data
 # Check if the CRS is the same
-crs(disturbance) == crs(xy)
-
+#crs(disturbance) == crs(xy)
+#
 # change the projection of the XY data
 xy <- terra::project(xy, crs(disturbance))
 
@@ -260,32 +260,50 @@ out_df %>%
 
 
 
+##################################################################
+#             Statistically evaluate data
+##################################################################
 
-# Check out the effects of the lagged values
-windows()
-out_df %>% 
-  filter((art == 'Kupferstecher' & avg_beetles_trap < 3000) | 
-           (art == 'Buchdrucker' & avg_beetles_trap < 10000 )) %>%  #filter(year > 2014 & beetle_by_trap< 30000) %>% 
-  #filter(art == 'Buchdrucker'   & beetle_by_trap < 6000) #%>% 
-  # filter(art == 'Buchdrucker') %>% 
-  ggplot(aes(x = avg_beetles_trap,
-             y = lag_dist_sum,
-             color = art)) +
-  geom_point() + 
-  geom_smooth(method= "loess") +
-  facet_wrap(art ~ drought_period, scales = 'free')
+# What is the variability between traps?
+#                         between traps pairs?
+#                         between years?
+#                         within traps (repeated measures): longitudinal data
+# Dependencies: for one trap over time
+#
+# split in two data: IT, PC
+dat_IT <- dat %>% 
+  filter(art == 'Buchdrucker')
+
+#
+# split in two data: IT, PC
+dat_PC <- dat %>% 
+  filter(art == 'Kupferstecher')
 
 
-windows()
-out_df %>% 
-  filter(year > 2014) %>% 
-  filter(art == 'Kupferstecher') %>% 
-  ggplot(aes(x = beetle_by_trap,
-             y = lag_dist_sum,
-             color = art)) +
-  geom_point() + 
-  geom_smooth(method= "loess") #+
-#facet_grid(art ~ year, scales = 'free')
+# -------------------------------------------
+
+library(nlme)
+m1 <- lm(fangmenge ~ 1, dat_IT)
+
+coef(m1)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
