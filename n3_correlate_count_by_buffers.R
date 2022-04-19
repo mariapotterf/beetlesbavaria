@@ -60,6 +60,11 @@ xy      <- vect(paste(myPath, outFolder, "xy_3035.gpkg", sep = "/"),
                    layer = 'xy_3035') # read watershed
 
 
+# Correct Pityogenes chalcographus counts: divide by 10:
+dat <- dat %>% 
+  mutate(fangmenge =replace(fangmenge, 
+                            art== "Kupferstecher", 
+                            fangmenge[art== "Kupferstecher"]/10)) #%>%
 
 #  ---------------------------------------------------------------------
 # How much mortality happened in each buffer? 
@@ -95,6 +100,9 @@ buff_500 = xy %>%
 # Intersect buffers with forest and disturbance maps
 # export as values from rasters to have a dataframe
 # for each trap: 
+
+buff_ls <- terra::split(buff_500, "OBJECTID")
+
 
 mortality_by_buff <- function(spatVect, ...) {
 
@@ -148,10 +156,6 @@ dist_rs_df2 <- dist_rs_df %>%
                    bemerk,
                    aelf,
                    pk_globalid))
-
-dist_rs_df2 %>% 
-  filter(globalid == 'FA67E0E8-8FB2-4A38-BB5B-0FEC711904A5') %>% 
-  dplyr::select(year, n)
 
 
 # ---------------------------------------------------------
