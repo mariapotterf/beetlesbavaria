@@ -72,11 +72,6 @@ crs(forest_type) == crs(disturbance)
 forest_type <- terra::project(forest_type, crs(disturbance))
 
 
-# Correct Pityogenes chalcographus counts: divide by 10:
-#dat <- dat %>% 
-#  mutate(fangmenge =replace(fangmenge, 
-#                            art== "Kupferstecher", 
-#                            fangmenge[art== "Kupferstecher"]/10)) #%>%
 
 #  ---------------------------------------------------------------------
 # How much mortality happened in each buffer? 
