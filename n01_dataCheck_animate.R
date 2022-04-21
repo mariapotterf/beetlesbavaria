@@ -102,13 +102,6 @@ dat %>%
   facet_grid(.~art)
 
 
-# Update the number of the beetles in Kupferstecher
-dat <- dat %>% 
-  mutate(fangmenge =replace(fangmenge, 
-                            art== "Kupferstecher", 
-                            fangmenge[art== "Kupferstecher"]/10)) #%>%
-
-
 # Split data between years: , until 2018, > 2018 - drought years, 
 # need to standardize data between years: get mean yearly counts?
 # maybe also standarziye by number of plots??? does number od plot vary over years?
