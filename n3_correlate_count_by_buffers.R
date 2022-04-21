@@ -72,7 +72,6 @@ crs(forest_type) == crs(disturbance)
 forest_type <- terra::project(forest_type, crs(disturbance))
 
 
-
 #  ---------------------------------------------------------------------
 # How much mortality happened in each buffer? 
 # ----------------------------------------------------------------------
