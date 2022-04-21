@@ -59,12 +59,24 @@ dat      <- fread(paste(myPath, outFolder, "dat.csv", sep = "/"))
 xy      <- vect(paste(myPath, outFolder, "xy_3035.gpkg", sep = "/"), 
                    layer = 'xy_3035') # read watershed
 
+# Get forest type: 
+forest_type <- rast(paste(myPath, outFolder, "bav_fortype_ext30_int2u_LZW.tif", sep = "/"))
+# code: 
+# 2 - coniferous
+# 1 - deciduous
+# 0 - background
+
+# check the projection of teh raster!
+crs(forest_type) == crs(disturbance)
+
+forest_type <- terra::project(forest_type, crs(disturbance))
+
 
 # Correct Pityogenes chalcographus counts: divide by 10:
-dat <- dat %>% 
-  mutate(fangmenge =replace(fangmenge, 
-                            art== "Kupferstecher", 
-                            fangmenge[art== "Kupferstecher"]/10)) #%>%
+#dat <- dat %>% 
+#  mutate(fangmenge =replace(fangmenge, 
+#                            art== "Kupferstecher", 
+#                            fangmenge[art== "Kupferstecher"]/10)) #%>%
 
 #  ---------------------------------------------------------------------
 # How much mortality happened in each buffer? 
@@ -125,17 +137,70 @@ mortality_by_buff <- function(spatVect, ...) {
   return(r_df)
 }
 
-# Run the function across all buffers
+
+species_comp_by_buff <- function(spatVect, ...) {
+  
+  # Crop the disturbance raster by the buffer
+  r <-crop(forest_type, 
+           spatVect)
+  
+  # Get raster values
+  rst_values <- values(r)
+  
+  # Get a dataframe and count the disturbance cells
+  r_df <- data.frame(species = rst_values)
+  
+  r_df <- r_df %>%
+    filter(!is.na(r_df)) %>%
+    rename(species = bav_fortype_ext30_int2u_LZW) %>% 
+    group_by(species) %>%
+    summarise(species_n = n()) %>% 
+    mutate(freq = species_n / sum(species_n))
+  
+  return(r_df)
+}
+
+
+
+# Run the function across all buffers: for RS disturbances, for tree species composition
 dist_ls <- 
   lapply(buff_ls, mortality_by_buff)
+
+tree_species_ls <- 
+  lapply(buff_ls, species_comp_by_buff)
+
+
+
+
 
 # Add OBJECTID to link data to XY beetle data
 dist_ls2 <- map2(dist_ls, 
                  buff_500$OBJECTID, ~.x %>% mutate(OBJECTID = .y))
 
+dist_ls2 <- map2(dist_ls2, 
+                 buff_500$globalid, ~.x %>% mutate(globalid = .y))
+
+
+
+# Add OBJECTID to link data to XY beetle data
+tree_species_ls2 <- map2(tree_species_ls, 
+                 buff_500$OBJECTID, ~.x %>% mutate(OBJECTID = .y))
+
+tree_species_ls2 <- map2(tree_species_ls2, 
+                         buff_500$globalid, ~.x %>% mutate(globalid = .y))
+
+
+
 
 # Merge all dataframes in a single one:
-dist_rs_df <-do.call("rbind", dist_ls2)
+dist_rs_df      <-do.call("rbind", dist_ls2)
+tree_species_df <-do.call("rbind", tree_species_ls2)
+
+
+# Remove the background: 0, keep only deciduous = 1
+tree_species_df <- tree_species_df %>% 
+  filter(species == 1) 
+
 
 # Merge RS data to XY trap data:
 # get rid of geometry
@@ -146,7 +211,8 @@ xy_df <- xy %>%
 
 # Link disturbance data to geometry data:
 dist_rs_df2 <- dist_rs_df %>% 
-  left_join(xy_df, by = "OBJECTID") %>% 
+  left_join(xy_df, by = c("OBJECTID", 'globalid')) %>% 
+ # left_join(tree_species_df, by = "OBJECTID") %>% 
   dplyr::select(-c(bearbeiter,
                    bearbeit_dat, 
                    von_dat,    
@@ -156,6 +222,7 @@ dist_rs_df2 <- dist_rs_df %>%
                    bemerk,
                    aelf,
                    pk_globalid))
+
 
 
 # ---------------------------------------------------------
@@ -169,7 +236,7 @@ dat <- dat %>%
   dplyr::mutate(year  = lubridate::year(kont_dat), 
                 month = lubridate::month(kont_dat), 
                 day   = lubridate::day(kont_dat),
-                doy   =  lubridate::yday(kont_dat) + 1)  # as POXIT data has January 1st at 0
+                doy   = lubridate::yday(kont_dat) + 1)  # as POXIT data has January 1st at 0
 
 
 
@@ -196,6 +263,7 @@ dat_avg <- dat %>%
             freq_visit  = length(unique(kont_dat)),
             avg_beetles_trap = sum_beetles/freq_visit) #%>%
 
+
 # Classify the drought season
 dat_avg <- dat_avg %>% 
   mutate(drought_period = case_when(
@@ -210,17 +278,26 @@ dat_avg <- dat_avg %>%
 # Link RS disturbance data to Beetle counts data 
 # -----------------------------------------------------------
 
-out_df <- dat_avg %>% 
-  left_join(dist_rs_df2, by = c("globalid", 'year'))
+out_df <- 
+  dat_avg %>% 
+  left_join(tree_species_df, by = "globalid") %>% 
+  left_join(dist_rs_df2, by = c("globalid", 'year', 'OBJECTID')) #%>% 
+ 
 
 # Link to beetle data, by globalid
 head(out_df)
 
 
 # Change pixel counts to ha:
-out_df <- out_df %>% 
-  mutate(n = n*0.09) %>% # convert to hectares
-  rename(RS_area_ha = n) 
+out_df <- 
+  out_df %>% 
+  mutate(n = n*0.09,
+         species_n = species_n*0.09) %>% # convert to hectares
+  rename(RS_area_ha = n,
+         deciduous_area_ha = species_n)  %>% 
+  mutate(RS_area_ha = replace_na(RS_area_ha, 0))  # replace NA values by 0, as no damage have been detected
+  
+
 
 # Add lagged RS mortality --------------------------------------------
 out_df <- 
@@ -237,25 +314,43 @@ out_df <-
 # for current year
 out_df %>% 
   filter(year > 2014 & year < 2021) %>% 
-  #filter(art == 'Buchdrucker') %>% 
+  filter(art == 'Buchdrucker') %>% 
   ggplot(aes(x = avg_beetles_trap ,
              y = RS_area_ha,
              color = art)) +
   geom_point() + 
-  geom_smooth(method= "loess") +
+  geom_smooth(method= "gam") +
   facet_wrap(art ~ drought_period, scales = 'free')
 
 
 # For lagged year
 out_df %>% 
-  filter(year > 2014 & year < 2021) %>% 
-  #filter(art == 'Buchdrucker') %>% 
+  filter(year > 2014 ) %>% 
+  filter(art == 'Buchdrucker') %>% 
   ggplot(aes(x = avg_beetles_trap ,
              y = lag_dist_sum,
              color = art)) +
   geom_point() + 
-  geom_smooth(method= "loess") +
+  geom_smooth(method= "gam") +
   facet_wrap(art ~ drought_period, scales = 'free')
+
+
+
+# Share of deciduous vs betle counts?
+
+
+out_df %>% 
+  filter(year > 2014 ) %>% 
+ # filter(art == 'Buchdrucker') %>% 
+  ggplot(aes(x = freq ,
+             y = avg_beetles_trap )) + 
+  geom_point(alpha = 0.5) + 
+  theme_bw() + 
+  facet_grid(.~art) +
+  xlab('Deciduous share [%]')
+  
+
+
 
 
 
@@ -283,10 +378,50 @@ dat_PC <- dat %>%
 # -------------------------------------------
 
 library(nlme)
-m1 <- lm(fangmenge ~ 1, dat_IT)
+
+# Dies the counts change over years?
+
+# lok at counts per years
+str(dat_IT)
+
+# Variabilita betweeen years
+plot(y = dat_IT$fangmenge, x = as.factor(dat_IT$year ))
+
+# Variability betweeen sites
+dat_IT %>% 
+ggplot(aes(x = as.factor(doy), 
+           y = fangmenge)) +
+  geom_boxplot() +
+  facet_grid(year~.)
+
+
+# Check the variability between counts per one trap over time
+dat_IT %>% 
+  filter(monsto_name == 'Traunstein') %>% 
+  ggplot(aes(x = as.factor(doy), 
+             y = fangmenge,
+             color = as.factor(year))) +
+  geom_point()
+
+# Check variability between locations?
+dat_IT %>% 
+  #filter(monsto_name == 'Traunstein') %>% 
+  ggplot(aes(x = as.factor(monsto_name), 
+             y = fangmenge)) +
+  geom_boxplot()
+
+
+
+
+
+m1 <- lme(fangmenge ~ 1, dat_IT, random = ~1|year) # Create a linear model: alpha = mean 
 
 coef(m1)
 
+anova(m1)
+ggqqplot(residuals(m1))
+
+summary(m1)
 
 
 
