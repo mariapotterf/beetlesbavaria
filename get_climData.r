@@ -29,8 +29,8 @@ library(terra)
 
 
 # Get spatial data for each trap
-xy      <- vect(paste(myPath, outFolder, "xy_3035.gpkg", sep = "/"), 
-                layer = 'xy_3035') # read watershed
+xy        <- vect(paste(myPath, outFolder, "xy_3035.gpkg", sep = "/"), 
+                layer = 'xy_3035') # read trap location
 xy_latlng <- terra::project(xy, 
                           "+proj=longlat +datum=WGS84 +ellps=WGS84 +towgs84=0,0,0")
 
@@ -46,171 +46,161 @@ library(PCICt)
 
 # Data was downloaded as netCDF from https://cds.climate.copernicus.eu/cdsapp#!/dataset/reanalysis-era5-land-monthly-means?tab=overview
 
-# Read soil water content, 4 levels:
-vars <- c('u10', # ,  10 m component of wind
-          'src', 'tp',  "swvl1", "swvl2", "swvl3", "swvl4")  # , 
 
-out <- vector("list", length(vars))
+# Read .nc data as a raster in terra - way faster!  
+dat_ras <- terra::rast(paste(myPath, inFolder,  "ERA_Bav.nc", sep = "/"))
 
-# Conevrt vect from terra to sf object
-xy_latlng_sf <- sf::st_as_sf(xy_latlng)
+# extract all values to the xy coordinates:
+dat_ext_df <- terra::extract(dat_ras, xy_latlng)
 
 
-# Crop dataset for the study region, for each of teh rasters:
-for (i in 1:length(vars)) {
-  
-  print(vars[i])
-  
-  
-  # Try with Raster
-  dat_ras <- raster::brick(paste(myPath, inFolder,  "ERA_data_soilMoisture.nc", sep = "/"), varname = vars[i])
-  dat_ras <- raster::stack(dat_ras)
- 
-  dat_ras <- extract(dat_ras, xy_latlng_sf)
-  
-  out[[k]] <- dat_ras %>%
-      as.matrix()
-  
-}
-
-
-
-# Tr with terra:
-
-for (i in 1:length(vars)) {
-  
-dat_ras <- rast(paste(myPath, inFolder,  "ERA_data_soilMoisture.nc", sep = "/"))
-
-#  str(dat_ras)
-
-dat_ras2 <- extract(dat_ras, xy_latlng)
-#  dat_ras <- raster::mask(dat_ras, studyregion_latlng)
-
-# out[[k]] <- dat_ras %>%
-#    as.matrix()
-
-}
+# Check the variables of interest:
+var_names <- varnames(dat_ras)    # 9 variables
+ras_time  <- time(dat_ras)        # 441
+n_layer   <- nlyr(dat_ras)        # 441 
 
 
 # terra works well, but require correct naming of variables:
 # has ID = OBJECTID from teh vect
 
 # naming: need to be make manually:
-# years: 2015-2021: 7
+# years:  2015-2021: 7
 # months: april-October: 7
-# hour: at 12
-# variables: 7
+# hour:   at 12:00
+# variables: 9
 
-# Check time from terra
-time(dat_ras)
+# Create a datatable for each site (ID), variable, and time
+df_melt <- data.table::melt(dat_ext_df, 
+                            id.vars = c('ID'))
 
-# Total number of names: 7 (years)*7(months)*7(variables)
-# 343
-
-# How to link the variables names with the dates???
-
-
-
-
-
-r<-raster::brick(paste(myPath, inFolder,  "ERA_data_soilMoisture.nc", sep = "/"), var = vars[1])
-
-
-
-
-# Nc-open = just opens the coccention to the file, does not read the file
-# needs to be closed after it is not needed by 'nc_close()'
-climate_output <- nc_open(paste(myPath, inFolder,  "ERA_data_soilMoisture.nc", sep = "/"))
+# Add time  to df and split in months:
+df <- df_melt %>% 
+  arrange(ID, variable) %>%
+  mutate(time = rep(ras_time, nrow(dat_ext_df))) %>% 
+  separate(variable, 
+           c("var", "time_num"), "_") %>% 
+  dplyr::mutate(year  = lubridate::year(time), 
+                month = lubridate::month(time), 
+                day   = lubridate::day(time),
+                doy   =  lubridate::yday(time) + 1)  # as POXIT data has January 1st at 0
 
 
-# Get the index of the long-lat values:
-lon <- ncvar_get(climate_output, varid = "longitude")
-lat <- ncvar_get(climate_output, varid = "latitude")
+# combine soil moisture data: sum the 4 layers:
+soil_vars <- c("swvl1", "swvl2", "swvl3", "swvl4")
 
 
-# What is the time interval?
-climate_output$dim$time$units
-# "hours since 1900-01-01 00:00:00.0"
+# Split df in two tales: having all variables  besides soil water content,
+# and only soil water content
+df_vars <- df %>% 
+  filter(!(var %in% soil_vars))
+  
+
+# For soil water content: need to get sums (?) as Cornelius, or means?
+# I will use means
+df_soil <- df %>% 
+  filter(var %in% soil_vars ) %>%
+  group_by(ID, year, month, day) %>% 
+  mutate(#sum_swv = sum(value),
+         value = mean(value)) 
 
 
-# Check what is my calendar:
-climate_output$dim$time$calendar
-# "gregorian"
+# remove the variable and create a new one:
+df_soil <- df_soil %>% 
+  #dplyr::select(-c(var)) %>% 
+  mutate(var = c('swv')) %>% 
+  dplyr::select("ID",   # correctly order the columns
+                "var",
+                "time_num",
+                "value",
+                "time", 
+                "year",
+                "month" ,
+                "day",
+                "doy"  )
+  
 
 
-
-
-
-
-
-
-
-
-r <- getData("worldclim", var="bio", res=0.5, lon=-72, lat=44)
-
-
-# -----------------------------------
-# Dumy exmaple
-
-set.seed(802)
-long <- runif(10, -72.85, -72.78)
-lat <- runif(10, 44.5, 44.6)
-# a vector of ID numbers for these coordinates
-ID <- 1:10
-# bind the long and lat into a dataframe
-coords <- data.frame(long, lat)
-
-# Check wehere aare the points located?
-library(leaflet)
-library(maps)
-# visualizing the ten coordinates we generated:
-leaflet(data=coords) %>% 
-  addProviderTiles(providers$Esri.NatGeoWorldMap) %>% 
-  addCircleMarkers(~long, ~lat, label=as.character(ID))
-
-
-# downloading the bioclimatic variables from worldclim at a resolution of 30 seconds (.5 minutes)
-r_bio  <- raster::getData("worldclim", var="bio", res=0.5, lon=11.142, lat=48.89)
-r_tmin <- raster::getData("worldclim", var="tmin", res=0.5, lon=11.142, lat=48.89)
-r_tmax <- raster::getData("worldclim", var="tmax", res=0.5, lon=11.142, lat=48.89)
-r_prec <- raster::getData("worldclim", var="prec", res=0.5, lon=11.142, lat=48.89)
-# lets also get the elevational data associated with the climate data
-alt <- raster::getData("worldclim", var="alt", res=.5, lon=11.142, lat=48.89) # middle bavaria
-
-
-# how many layers?
-nlayers(r) 
-
-windows()
-plot(r)
-
-# Download the file for bavaria: no need!
-# First get the coordinates:
-# lat-long
-# NW: 50.43 9.14
-# NE: 50.36 13.68
-# SE  47.47 14.09
-# SW: 47.57 7.56
-
-# seems that data end in 2018? !
-
-# Check the observation data from Meteorological stations:
-# https://cran.r-project.org/web/packages/climate/vignettes/getstarted.html
-
-
-# Try climate package -------------------------------------------------------------
+# Merge the df_soil and df_vars onto single file
+df_out <- rbind(df_soil, df_vars)
 
 
 
-library(climate)
-DE = stations_ogimet(country = "Germany", add_map = TRUE)
+# Export the final table:
 
-# Download the the annual summary of air temperature:
-df = meteo_imgw(interval = "monthly", rank = "synop", year = 2014:2021, station = 10007) 
-
-
-
-# Read data from ERA
+data.table::fwrite(df_out, 
+                   paste(myPath, outTable, 'dat_clim.csv', sep = "/"))
 
 
 
+
+
+
+
+
+
+# Check data attribution: -----------------------------------------------------
+
+
+
+
+
+
+
+
+
+
+# check temperatures: if seems correct
+df %>% 
+  filter(var %in% soil_vars)  %>%  # temperature
+  ggplot(aes(x = time,
+             y = value,
+             group = as.factor(year)
+             )) +
+  geom_point() +
+  geom_smooth() +
+  facet_grid(var ~ .)
+
+
+# Add horizontal ine for means:
+X.mean <- df %>%
+  filter(var %in% soil_vars)  %>%  
+#  group_by(grp) %>%
+  summarize(y = mean(value))
+
+df %>% 
+  filter(var %in% soil_vars)  %>%  # temperature
+  ggplot(aes(x = as.factor(year),
+             y = value,
+             fill = var)) +
+  geom_boxplot(outlier.colour = NA ) +
+  geom_hline(data = X.mean, aes(yintercept = y), col = 'red', linetype = 'dashed') 
+
+
+  
+
+# Check per individual months:
+df %>% 
+  filter(var %in% soil_vars)  %>%  # temperature
+  ggplot(aes(x = as.factor(month),
+             y = value,
+             fill = var)) +
+ # stat_summary(fun.data = "mean_cl_boot",  size = 0.5) +
+  geom_boxplot(outlier.colour = NA ) +
+  #geom_hline(data = X.mean, aes(yintercept = y), col = 'red', linetype = 'dashed')  +
+  facet_grid(.~factor(year))
+
+
+
+df %>% 
+  filter(var %in% soil_vars)  %>%  # temperature
+  ggplot(aes(x = as.factor(month),
+             y = value,
+             fill = var)) +
+  stat_summary(fun.data = "mean_cl_boot",  size = 0.5, aes(group = var,col = var)) +
+ # geom_boxplot(outlier.colour = NA ) +
+  #geom_hline(data = X.mean, aes(yintercept = y), col = 'red', linetype = 'dashed')  +
+  facet_grid(.~factor(year)) +
+  stat_summary(fun = median,
+               geom = "line",
+               aes(group = var,col = var)) + 
+  theme(legend.position = 'bottom')
