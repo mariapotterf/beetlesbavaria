@@ -60,7 +60,7 @@ xy      <- vect(paste(myPath, outFolder, "xy_3035.gpkg", sep = "/"),
                    layer = 'xy_3035') # read watershed
 
 # Get climate data for traps:
-xy_clim <- fread(paste(myPath, outTable, 'dat_clim.csv', sep = "/"))
+xy_clim <- fread(paste(myPath, outTable, 'xy_clim.csv', sep = "/"))
 
 
 
@@ -425,16 +425,31 @@ summary(m1)
 
 
 
+# ----------------------------------------------------------------
+# LInk beetle counts data to climate XY
+# ----------------------------------------------------------------
+
+head(dat)
+head(xy_clim)
 
 
+xy_clim2 <- xy_clim %>%
+  dplyr::rename(objectid = ID ) %>% 
+  dplyr::select(-c(day, doy))
 
 
+# Merg data
+dat_clim <- dat %>% 
+  right_join(xy_clim2, by = c("objectid","year", "month" ))
 
 
-
-
-
-
+# relatioship between counts and drought?
+dat_clim %>% 
+  filter(var == 'tp') %>% 
+ ggplot(aes(y = fangmenge,
+           x = value)) +
+  geom_point() +
+  facet_grid(art~year)
 
 
 
