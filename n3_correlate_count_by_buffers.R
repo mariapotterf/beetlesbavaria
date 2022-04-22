@@ -59,6 +59,11 @@ dat      <- fread(paste(myPath, outFolder, "dat.csv", sep = "/"))
 xy      <- vect(paste(myPath, outFolder, "xy_3035.gpkg", sep = "/"), 
                    layer = 'xy_3035') # read watershed
 
+# Get climate data for traps:
+xy_clim <- fread(paste(myPath, outTable, 'dat_clim.csv', sep = "/"))
+
+
+
 # Get forest type: 
 forest_type <- rast(paste(myPath, outFolder, "bav_fortype_ext30_int2u_LZW.tif", sep = "/"))
 # code: 
