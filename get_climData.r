@@ -101,7 +101,7 @@ df_soil <- df %>%
   filter(var %in% soil_vars ) %>%
   group_by(ID, year, month, day) %>% 
   mutate(#sum_swv = sum(value),
-         value = mean(value)) 
+         value = sum(value)) 
 
 
 # remove the variable and create a new one:
