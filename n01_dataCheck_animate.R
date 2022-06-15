@@ -158,7 +158,13 @@ dat_avg <- dat %>%
             avg_beetles_trap = sum_beetles/freq_visit) #%>%
 
 
-# some sites have been reisited every 7 days!
+# what is average revisit time?
+# number of days: April to October: 212 days
+range(212/dat_avg$freq_visit)
+
+hist(212/dat_avg$freq_visit)
+
+# some sites have been revisited every 7 days!
 # calculation works great!
 
 # Calculate the mean number of beetles per trap over the season
@@ -225,7 +231,7 @@ dat_avg %>%
   
 # Check development of counts over one year
 windows()
-dat %>% 
+  dat %>% 
   filter(month > 4 ) %>%             #  &  art == "Buchdrucker"
   ggplot(aes(x = doy,                # DOY = Day of the Year
              y = fangmenge,
@@ -294,6 +300,86 @@ dat %>%
     facet_wrap(art~., scales = 'free')
   
   
+  
+  
+  
+  
+# -------------------------------------------------------------
+# variations between traps???
+# ---------------------------------------------------------
+  
+# spliut in two groups: 1&2
+head(dat)
+  
+# 
+sort(unique(dat$falsto_name2))
+
+# First, replace all spaces by '_'
+dat <- dat %>% 
+  mutate(falsto_name2 = gsub(' ', '_', falsto_name)) %>% 
+  mutate(pair_grp = as.numeric(gsub("\\D", "", falsto_name2)))
+
+
+# compare counts by groups:
+dat %>% 
+  filter(pair_grp != 3 & year > 2014) %>% 
+  ggplot(aes(y = fangmenge/10000,
+             x = factor(year),
+             fill = factor(pair_grp))) +
+  geom_boxplot() +
+  scale_y_continuous(trans='log10') +
+  facet_grid(.~art)
+  
+
+# convert data for counts on 1 and counts on 2:
+# in yx format:
+
+dat_pairs <- dat %>% 
+  filter(pair_grp != 3 & year > 2014) %>% 
+  dplyr::select('year', 'fangmenge', 'pair_grp', 'art', 'monsto_name')
+
+
+# split in two grousp
+dat_pairs1 <- dat_pairs %>% 
+  filter(pair_grp == 1) %>% 
+  rename(fangmenge1 = fangmenge)
+
+dat_pairs2 <- dat_pairs %>% 
+  filter(pair_grp == 2) %>% 
+  rename(fangmenge2 = fangmenge)
+
+# join data tables
+dat_pairs_out <- dat_pairs1 %>% 
+  left_join(dat_pairs2, by=c('year', 'art', 'monsto_name'))
+  
+  
+# variation between catched numbers:
+
+dat %>% 
+  filter(pair_grp != 3 & year > 2014) %>% 
+  ggplot(aes(y = fangmenge/10000,
+             x = factor(year),
+             fill = factor(pair_grp))) +
+  geom_boxplot() +
+  scale_y_continuous(trans='log10') +
+  facet_grid(.~art)
+
+
+# Check if individual captures correlate between paired locations?
+windows()
+dat_pairs_out %>% 
+  filter(art == 'Buchdrucker') %>%  
+  ggplot(aes(y = fangmenge1,
+             x = fangmenge2,
+             color = art)) +
+  geom_point() #+
+  scale_y_continuous(trans='log10') +
+  facet_grid(.~art)
+
+
+# seems weird: just check on single locations?
+  dat %>% 
+    filter(monsto_name == 'Hemau' & year == 2021)
   
 # ----------------------------------------------
 #              ROLLING AVERAGES
