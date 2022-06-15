@@ -438,6 +438,10 @@ xy_clim2 <- xy_clim %>%
   dplyr::select(-c(day, doy))
 
 
+# convert long to wide format
+
+
+
 # Merg data
 dat_clim <- dat %>% 
   right_join(xy_clim2, by = c("objectid","year", "month" ))
@@ -445,7 +449,7 @@ dat_clim <- dat %>%
 
 # relatioship between counts and drought?
 dat_clim %>% 
-  filter(var == 'tp') %>% 
+  filter(var == 'swv' & month == 7) %>% 
  ggplot(aes(y = fangmenge,
            x = value)) +
   geom_point() +
