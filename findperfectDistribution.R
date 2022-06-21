@@ -63,9 +63,12 @@ library(effects)        # what do my marginal effects look like?
 library(performance)    # binomial model diagnostics
 library(emmeans)        # post hoc for categorical predictors
 
+library(ggplot2)
+library(dplyr)
+
 # The GLM Process:
 # --------------------------------
-# 1 .determina model structure: what is X? what is Y?
+# 1 .determine model structure: what is X? what is Y?
 # 2. model selection process: model comparions, (AIC)
 # 3. do my data fits model assumptions? check distributions of residuals, try new model if npot randomly distributed
 
@@ -149,5 +152,19 @@ r2(best_model)
 MASS::confint(best_model)
 
 
+# fit my model:
+# is teh salamandra counts dependent on the presence/absence of the 
+# mining site?
+m1 <- glm(count ~ mined,
+                  data = Salamanders,
+                  family = "poisson")
+summary(m1)
 
 
+# visualize teh data:
+Salamanders %>%
+  mutate(mine_line = ifelse(mined == "no", 1, 2)) %>%
+  ggplot(aes(x = mine_line, y = count)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE) +
+  theme_bw()
