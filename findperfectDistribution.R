@@ -266,9 +266,121 @@ AIC(m3, m.nb)
 # beetle counts:
 # ------------------------------------------------------------------------
 
-library(bbmle)
+library(bbmle)  # for AIC 
+
+
+# Read my paths -----------------------------------------------------------
+source('myPaths.R')
+
+# Get climate data for traps:
+xy_clim <- fread(paste(myPath, outTable, 'xy_clim.csv', sep = "/"))
+
+
+# ----------------------------------------------------------------
+# LInk beetle counts data to climate XY
+# ----------------------------------------------------------------
 
 head(dat)
+head(xy_clim)
+
+# convert data from long to wide to have variables in columns
+xy_clim2 <- xy_clim %>%
+  dplyr::select(ID, var, value, year, month)# %>% 
+  
+
+
+
+# seems challenging, as the climate data are by months?
+unique(xy_clim$time)  # recorded once a month, from April to October (7 months), years: 2015 - 2021 (7 years) ~ 49 records in 
+# need to sum beetle data: sums by months and year! then link them together
+
+ips.sum <- ips %>%
+  group_by(year, month, objectid) %>% 
+  summarise(ips_month_sum = sum(fangmenge)) %>% 
+  filter(year %in% 2015:2021) %>% 
+  filter(month %in% 4:10)
+  
+
+# Do the same with climate variables:
+unique(xy_clim$var)
+# [1] "swv"  "u10"  "v10"  "t2m"  "sshf" "tp" 
+
+
+# Select swm: can be mean or the max??
+swm.sum <- xy_clim %>% 
+  filter(var == 'swv') %>% 
+  group_by(year, month, ID) %>% 
+  summarize(swm_sum = sum(value, na.rm = T)) %>% 
+  dplyr::rename(objectid = ID ) #%>% 
+  #dplyr::select(-c(day, doy))
+
+
+# temperature
+t2m.sum <- xy_clim %>% 
+  filter(var == 't2m') %>% 
+  group_by(year, month, ID) %>% 
+  summarize(t2m_sum = sum(value, na.rm = T)) %>% 
+  dplyr::rename(objectid = ID ) #%>% 
+#dplyr::select(-c(day, doy))
+
+
+
+
+
+# Merg data
+dat_clim <- ips.sum %>% 
+  right_join(swm.sum, by = c("objectid","year", "month" )) %>% 
+  right_join(t2m.sum, by = c("objectid","year", "month" )) #%>% 
+#  drop_na()
+
+
+# Check if data correlate??
+# relatioship between counts and drought?
+dat_clim %>% 
+  ggplot(aes(y = ips_month_sum  ,
+             x = swm_sum)) +
+  geom_point() 
+
+
+
+
+# does drought index predict the beetle counts???
+hist(dat_clim$ips_month_sum)
+hist(dat_clim$swm_sum)
+
+
+
+
+# try some models fits: 
+fit.binom         <- glmmTMB(ips_month_sum ~ 1, data = dat_clim, family=nbinom2)    # negative binomial from glmmTMB
+fit.rand.loc      <- glmmTMB(ips_month_sum ~ (1|objectid), data = dat_clim, family=nbinom2)  # negative binomial from glmmTMB
+fit.rand.month    <- glmmTMB(ips_month_sum ~ (1|objectid) + month, data = dat_clim, family=nbinom2)  # negative binomial from glmmTMB
+fit.rand.month.swm    <- glmmTMB(ips_month_sum ~ (1|objectid) + month + swm_sum , data = dat_clim, family=nbinom2)  # negative binomial from glmmTMB
+fit.rand.swm     <- glmmTMB(ips_month_sum ~ (1|objectid) + swm_sum , data = dat_clim, family=nbinom2)  # negative binomial from glmmTMB
+fit.rand.t2m.swm    <- glmmTMB(ips_month_sum ~ (1|objectid) + t2m_sum + swm_sum , data = dat_clim, family=nbinom2)  # negative binomial from glmmTMB
+# 
+# by / I can set a hierarchical structure in teh model! so tehre are two random parameters: 'objection' and 'trap couple'
+# fit.rand.t2m.swm.int    <- glmmTMB(ips_month_sum ~ (1|objectid/trap) + t2m_sum*swm_sum , data = dat_clim, family=nbinom2, AR())  # negative binomial from glmmTMB
+# by AR - autocorrelation in time
+# need to check Marek's approach! 
+
+
+# Compare the models by the AIC: the lower AIC, better
+# also, simpler models are better than more complex
+bbmle::AICtab(fit.binom, fit.rand.loc, fit.rand.month, fit.rand.month.swm, fit.rand.swm, fit.rand.t2m.swm, fit.rand.t2m.swm.int)
+
+# scale predictors before the fitting: Z score transformation 
+
+# --------------------------------------
+
+
+head(dat)
+
+windows()
+hist(ips$fangmenge, breaks  =1000 )
+
+ips %>% 
+  filter(fangmenge == 0)
 
 # check distribution:
 dat %>% 
