@@ -16,10 +16,36 @@
 #     counts until July?
 
 
-# look from Cornelius data: what dsitribution did he used? Why?
+# look from Cornelius data: what distribution did he used? Why?
 
-# how tomodel my data and what is teh best approach?
+# how to model my data and what is the best approach?
 # What am I looking for?
+
+
+rm(list=ls()) 
+
+# Read my paths -----------------------------------------------------------
+source('myPaths.R')
+
+
+#library(sf)
+library(dplyr)
+library(data.table)
+library(tidyr)
+#library(raster)
+library(rgdal)
+library(tidyverse)
+library(lubridate)
+library(patchwork)
+library(fasterize)
+library(ggpubr)
+#library(terra)
+library(ggplot2)
+library(ggpubr)
+
+
+# Get beetle counts
+dat      <- fread(paste(myPath, outFolder, "dat.csv", sep = "/"))
 
 
 
@@ -63,13 +89,11 @@ library(effects)        # what do my marginal effects look like?
 library(performance)    # binomial model diagnostics
 library(emmeans)        # post hoc for categorical predictors
 
-library(ggplot2)
-library(dplyr)
 
 # The GLM Process:
 # --------------------------------
 # 1 .determine model structure: what is X? what is Y?
-# 2. model selection process: model comparions, (AIC)
+# 2. model selection process: model comparisons, (AIC)
 # 3. do my data fits model assumptions? check distributions of residuals, try new model if npot randomly distributed
 
 # check out the Data:
@@ -153,11 +177,33 @@ MASS::confint(best_model)
 
 
 # fit my model:
+# --------------------------------------------------------------
 # is teh salamandra counts dependent on the presence/absence of the 
 # mining site?
-m1 <- glm(count ~ mined,
+m0 <- glm(count ~ mined,
+          data = Salamanders,
+          family = "poisson",
+          na.action = "na.fail")
+summary(m0)
+
+simulationOutput0 <- simulateResiduals(fittedModel = m0, plot = T)
+
+# test dispersion
+testDispersion(simulationOutput0)
+
+# test if I have too many zeors?
+testZeroInflation(simulationOutput0)
+
+# simply plot effects: 
+plot(allEffects(m0))
+
+
+# my investigations:
+# ------------------------------------------------------
+m1 <- glm(count ~ mined + cover + Wtemp,
                   data = Salamanders,
-                  family = "poisson")
+                  family = "poisson",
+          na.action = "na.fail")
 summary(m1)
 
 
@@ -168,3 +214,139 @@ Salamanders %>%
   geom_point() +
   geom_smooth(method = "lm", se = FALSE) +
   theme_bw()
+
+# check model:
+MuMIn::dredge(m1)
+
+# keep only cover and mined
+m2 <- glm(count ~ mined + cover,
+          data = Salamanders,
+          family = "poisson",
+          na.action = "na.fail")
+MuMIn::dredge(m2)
+
+windows()
+simulationOutput <- simulateResiduals(fittedModel = m2, plot = T)
+
+
+# Need to further fix model for remove teh dependencies in teh data:
+# keep only cover and mined
+m3 <- glm(count ~ mined + cover,
+          data = Salamanders,
+          family = "poisson",
+          na.action = "na.fail")
+MuMIn::dredge(m3)
+
+# try different family:
+m.nb <- glm(count ~ mined + cover,
+         data = Salamanders,
+         family = "nbinom2",
+         na.action = "na.fail")
+MuMIn::dredge(m.nb)
+
+
+# try random effects:
+m.1 <- glm(count ~ 1,
+            data = Salamanders,
+            family = "poisson",
+            na.action = "na.fail")
+
+
+# compare poisson model with the nb (negative binomial)
+MuMIn::dredge(m.1)
+
+summary(m.1)
+
+AIC(m3, m.nb)
+
+
+
+# ------------------------------------------------------------------------
+# Follow Kristin's example and evaluate my distributions:
+# beetle counts:
+# ------------------------------------------------------------------------
+
+library(bbmle)
+
+head(dat)
+
+# check distribution:
+dat %>% 
+  filter(art == 'Buchdrucker') %>% 
+  ggplot(aes(fangmenge)) + 
+  geom_histogram(aes(y =..density..)) +
+  stat_function(fun = dnorm, 
+                args = list(mean = mean(dat$fangmenge), 
+                                         sd = sd(dat$fangmenge)), color="red")# +
+
+# not normally distributed
+
+# strongly left skewed data
+
+# do I have any zeros???
+
+
+# Specify categorial variables: -----------------------
+str(dat)
+
+# The grouping variables need to be declaread as factors
+dat$drought_period <- as.factor(dat$drought_period)
+
+
+# Options for distribution:
+# poisson
+# negative binomial (alt: overdispersed, )
+
+ips <- dat %>% filter(art == 'Buchdrucker')
+  
+   
+# 
+fit.lm      <- lm(fangmenge ~ 1, data = ips) # normal
+fit.lmer    <- lmer(fangmenge ~ 1|drought_period, data = ips) # normal + random effect of drought
+fit.drought <- glmmTMB(fangmenge ~ (1|drought_period), data = ips, family=nbinom2)  # negative binomial from glmmTMB
+fit.year    <- glmmTMB(fangmenge ~ (1|year), data = ips, family=nbinom2)  # negative binomial from glmmTMB
+
+# the beetle data are longitudional, represents repeated measures (over time, same measures on the locations)
+# and in pairs: the pairs are more similar to each other then further distant traps
+fit2 <- glmmTMB(fangmenge ~           # beetle counts 
+                 (1|monsto_name) +   # enter random effect: repeated measures on traps
+                 drought_period,               # dependance on year
+               data = ips,           # data from  
+               family=nbinom2)  # negative binomial from glmmTMB
+
+
+
+# Compare the models by the AIC: the lower AIC, better
+# also, simpler models are better than more complex
+bbmle::AICtab(fit.lm, fit.lmer, fit.drought, fit.year,fit2  )
+
+windows()
+simulationOutput <- simulateResiduals(fittedModel = fit2, 
+                                      plot = T)
+
+res <- simulateResiduals(fittedModel = fit2)
+
+plot(res, rank = T)
+plot(res, asFactor = T)
+# Yay! the QQ plot shows that we have some issues, residuals are not independent
+
+# test if the residuals are the same as random?
+testDispersion(simulationOutput)
+
+
+summary(fit)
+
+# simulate data:
+# simulate data
+sims <- simulate(fit, nsim=100)
+
+windows()
+sims %>%
+  as_tibble() %>%
+  gather() %>%
+  ggplot() +
+  geom_line(stat = "count", aes(x = value, group = key), alpha = 0.1, col="#d73027") +
+  geom_density(stat="count", data = ips, aes(x = fangmenge), col = "black", size = 1) +
+  theme_bw() +
+  labs(x = "Cover",
+       y = "Count")
