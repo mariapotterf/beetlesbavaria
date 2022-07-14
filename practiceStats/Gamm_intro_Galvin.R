@@ -1,4 +1,4 @@
-# Learn gamms
+# Learn GAMs
 library('here')
 library('mgcv')
 library('gratia')
@@ -391,7 +391,11 @@ gam.check(pois_model, rep = 500)
 
 
 ## ----gam_check_plots3, include=T,echo=TRUE, results="hide"--------------------
-negbin_model <- gam(y_negbinom ~ s(x1, k=12) + s(x2, k=12), family = nb, method = 'REML')
+negbin_model <- gam(y_negbinom ~ 
+                      s(x1, k=12) + 
+                      s(x2, k=12), 
+                    family = nb, 
+                    method = 'REML')
 gam.check(negbin_model, rep = 500)
 
 
@@ -589,8 +593,10 @@ knitr::include_graphics(here('resources', 'cross-validated.png'))
 galveston <- #read_csv('C:/Users/ge45lep/Documents/stats/intro-gam-webinar-2020-master/intro-gam-webinar-2020-master/data/gbtemp.csv')
   #read_csv(here('data', 'gbtemp.csv')) %>%
   read_csv('C:/Users/ge45lep/Documents/stats/intro-gam-webinar-2020-master/intro-gam-webinar-2020-master/data/gbtemp.csv') %>% 
-  mutate(datetime = as.POSIXct(paste(DATE, TIME), format = '%m/%d/%y %H:%M', tz = "CDT"),
-         STATION_ID = factor(STATION_ID), DoY = as.numeric(format(datetime, format = '%j')),
+  mutate(datetime = as.POSIXct(paste(DATE, TIME), 
+                               format = '%m/%d/%y %H:%M', tz = "CDT"),
+         STATION_ID = factor(STATION_ID), 
+         DoY = as.numeric(format(datetime, format = '%j')),
          ToD = as.numeric(format(datetime, format = '%H')) +
            (as.numeric(format(datetime, format = '%M')) / 60))
 galveston
