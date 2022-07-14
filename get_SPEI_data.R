@@ -20,7 +20,84 @@
 
 rm(list = ls())
 
+
+# Read my paths -----------------------------------------------------------
+source('myPaths.R')
+
+
+# Read libs  --------------------------------------------------------------
+
 library(SPEI)
+library(sf)
+library(dplyr)
+library(data.table)
+library(tidyr)
+library(rgdal)
+library(raster)
+library(tidyverse)
+library(lubridate)
+library(patchwork)
+library(fasterize)
+library(ggpubr)
+library(terra)
+
+
+# Get spatial data for each trap
+xy        <- vect(paste(myPath, outFolder, "xy_3035.gpkg", sep = "/"), 
+                  layer = 'xy_3035') # read trap location
+
+# Get rasters in .asc format:
+ras_path = paste(myPath, 'rawData/DeutschWetter/01_Jan',  "200501asc.gz", sep = "/")
+connect=gzfile(ras_path)  
+r=raster::raster(connect)
+
+
+temp <- tempfile()
+
+unzip(temp)
+r=raster::raster(ras_path)
+
+zipd = tempdir()
+unzip(temp, exdir=zipd)
+myRaster = raster(ras_path)
+
+
+unzip(ras_path)
+
+
+# create connection to a gz file
+con <- gzfile(ras_path, open = "rb")
+
+# read data from this connection into a raw vector
+myras.raw <- readBin(con, what = "raw", n = 1e10)
+
+# read this raw vector
+myras <- readTIFF(myras.raw)
+myras <- raster(con)
+
+
+
+# Read .nc data as a raster in terra - way faster!  
+zz=gzfile('file.csv.gz','rt')  
+dat=read.csv(zz,header=F)
+
+# Read only raster (unzipped already:)
+r=raster::raster(paste(myPath, 'rawData/DeutschWetter/01_Jan/200501asc', 'TAMM_01_2005_01.asc', sep = '/'))
+
+# convert to terra object for faster calculation
+r2<- terra::rast(r)
+
+dat_ras <- raster(paste(myPath, 
+                             'rawData/DeutschWetter/01_Jan',  "200501asc.gz", sep = "/"))
+
+# extract all values to the xy coordinates:
+dat_ext_df <- terra::extract(dat_ras, xy_latlng)
+
+
+
+# Convert data to same coordinate system:
+xy_latlng <- terra::project(xy, 
+                            "+proj=longlat +datum=WGS84 +ellps=WGS84 +towgs84=0,0,0")
 
 
 
