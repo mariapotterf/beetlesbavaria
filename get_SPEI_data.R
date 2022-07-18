@@ -40,68 +40,79 @@ library(patchwork)
 library(fasterize)
 library(ggpubr)
 library(terra)
-
+library(R.utils)
 
 # Get spatial data for each trap
 xy        <- vect(paste(myPath, outFolder, "xy_3035.gpkg", sep = "/"), 
                   layer = 'xy_3035') # read trap location
-
-# Get rasters in .asc format:
-ras_path = paste(myPath, 'rawData/DeutschWetter/01_Jan',  "200501asc.gz", sep = "/")
-connect=gzfile(ras_path)  
-r=raster::raster(connect)
-
-
-temp <- tempfile()
-
-unzip(temp)
-r=raster::raster(ras_path)
-
-zipd = tempdir()
-unzip(temp, exdir=zipd)
-myRaster = raster(ras_path)
-
-
-unzip(ras_path)
-
-
-# create connection to a gz file
-con <- gzfile(ras_path, open = "rb")
-
-# read data from this connection into a raw vector
-myras.raw <- readBin(con, what = "raw", n = 1e10)
-
-# read this raw vector
-myras <- readTIFF(myras.raw)
-myras <- raster(con)
-
-
-
-# Read .nc data as a raster in terra - way faster!  
-zz=gzfile('file.csv.gz','rt')  
-dat=read.csv(zz,header=F)
-
-# Read only raster (unzipped already:)
-r=raster::raster(paste(myPath, 'rawData/DeutschWetter/01_Jan/200501asc', 'TAMM_01_2005_01.asc', sep = '/'))
-
-# convert to terra object for faster calculation
-r2<- terra::rast(r)
-
-dat_ras <- raster(paste(myPath, 
-                             'rawData/DeutschWetter/01_Jan',  "200501asc.gz", sep = "/"))
-
-# extract all values to the xy coordinates:
-dat_ext_df <- terra::extract(dat_ras, xy_latlng)
-
-
-
 # Convert data to same coordinate system:
-xy_latlng <- terra::project(xy, 
-                            "+proj=longlat +datum=WGS84 +ellps=WGS84 +towgs84=0,0,0")
+xy2 <- terra::project(xy, "EPSG:31467")
+
+
+# List all files > than 2000
+# C:\Users\ge45lep\Documents\2022_BarkBeetles_Bavaria\rawData\DeutschWetter
+file_ls <- list.files(paste(myPath, "rawData/DeutschWetter", sep = "/"), 
+                           pattern = "^20.*\\.gz$",    
+                          recursive=TRUE)
 
 
 
-#  Run examples:
+# # For single file: ---------------------------
+# Get rasters in .asc format:
+# ras_path = paste(myPath, 'rawData/DeutschWetter/01_Jan',  "200501asc.gz", sep = "/")
+# R.utils::gunzip(ras_path, remove=FALSE)
+# ff <- gsub(".gz$", "", ras_path)
+# z <- rast(ff)
+# # set the reference system:
+# crs(z) <- "EPSG:31467"
+# 
+# plot(z)
+# plot(xy2, add = T)
+
+
+"EPSG:31467"
+
+# run over list or fasters:
+
+ras_ls <- lapply(file_ls, function(file, ...) {
+  ras_path = paste(myPath, 'rawData/DeutschWetter',  file , sep = "/")
+  # unzip file
+  R.utils::gunzip(ras_path, remove = FALSE, overwrite = T)
+  
+  # read file
+  ff <- gsub(".gz$", "", ras_path)
+  # read raster
+  z <- rast(ff)
+  # set the reference system:
+  crs(z) <- "EPSG:31467"
+  return(z)
+  
+})
+
+plot(ras_ls[[50]])
+
+# extract raster values to a vector:
+ext_ls <- lapply(ras_ls, function(ras) {
+  df <- terra::extract(ras, xy2)
+  return(df)
+})
+
+
+# merge data by columns:
+df <- do.call(cbind, ext_ls)
+
+# add the globalID XY data 
+out.df <- cbind(df, globalid = xy$globalid )
+names(out.df)
+
+# remove IDs
+out.df <- out.df %>% 
+  dplyr::select(-c(ID))
+
+
+
+
+#  Run examples: --------------------------------------
 
 
 # calculate drought indices:
