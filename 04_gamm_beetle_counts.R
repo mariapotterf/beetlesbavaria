@@ -140,12 +140,21 @@ res1
 
 # from answer:
 res1 <- by(dd, dd$gp, \(x) {
-  a <- cbind(merge(x[-3], data.frame(doy=do.call(seq.int, as.list(range(x$doy)))), all=TRUE), gp=el(x$gp))
+  a <-
+    cbind(merge(x[-3], data.frame(doy = do.call(
+      seq.int, as.list(range(x$doy))
+    )), all = TRUE), gp = el(x$gp))
   na <- is.na(a$cumsum)
-  int <- with(a, spline(doy, cumsum, n=nrow(a)))$y
+  int <- with(a, spline(doy, cumsum, n = nrow(a)))$y
   # transform(a, cumsum=replace(cumsum, na, int[na]), flag=replace(flag, is.na(flag), 1))
-  df <- transform(a, cumsum=replace(cumsum, na, int[na]), flag=replace(flag, is.na(flag), 1));    merge(df, data.frame(doy=2:20, gp=el(a$gp)), all=TRUE) |> {\(.) .[order(.$doy), ]}()
-  }) |> do.call(what=rbind)
+  df <-
+    transform(a,
+              cumsum = replace(cumsum, na, int[na]),
+              flag = replace(flag, is.na(flag), 1))
+  merge(df, data.frame(doy = 2:20, gp = el(a$gp)), all = TRUE) |> {
+    \(.) .[order(.$doy),]
+  }()
+}) |> do.call(what = rbind)
 res1
 
 
