@@ -107,6 +107,10 @@ get_SPEI <- function(df, ...){
     ts(df, start = c(2000, 01), end=c(2021,12), frequency=12) 
   
     # One and tvelwe-months SPEI 
+  my_scales = c(1,3,6,12)
+  for (scale in my_scales) {
+    
+  }
   spei1 <- spei(df.ts[,'BAL'], scale = 1) # calculate SPEI for current month
   #spei3 <- spei(df.ts[,'BAL'], scale = 3) # calculate SPEI for current + 2 previous  months
   #spei6 <- spei(df.ts[,'BAL'], scale = 6) # calculate SPEI for current + 6 previous  months
@@ -135,6 +139,48 @@ out.df <- do.call('rbind', df_ls2)
 
 # export file:
 fwrite(out.df, paste(myPath, outTable, 'xy_spei.csv'))
+
+
+
+
+
+
+
+
+
+
+
+# !!! to complete later!!! Get SPEI for several scales: 1,3,6,12 -------------------------------
+spei_ls <- c()
+my_scales = c(1,3,6,12)
+for (s in my_scales) {
+  s = 1
+  print(s)
+  spei_s <- spei(df.ts[,'BAL'], scale = s) # calculate SPEI for current month
+    # extract just values from SPEI object:
+  dd <- spei_s$fitted
+  
+  # covert to dataframe
+  df.out <- data.frame(spei=as.matrix(dd), 
+                       date=zoo::as.Date(time(dd)))
+  # add location indication
+  df.out <-df.out %>% 
+    mutate(globalid = rep(id, nrow(df.out)))
+  
+  return(df.out)
+  
+}
+
+
+
+spei1 <- spei(df.ts[,'BAL'], scale = 1) # calculate SPEI for current month
+#spei3 <- spei(df.ts[,'BAL'], scale = 3) # calculate SPEI for current + 2 previous  months
+#spei6 <- spei(df.ts[,'BAL'], scale = 6) # calculate SPEI for current + 6 previous  months
+#spei12 <- spei(df.ts[,'BAL'], scale = 12) # calculates SPEI for current and 11 previous months
+#class(spei1) 
+# extract just values from SPEI object:
+dd <- spei1$fitted
+
 
 
 
