@@ -53,6 +53,41 @@ library(terra)
 # Get beetle counts
 dat      <- fread(paste(myPath, outFolder, "dat.csv", sep = "/"))
 
+# Get SPEI and clim data:
+df_spei <- fread(paste(myPath, outTable, 'xy_spei.csv'))
+# Get precip and temp data:
+df_prec   <- fread(paste(myPath, outTable, 'xy_precip.csv', sep = '/'))
+df_temp   <- fread(paste(myPath, outTable, 'xy_temp.csv', sep = '/'))
+
+
+# convert to df_spei to month, year format: 
+df_spei2 <-
+  df_spei %>%
+  rename(spei = Series.1) %>%
+  mutate(date = format(as.Date(date, "%d/%m/%Y"), "%m.%Y")) %>%
+  separate(date, c('month', 'year')) %>% 
+  mutate(month = as.numeric(month),
+         year = as.numeric(year))
+
+
+# rename column names to join the datasets:
+df_prec <- df_prec %>% 
+  rename(PRCP = vals)
+
+df_temp <- df_temp %>% 
+  rename(TMED = vals) %>% 
+  mutate(TMED = TMED/10)  # as in the description
+
+# join data
+df_clim <- df_prec %>% 
+  full_join(df_temp, by = c("globalid", "month", "year")) %>% 
+  full_join(df_spei2, by = c("globalid", "month", "year")) #%>% 
+  
+
+
+# Filter beetle data: get only ips ---------------------------------------------
+
+
 ips <- dat %>% 
   filter(art == 'Buchdrucker') %>% 
   filter(doy > 90 &  doy < 270)
@@ -60,7 +95,7 @@ ips <- dat %>%
 str(ips)
 
 
-# Get climate data for traps:
+# Get climate data for traps: --------------------------------------------------
 xy_clim <- fread(paste(myPath, outTable, 'xy_clim.csv', sep = "/"))
 
 # get trap coordinates
