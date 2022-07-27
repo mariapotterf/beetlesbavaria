@@ -4,6 +4,7 @@ library(rvest)
 library(stringr)
 
 page_link <- "https://opendata.dwd.de/climate_environment/CDC/grids_germany/monthly/air_temperature_mean/"
+page_link_precip <- 'https://opendata.dwd.de/climate_environment/CDC/grids_germany/monthly/precipitation/'
 
 month_name <- c("01_Jan",
                 "02_Feb",
@@ -26,7 +27,7 @@ download_data <- function(x, ...) {
   print(month_name)
   
   # getting the html page for 01_Jan folder
-  page <- read_html(paste0(page_link, month_name, "/"))
+  page <- read_html(paste0(page_link_precip, month_name, "/"))
 
   # getting the link text
   link_text <- page %>%
