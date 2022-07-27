@@ -51,7 +51,7 @@ xy2 <- terra::project(xy, "EPSG:31467")
 
 # List all files > than 2000
 # C:\Users\ge45lep\Documents\2022_BarkBeetles_Bavaria\rawData\DeutschWetter
-file_ls <- list.files(paste(myPath, "rawData/DeutschWetter", sep = "/"), 
+file_ls <- list.files(paste(myPath, "rawData/DeutschWetter/airtemp", sep = "/"), 
                            pattern = "^20.*\\.gz$",    
                           recursive=TRUE)
 
@@ -105,12 +105,33 @@ df <- do.call(cbind, ext_ls)
 out.df <- cbind(df, globalid = xy$globalid )
 names(out.df)
 
-# remove IDs
+# remove IDs: every raster column now has each ID column: duplicated
 out.df <- out.df %>% 
   dplyr::select(-c(ID))
 
 
+# organize the data in time series: 
+# order by dates, chcek which values are needed for SPEI calculation?
+# codng for the names XXXXYY - XXXX - year, YY - month
+# data represent the monthly mean values at the grid of 1km2
+# 
+# Mean of the monthly averaged mean daily air temperature in 2 m height above ground, 
+# given in 1/10 °C.
+names(out.df) <- gsub('asc', '', names(out.df))
+names(out.df)
 
+
+# Convert to long format
+long.df <- 
+  out.df %>% 
+  pivot_longer(!globalid, names_to = "time", values_to = "temp") %>% 
+  # split year and months
+  mutate(month = str_sub(time, -2, -1),  # extract last two characters (month)
+         year = str_sub(time, 1,4))      # extract first 4 characters (year)  
+
+# convert to time series data:
+ts()
+df.ts <- ts(long.df[,-c(1,2)], end=c(2011,10), frequency=12) 
 
 #  Run examples: --------------------------------------
 
