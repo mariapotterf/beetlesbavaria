@@ -45,15 +45,90 @@ library(R.utils)
 # Get spatial data for each trap
 xy        <- vect(paste(myPath, outFolder, "xy_3035.gpkg", sep = "/"), 
                   layer = 'xy_3035') # read trap location
-# Convert data to same coordinate system:
-xy2 <- terra::project(xy, "EPSG:31467")
+# Convert data to DWD coordinate system:
+xy2 <- terra::project(xy, "EPSG:31467")  # coordinate system from the DWD data: Germany
 
 
 # List all files > than 2000
 # C:\Users\ge45lep\Documents\2022_BarkBeetles_Bavaria\rawData\DeutschWetter
-file_ls <- list.files(paste(myPath, "rawData/DeutschWetter/airtemp", sep = "/"), 
-                           pattern = "^20.*\\.gz$",    
-                          recursive=TRUE)
+
+# Get vector of folders by climate variable
+vars <- c('temp', 'precip')
+
+
+for (i in vars){
+  print(i)
+  
+  # List files: from 2000 onwards:
+  file_ls <- list.files(paste(myPath, "rawData/DeutschWetter", i, sep = "/"),
+                            pattern = "^20.*\\.gz$",
+                            recursive=TRUE)
+  
+  # read in rasters 
+  ras_ls <- lapply(file_ls, function(file, ...) {
+    # set raster file
+    ras_path = paste(myPath, 'rawData/DeutschWetter',  i, file , sep = "/")
+    print(ras_path)
+    # unzip file
+    R.utils::gunzip(ras_path, remove = FALSE, overwrite = T)
+    
+    # read file
+    ff <- gsub(".gz$", "", ras_path)
+    # read raster
+    z <- rast(ff)
+    # set the reference system:
+    crs(z) <- "EPSG:31467"
+    return(z)
+    
+  })
+  
+  #plot(ras_ls[[50]])
+  
+  # extract raster values to a vector:
+  ext_ls <- lapply(ras_ls, function(ras) {
+    df <- terra::extract(ras, xy2)
+    return(df)
+  })
+  
+  
+  # merge data by columns:
+  df <- do.call(cbind, ext_ls)
+  
+  # add the globalID XY data 
+  out.df <- cbind(df, globalid = xy$globalid )
+ # names(out.df)
+  
+  # remove IDs: every raster column now has each ID column: duplicated
+  out.df <- out.df %>% 
+    dplyr::select(-c(ID))
+  
+  
+  # organize the data in time: 
+  # codng for the names XXXXYY - XXXX - year, YY - month
+  # data represent the monthly mean values at the grid of 1km2
+  # 
+  # Mean of the monthly averaged mean daily air temperature in 2 m height above ground, 
+  # given in 1/10 °C.
+  names(out.df) <- gsub('asc', '', names(out.df))
+ # names(out.df)
+  
+  
+  # Convert to long format
+  long.df <- 
+    out.df %>% 
+    pivot_longer(!globalid, names_to = "time", values_to = "vals") %>% 
+    # split year and months
+    mutate(month = as.numeric(str_sub(time, -2, -1)),  # extract last two characters (month)
+           year = as.numeric(str_sub(time, 1,4))) %>%      # extract first 4 characters (year)  
+    dplyr::select(-c(time))
+  
+  
+  # Export file
+  outName = paste0('xy_', i, '.csv')
+  #print(paste(myPath, outTable, outName, sep = '/'))
+  fwrite(long.df, paste(myPath, outTable, outName, sep = '/'))
+  
+}
 
 
 
@@ -70,68 +145,23 @@ file_ls <- list.files(paste(myPath, "rawData/DeutschWetter/airtemp", sep = "/"),
 # plot(xy2, add = T)
 
 
-"EPSG:31467"
 
-# run over list or fasters:
 
-ras_ls <- lapply(file_ls, function(file, ...) {
-  ras_path = paste(myPath, 'rawData/DeutschWetter',  file , sep = "/")
-  # unzip file
-  R.utils::gunzip(ras_path, remove = FALSE, overwrite = T)
+
+
+
+
   
-  # read file
-  ff <- gsub(".gz$", "", ras_path)
-  # read raster
-  z <- rast(ff)
-  # set the reference system:
-  crs(z) <- "EPSG:31467"
-  return(z)
-  
-})
+# convert to time series data ----------------------------------------
+df.ts <- ts(long.df, start = c(2000, 01), end=c(2021,12), frequency=12) 
 
-plot(ras_ls[[50]])
-
-# extract raster values to a vector:
-ext_ls <- lapply(ras_ls, function(ras) {
-  df <- terra::extract(ras, xy2)
-  return(df)
-})
+head(df.ts)
+plot(df.ts)
 
 
-# merge data by columns:
-df <- do.call(cbind, ext_ls)
-
-# add the globalID XY data 
-out.df <- cbind(df, globalid = xy$globalid )
-names(out.df)
-
-# remove IDs: every raster column now has each ID column: duplicated
-out.df <- out.df %>% 
-  dplyr::select(-c(ID))
 
 
-# organize the data in time series: 
-# order by dates, chcek which values are needed for SPEI calculation?
-# codng for the names XXXXYY - XXXX - year, YY - month
-# data represent the monthly mean values at the grid of 1km2
-# 
-# Mean of the monthly averaged mean daily air temperature in 2 m height above ground, 
-# given in 1/10 °C.
-names(out.df) <- gsub('asc', '', names(out.df))
-names(out.df)
 
-
-# Convert to long format
-long.df <- 
-  out.df %>% 
-  pivot_longer(!globalid, names_to = "time", values_to = "temp") %>% 
-  # split year and months
-  mutate(month = str_sub(time, -2, -1),  # extract last two characters (month)
-         year = str_sub(time, 1,4))      # extract first 4 characters (year)  
-
-# convert to time series data:
-ts()
-df.ts <- ts(long.df[,-c(1,2)], end=c(2011,10), frequency=12) 
 
 #  Run examples: --------------------------------------
 
@@ -166,7 +196,7 @@ df.ts <- ts(long.df[,-c(1,2)], end=c(2011,10), frequency=12)
 data(wichita) 
 
 # Compute potential evapotranspiration (PET) and climatic water balance (BAL) 
-wichita$PET <- thornthwaite(wichita$TMED, lat = 37.6475) 
+wichita$PET <- thornthwaite(wichita$TMED, lat = 37.6475) # 48.777500
 wichita$BAL <- wichita$PRCP-wichita$PET 
 
 # Convert to a ts (time series) object for convenience 
