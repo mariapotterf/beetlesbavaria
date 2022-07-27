@@ -49,6 +49,27 @@ xy        <- vect(paste(myPath, outFolder, "xy_3035.gpkg", sep = "/"),
 xy2 <- terra::project(xy, "EPSG:31467")  # coordinate system from the DWD data: Germany
 
 
+# filter through years: >1970 ------------------------
+# 
+
+# List files: from 2000 onwards:
+i = 'temp'
+file_ls <- list.files(paste(myPath, "rawData/DeutschWetter", i, sep = "/"),
+                      #pattern = "^20.*\\.gz$",
+                      pattern = "*\\.gz$",
+                      recursive=TRUE)
+
+s <- c("jan/193501asc.gz", "feb/188209asc.gz", "mar/197501asc.gz", "apr/202107asc.gz")
+
+f_1970 <- function(x, y = 1970) {
+  first4 <- substr(x, 8, 11)
+  print(first4)
+  #year <- as.numeric(first4)
+ # year >= y
+}
+
+file_ls[f_1970(file_ls)]
+
 # List all files > than 2000
 # C:\Users\ge45lep\Documents\2022_BarkBeetles_Bavaria\rawData\DeutschWetter
 
@@ -67,8 +88,10 @@ for (i in vars){
   # read in rasters 
   ras_ls <- lapply(file_ls, function(file, ...) {
     # set raster file
+    #file = '11_Nov'
     ras_path = paste(myPath, 'rawData/DeutschWetter',  i, file , sep = "/")
-    print(ras_path)
+    
+    print(file)
     # unzip file
     R.utils::gunzip(ras_path, remove = FALSE, overwrite = T)
     
@@ -116,7 +139,7 @@ for (i in vars){
   # Convert to long format
   long.df <- 
     out.df %>% 
-    pivot_longer(!globalid, names_to = "time", values_to = "vals") %>% 
+    pivot_longer(!globalid, names_to = "time", values_to = 'vals') %>% 
     # split year and months
     mutate(month = as.numeric(str_sub(time, -2, -1)),  # extract last two characters (month)
            year = as.numeric(str_sub(time, 1,4))) %>%      # extract first 4 characters (year)  
