@@ -35,7 +35,7 @@ download_data <- function(x, ...) {
     html_text()
 
   # creating links
-  links <- paste0(page_link, month_name, "/", link_text)[-1]
+  links <- paste0(page_link_precip, month_name, "/", link_text)[-1]
 
   # extracting the numbers for filename
   filenames <- stringr::str_extract(pattern = "\\d+", string = link_text[-1])
