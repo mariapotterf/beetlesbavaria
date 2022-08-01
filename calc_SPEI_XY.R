@@ -101,48 +101,9 @@ df_ls <- df %>%
   group_split(globalid)
 
 
-# One and tvelwe-months SPEI 
-my_scales = c(1,3,6,12)
-spei_ls <- lapply(my_scales, function(i) {
-
-    # extract just values from SPEI object:
-  dd = spei(df.ts[,'BAL'], scale = i)$fitted
-
-  # covert to dataframe, convert date to format
-  df.out <- data.frame(spei=as.matrix(dd), 
-                       date=zoo::as.Date(time(dd)))
-  
-  # add scale indication
-  df.out <-df.out %>% 
-    mutate(scale = rep(i, nrow(df.out)))
-  return(df.out)
-})
-
-out.df <- do.call('rbind', df_ls2)
-
-
-
-spei1 <- spei(df.ts[,'BAL'], 1)$fitted      # SPEI for current month
-spei3 <- spei(df.ts[,'BAL'], scale = 3)$fitted # calculate SPEI for current + 2 previous  months
-spei6 <- spei(df.ts[,'BAL'], scale = 6)$fitted # calculate SPEI for current + 6 previous  months
-spei12 <- spei(df.ts[,'BAL'], scale = 12)$fitted # calculates SPEI for current and 11 previous months
-#class(spei1) 
-# extract just values from SPEI object:
-dd <- spei1$fitted
-
-# covert to dataframe
-df.out <- data.frame(spei=as.matrix(dd), 
-                     date=zoo::as.Date(time(dd)))
-# add location indication
-df.out <-df.out %>% 
-  mutate(globalid = rep(id, nrow(df.out)))
-
-
-
-
 # Calculate the SPEI for each location:
-
 get_SPEI <- function(df, ...){
+  
   # get XY name
   id = unique(df$globalid)
   
@@ -185,51 +146,13 @@ df_ls2<- lapply(df_ls, get_SPEI)
 out.df <- do.call('rbind', df_ls2)
 
 # export file:
-fwrite(out.df, paste(myPath, outTable, 'xy_spei.csv'))
+fwrite(out.df, paste(myPath, outTable, 'xy_spei.csv', sep = "/"))
 
 
 
 
 
-
-
-
-
-
-
-# !!! to complete later!!! Get SPEI for several scales: 1,3,6,12 -------------------------------
-spei_ls <- c()
-my_scales = c(1,3,6,12)
-for (s in my_scales) {
-  s = 1
-  print(s)
-  spei_s <- spei(df.ts[,'BAL'], scale = s) # calculate SPEI for current month
-    # extract just values from SPEI object:
-  dd <- spei_s$fitted
-  
-  # covert to dataframe
-  df.out <- data.frame(spei=as.matrix(dd), 
-                       date=zoo::as.Date(time(dd)))
-  # add location indication
-  df.out <-df.out %>% 
-    mutate(globalid = rep(id, nrow(df.out)))
-  
-  return(df.out)
-  
-}
-
-
-
-spei1 <- spei(df.ts[,'BAL'], scale = 1) # calculate SPEI for current month
-#spei3 <- spei(df.ts[,'BAL'], scale = 3) # calculate SPEI for current + 2 previous  months
-#spei6 <- spei(df.ts[,'BAL'], scale = 6) # calculate SPEI for current + 6 previous  months
-#spei12 <- spei(df.ts[,'BAL'], scale = 12) # calculates SPEI for current and 11 previous months
-#class(spei1) 
-# extract just values from SPEI object:
-dd <- spei1$fitted
-
-
-
+# Continue with SPEI plotting --------------------------------------------------------------
 
 # -----------------------------------------------------------------------
 df.ts <- df %>% 
@@ -239,12 +162,6 @@ head(df.ts)
 plot(df.ts)
 
 
-# One and tvelwe-months SPEI 
-spei1 <- spei(df.ts[,'BAL'], scale = 1) # calculate SPEI for current month
-#spei3 <- spei(df.ts[,'BAL'], scale = 3) # calculate SPEI for current + 2 previous  months
-#spei6 <- spei(df.ts[,'BAL'], scale = 6) # calculate SPEI for current + 6 previous  months
-#spei12 <- spei(df.ts[,'BAL'], scale = 12) # calculates SPEI for current and 11 previous months
-class(spei1$fitted) 
 
 # export df:
 dd <- spei1$fitted
