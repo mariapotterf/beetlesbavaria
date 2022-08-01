@@ -71,11 +71,23 @@ forest_type <- rast(paste(myPath, outFolder, "bav_fortype_ext30_int2u_LZW.tif", 
 # 1 - deciduous
 # 0 - background
 
+spruce <- rast(paste(myPath, outFolder, "bav_spruce.tif", sep = "/"))
+# keep as spruce only the pixel values 88-100 (the % probability of spruce occurence: visually tested with teh coniferous data extent)
+
 # check the projection of teh raster!
 crs(forest_type) == crs(disturbance)
+crs(spruce) == crs(disturbance)
 
 forest_type <- terra::project(forest_type, crs(disturbance))
+spruce <- terra::project(spruce, crs(disturbance))
 
+# reclassify spruce: keep only values 88-100 as 1
+unique(values(spruce))
+m <- c(1, 90, NA,
+       90, 100, 1,
+       100, 256, NA)
+rclmat <- matrix(m, ncol=3, byrow=TRUE)
+spruce1 <- classify(spruce, rclmat, include.lowest=TRUE)
 
 #  ---------------------------------------------------------------------
 # How much mortality happened in each buffer? 
@@ -164,9 +176,32 @@ species_comp_by_buff <- function(spatVect, ...) {
   return(r_df)
 }
 
+spruce_comp_by_buff <- function(spatVect, ...) {
+  
+  #spatVect = buff_ls[[5]]
+  # Crop the disturbance raster by the buffer
+  r <-crop(spruce1, 
+           spatVect)
+  
+  # Get raster values
+  rst_values <- values(r)
+  
+  # Get a dataframe and count the disturbance cells
+  r_df <- data.frame(spruce = rst_values)
+  
+  r_df <- 
+    r_df %>%
+    filter(!is.na(r_df)) %>%
+    rename(spruce = bav_spruce)  %>% 
+    group_by(spruce) %>%
+    summarise(spruce_n = n()) %>% 
+    #mutate(freq = species_n / sum(species_n)) # contains 0 as well, so shows the whole buffer
+  mutate(sp_prop = spruce_n / buff_size)
+  
+  return(r_df)
+}
 
-
-# Run the function across all buffers: for RS disturbances, for tree species composition
+# Run the function across all buffers: for RS disturbances, for tree species composition, for spruce share
 dist_ls <- 
   lapply(buff_ls, mortality_by_buff)
 
@@ -174,7 +209,8 @@ tree_species_ls <-
   lapply(buff_ls, species_comp_by_buff)
 
 
-
+spruce_ls <- 
+  lapply(buff_ls, spruce_comp_by_buff)
 
 
 # Add OBJECTID to link data to XY beetle data
@@ -193,15 +229,25 @@ tree_species_ls2 <- map2(tree_species_ls,
 tree_species_ls2 <- map2(tree_species_ls2, 
                          buff_500$globalid, ~.x %>% mutate(globalid = .y))
 
+# Add OBJECTID to link data to XY beetle data
+spruce_ls2 <- map2(spruce_ls, 
+                         buff_500$OBJECTID, ~.x %>% mutate(OBJECTID = .y))
+
+spruce_ls2 <- map2(spruce_ls, 
+                         buff_500$globalid, ~.x %>% mutate(globalid = .y))
+
+
 
 
 
 # Merge all dataframes in a single one:
 dist_rs_df      <-do.call("rbind", dist_ls2)
 tree_species_df <-do.call("rbind", tree_species_ls2)
+spruce_df       <-do.call("rbind", spruce_ls2)
 
 # export data: speies composition
 fwrite(tree_species_df, paste(myPath, outTable, 'xy_treeComp.csv', sep = '/'))
+fwrite(spruce_df,       paste(myPath, outTable, 'xy_spruce.csv', sep = '/'))
 
 
 # Remove the background: 0, keep only deciduous = 1
