@@ -43,7 +43,7 @@ library("knitr")
 library("viridis")
 library('readr')
 library('gganimate')
-library(itsadug)
+library('itsadug')
 
 
 
@@ -53,11 +53,11 @@ library(itsadug)
 dat      <- fread(paste(myPath, outFolder, "dat.csv", sep = "/"))
 
 # Get SPEI and clim data:
-df_spei <- fread(paste(myPath, outTable, 'xy_spei.csv'))
+df_spei   <- fread(paste(myPath, outTable, 'xy_spei.csv'))
 df_prec   <- fread(paste(myPath, outTable, 'xy_precip.csv', sep = '/'))
 df_temp   <- fread(paste(myPath, outTable, 'xy_temp.csv', sep = '/'))
 
-# Get coniferous cover data: coniferous == 2
+# Get coniferous cover data: coniferous == 2! 
 df_tree   <- fread(paste(myPath, outTable, 'xy_treeComp.csv', sep = '/'))
 
 
@@ -112,6 +112,31 @@ df_spei %>%
   facet_grid(.~scale) 
 
 
+# Classify the SPEI data:
+# SPEI values can be categorized into extremely dry (SPEI ≤ −2), 
+# severely dry (−2 < SPEI ≤ −1.5), 
+# moderately dry (−1.5 < SPEI ≤ −1), and 
+# near normal conditions (−1 < SPEI < + 1) (Slette et al., 2019).
+range(df_spei$Series.1, na.rm = T)
+#  -3.076544  2.980012
+
+df_spei <- df_spei %>% 
+  mutate(spei_cat = case_when(Series.1 <= -2 ~ 'ext_dry',
+                              Series.1 < -2 & Series.1 <= -1.5 ~ 'sev_dry',
+                              Series.1 < -1.5 & Series.1 <= -1 ~ 'mod_dry',
+                              Series.1 < -1 & Series.1 <= +1 ~ 'normal',
+                              Series.1 < +1 & Series.1 <= +1.5 ~ 'mod_wet',
+                              Series.1 < +1.5 & Series.1 <= +2 ~ 'sev_wet',
+                              Series.1 > 2 ~ 'ext_wet'
+                              ))
+
+
+
+# Get frequency of extremely dry locations:
+df_spei %>% 
+  group_by(year, spei_cat) %>% 
+  tally()
+
 
 df_temp %>% 
   ggplot(aes(x = factor(year),
@@ -119,7 +144,8 @@ df_temp %>%
   geom_boxplot(outlier.shape = NA ) +
   geom_hline(yintercept = mean(df_temp$TMED), col="red") +
   #geom_hline(yintercept = -1, lty = 'dashed') +
-  theme_bw()
+  theme_bw() + 
+  theme(axis.text.x = element_text(angle = 90))
 
 
 
@@ -127,6 +153,7 @@ df_temp %>%
 
 
 ips <- dat %>% 
+  filter(year !=2014) %>% 
   filter(art == 'Buchdrucker') %>% 
   filter(doy > 92 &  doy < 305) # April 1st to Oct 30
 
@@ -158,12 +185,9 @@ ips$globalid <- factor(ips$globalid)
 
 length(unique(ips$globalid))
 
-ips %>% 
-  ggplot(aes(y = fangmenge,
-             x = spei)) +
-  geom_point()
 
-# Dummy example:----------------------------------------------
+
+# Dummy example: Extrapolate values over days SKIP!!!:----------------------------------------------
 # How to interpolate values between dates?
 dd <- data.frame(count = c(100, 200, 300,
                            10, 15, 480,
@@ -175,7 +199,7 @@ dd <- data.frame(count = c(100, 200, 300,
 
 doy_vec = c(70:270)
 
-# Extrapolate values over days SKIP!!! --------------------------------------------------
+#  --------------------------------------------------
 
 dd <- data.frame(cumsum = c(4, 12, 14.5,
                             8, 15, 20,
@@ -319,28 +343,28 @@ summary(m5)
 
 
 # Test XY relationship patter: observed vs modelled data ------------------
-
-linear_model <- gam(Sources ~ SampleDepth, data = isit2)
-summary(linear_model)
-
-data_plot <- ggplot(data = isit2, aes(y = Sources, x = SampleDepth)) + 
-  geom_point() +
-  geom_line(aes(y = fitted(linear_model)),
-            colour = "red", size = 1.2) + 
-  theme_bw()
-data_plot
-
-gam_model <- gam(Sources ~ s(SampleDepth), data = isit2)
-
+# do not run
+# linear_model <- gam(Sources ~ SampleDepth, data = isit2)
+# summary(linear_model)
+# 
+# data_plot <- ggplot(data = isit2, aes(y = Sources, x = SampleDepth)) + 
+#   geom_point() +
+#   geom_line(aes(y = fitted(linear_model)),
+#             colour = "red", size = 1.2) + 
+#   theme_bw()
+# data_plot
+# 
+# gam_model <- gam(Sources ~ s(SampleDepth), data = isit2)
+# 
 
 # get together montly ips counts and spei: ------------------------------------------
 ips_sum <- ips %>%
   filter(representativ == 'Ja') %>% 
-  group_by(globalid, year, month) %>% 
+  group_by(globalid, year, month, monsto_name ) %>% 
   summarise(ips_sum = sum(fangmenge, na.rm = T))
 
 
-#  Add SPEI, temp, precip, sprue share data --------------------------------------------
+#  Add SPEI, temp, precip, spruce share data --------------------------------------------
 ips_sum2 <- ips_sum %>% 
   left_join(df_clim, by = c("globalid", "year", "month")) %>% 
   left_join(df_conif , by = c("globalid")) %>% 
@@ -374,6 +398,10 @@ ips_sum2 %>%
   
   # Select optimal 'p' for tweetie - varies between 1 to2
   
+  
+  
+# Check parameters for Tweedie
+  
 
 hist(ips_sum2$ips_sum, breaks = seq(0, 52000, 500) )
 hist(ips_sum2$freq, breaks = seq(0, 1, 0.1) )
@@ -382,14 +410,13 @@ hist(ips_sum2$spei12)
 
 # convert to factors:
 ips_sum2 <- ips_sum2 %>% 
-  mutate(globalid = factor(globalid))
+  mutate(globalid = factor(globalid),
+         monsto_name = factor(monsto_name))
 
 plot(ips_sum2$spei1, ips_sum2$month )
 
 
 # Get GAM with all predictors: temp, spei, conif, XY ------------------------------------
-a = c(1,2,3,8)
-as.vector(scale(a))
 # check the dstribution:
 hist(ips_sum2$ips_sum)
 
@@ -517,51 +544,121 @@ m4 <- bam(ips_sum ~ s(spei1, k =800) +
 
 M <- list(c(1, 0.5), NA)
 m5 <- bam(ips_sum ~
-            s(spei1, k =80),# + # drought
-            #s(TMED, k=100) +  # temperature
-            #s(PRCP, k = 100) +         # precip 
-            #s(freq, k = 200) +         # spruce %
-            #s(month, k =6) +  # months
-            #s(year, k = 8) +  # year
-            #s(x, y, k = 200, bs = 'ds', m = c(1, 0.5)) + # 2D smooth
-           #ti(TMED, year, bs = c('cc', 'tp'), k = c(15, 6)) +
-           #ti(x, y, TMED, d = c(2,1), bs = c('ds','tp'), 
-            #  m = M, k = c(50, 10)) +
-           #ti(x, y, PRCP, d = c(2,1), bs = c('ds','tp'),
-            #  m = M, k = c(50, 15)) +
-            #ti(x, y, spei1, d = c(2,1), bs = c('ds','tp'),
-            #   m = M, k = c(50, 15)),
+            s(spei1, k =80) + # drought
+            s(TMED, k=100) +  # temperature
+            s(PRCP, k = 100) +         # precip 
+            s(freq, k = 100) +         # spruce %
+            s(month, k =6) +  # months
+            s(year, k = 8) +  # year
+            s(monsto_name, k = 10, bs = 're') +
+            s(x, y, k = 200, bs = 'ds', m = c(1, 0.5))  + # 2D smooth
+           ti(TMED, year, bs = c('cc', 'tp'), k = c(15, 6))  +
+           ti(x, y, TMED, d = c(2,1), 
+              bs = c('ds','tp'), 
+              m = M, k = c(50, 10)) +
+           ti(x, y, PRCP, d = c(2,1), bs = c('ds','tp'),
+             m = M, k = c(50, 15))  +
+            ti(x, y, spei1, d = c(2,1), bs = c('ds','tp'),
+               m = M, k = c(50, 15)),
           data = ips_sum2, 
           method = 'fREML',
           #family = Tweedie(p=1.1, link = power(0)),
           family = tw(), #negative binomial(),
-          knots = knots,
+         # knots = knots,
           nthreads = 4, 
           discrete = TRUE)
 
-# Test ideal 'p' for Tweetie distribtion:
 
-m5tw1.9 <- bam(ips_sum ~
-            s(spei1, k =30) + # drought
-            s(TMED, k=30) +  # temperature
-            s(PRCP, k = 12) +         # precip 
-            s(freq, k = 15) +         # spruce %
-            s(month, k =6) +  # months
-            s(year, k = 8),
+
+M <- list(c(1, 0.5), NA)
+m7 <- bam(ips_sum ~
+            s(spei1, k =5) + # drought
+            s(TMED, k=5) +  # temperature
+            s(PRCP, k = 5) +         # precip 
+            s(freq, k = 5) +         # conif %
+            s(month, k =2, 'cc') +  # months
+            s(year, k = 2) +  # year
+            s(globalid, k = 5, bs = 're') +
+            s(monsto_name, k = 5, bs = 're') +
+            s(x, y, k = 5, bs = 'ds', m = c(1, 0.5))  + # 2D smooth
+            ti(TMED, year, bs = c('cc', 'tp'), k = c(15, 6)) ,# +
+            # ti(x, y, TMED, d = c(2,1), 
+            #    bs = c('ds','tp'), 
+            #    m = M, k = c(20, 10)) +
+            # ti(x, y, PRCP, d = c(2,1), bs = c('ds','tp'),
+            #    m = M, k = c(20, 15))  +
+            # ti(x, y, spei1, d = c(2,1), bs = c('ds','tp'),
+            #    m = M, k = c(20, 15)),
           data = ips_sum2, 
           method = 'fREML',
-          family= tw(), #quasipoisson,
-          #family = mgcv::Tweedie(p=1.1, 
-          #                       #link = "sqrt",
-          #                       link = power(0.5)),
-          #family = tw(), #negative binomial(),
-          knots = knots,
+          #family = Tweedie(p=1.1, link = power(0)),
+          family = tw(), #negative binomial(),
+          knots = knots_month ,
           nthreads = 4, 
           discrete = TRUE)
 
+
+
+summary(m7)
+plot(m7, page = 1)
+appraise(m7)
+
+
+m5.glm <- gam(ips_sum ~
+            spei1 + # drought
+            TMED,# +  # temperature
+            # s(PRCP, k = 1) +         # precip 
+            # s(freq, k = 1) +         # spruce %
+            # s(month, k =1) +  # months
+            # s(year, k = 1) +  # year
+            # s(x, y, k = 1, bs = 'ds', m = c(1, 0.5))  + # 2D smooth
+            # ti(TMED, year, bs = c('cc', 'tp'), k = c(1, 1)),#  +
+            # # ti(x, y, TMED, d = c(2,1), 
+            #    bs = c('ds','tp'), 
+            #    m = M, k = c(50, 10)) +
+            # ti(x, y, PRCP, d = c(2,1), bs = c('ds','tp'),
+            #    m = M, k = c(50, 15))  +
+            # ti(x, y, spei1, d = c(2,1), bs = c('ds','tp'),
+            #    m = M, k = c(50, 15)),
+          data = ips_sum2, 
+          method = 'fREML',
+          #family = Tweedie(p=1.1, link = power(0)),
+          family = 'poisson') #,#tw())#, #negative binomial(),
+          # knots = knots,
+         # nthreads = 4)
+
+appraise(m5.glm)
+
+
+m6 <- bam(ips_sum ~
+            s(spei1, k =80) + # drought
+            s(TMED, k=100) +  # temperature
+            s(PRCP, k = 100) +         # precip 
+            s(freq, k = 100) +         # spruce %
+            s(month, k =6) +  # months
+            s(year, k = 8) +  # year
+            s(x, y, k = 200, bs = 'ds', m = c(1, 0.5))  + # 2D smooth
+            ti(TMED, year, bs = c('cc', 'tp'), k = c(15, 6))  +
+            ti(x, y, TMED, d = c(2,1), 
+               bs = c('ds','tp'), 
+               m = M, k = c(50, 10)) +
+            ti(x, y, PRCP, d = c(2,1), bs = c('ds','tp'),
+               m = M, k = c(50, 15))  +
+            ti(x, y, spei1, d = c(2,1), bs = c('ds','tp'),
+               m = M, k = c(50, 15)),
+          data = ips_sum2, 
+          method = 'fREML',
+          #family = Tweedie(p=1.1, link = power(0)),
+          family = tw(), #negative binomial(),
+          # knots = knots,
+          nthreads = 4, 
+          discrete = TRUE)
+
+
+
 windows()
-appraise(m5tw1.9, method = 'simulate')
-plot(m5tw1.9, page = 1)
+appraise(m5, method = 'simulate')
+plot(m5, page = 1)
 
 m6 <- bam(ips_sum ~
             s(spei1, k =800) + # drought
