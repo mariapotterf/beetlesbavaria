@@ -154,7 +154,13 @@ fwrite(out.df, paste(myPath, outTable, 'xy_spei.csv', sep = "/"))
 
 # Continue with SPEI plotting --------------------------------------------------------------
 
-# -----------------------------------------------------------------------
+# ------------ -----------------------------------------------------------
+df <- out.df %>% 
+  filter(scale == 1)
+
+
+  
+
 df.ts <- df %>% 
   ts(df, start = c(2000, 01), end=c(2021,12), frequency=12) 
 
@@ -162,29 +168,8 @@ head(df.ts)
 plot(df.ts)
 
 
-
-# export df:
 dd <- spei1$fitted
 
-  data.frame(spei=as.matrix(dd), date=zoo::as.Date(time(dd)))
-
-
-
-df.ts=df.ts[order(df.ts$globalid, df.ts$year, df.ts$month,decreasing=F),]
-klima_zeit=data.frame()
-for (i in unique(klima$Tnr)) {
-  klima_zeit_i=ts(klima[klima$Tnr==i,c(6,7)], start = c(1971, 1), end=c(2020,12), frequency=12)
-  klima_zeit_i=as.data.frame(klima_zeit_i)
-  klima_zeit_i$spei1=spei(klima_zeit_i[,'BAL'], 1)$fitted # one-months SPEI
-  klima_zeit_i$spei3=spei(klima_zeit_i[,'BAL'], 3)$fitted
-  klima_zeit_i$spei6=spei(klima_zeit_i[,'BAL'], 6)$fitted
-  klima_zeit_i$spei12=spei(klima_zeit_i[,'BAL'], 12)$fitted # tvelwe-months SPEI
-  klima_zeit_i$spei24=spei(klima_zeit_i[,'BAL'], 24)$fitted
-  klima_zeit_i$Tnr=i # Traktnummer aus i
-  klima_zeit_i$Jahr=klima$Jahr[klima$Tnr==i]
-  klima_zeit_i$Monat=klima$Monat[klima$Tnr==i]
-  klima_zeit=rbind(klima_zeit, klima_zeit_i)
-}
 
 
 
@@ -204,12 +189,12 @@ spei1$coefficients
 # Plot spei object 
 par(mfrow=c(2,1)) 
 plot(spei1, main='Bavaria, SPEI-1') 
-plot(spei12, main='Bavaria, SPEI-12') 
+#plot(spei12, main='Bavaria, SPEI-12') 
 
 
 par(mfrow=c(2,1)) 
 plot(spi_1, 'Bavaria, SPI-1') 
-plot(spi_12, 'Bavaria, SPI-12') 
+#plot(spi_12, 'Bavaria, SPI-12') 
 
 # Time series not starting in January 
 par(mfrow=c(1,1)) 
