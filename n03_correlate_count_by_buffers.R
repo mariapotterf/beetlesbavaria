@@ -108,13 +108,15 @@ buff_500 = xy %>%
 # ---------------------------------------------------------------
 
 # Make buffers
-# Intersect buffers with forest and disturbance maps
+# Intersect buffers with forest and disturbance maps:
+# forest values: calculate prop of forest type from all forest
+#                         prop of forest type from whole buffer 
 # export as values from rasters to have a dataframe
 # for each trap: 
 
 buff_ls <- terra::split(buff_500, "OBJECTID")
 
-
+# get functions to calculate sum mortality and forest composition:
 mortality_by_buff <- function(spatVect, ...) {
 
   # Crop the disturbance raster by the buffer
@@ -136,6 +138,8 @@ mortality_by_buff <- function(spatVect, ...) {
   return(r_df)
 }
 
+# buffer size:
+buff_size <- pi*500^2/30^2 # number of pixels by buffer
 
 species_comp_by_buff <- function(spatVect, ...) {
   
@@ -154,7 +158,8 @@ species_comp_by_buff <- function(spatVect, ...) {
     rename(species = bav_fortype_ext30_int2u_LZW) %>% 
     group_by(species) %>%
     summarise(species_n = n()) %>% 
-    mutate(freq = species_n / sum(species_n))
+    mutate(freq = species_n / sum(species_n)) # contains 0 as well, so shows the whole buffer
+    #mutate(sp_prop = species_n / buff_size)
   
   return(r_df)
 }
@@ -194,6 +199,9 @@ tree_species_ls2 <- map2(tree_species_ls2,
 # Merge all dataframes in a single one:
 dist_rs_df      <-do.call("rbind", dist_ls2)
 tree_species_df <-do.call("rbind", tree_species_ls2)
+
+# export data: speies composition
+fwrite(tree_species_df, paste(myPath, outTable, 'xy_treeComp.csv', sep = '/'))
 
 
 # Remove the background: 0, keep only deciduous = 1
