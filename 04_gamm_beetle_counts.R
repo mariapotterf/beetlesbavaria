@@ -58,7 +58,9 @@ df_prec   <- fread(paste(myPath, outTable, 'xy_precip.csv', sep = '/'))
 df_temp   <- fread(paste(myPath, outTable, 'xy_temp.csv', sep = '/'))
 
 # Get coniferous cover data: coniferous == 2! 
+# spruce: share of spruce
 df_tree   <- fread(paste(myPath, outTable, 'xy_treeComp.csv', sep = '/'))
+df_spruce <- fread(paste(myPath, outTable, 'xy_spruce.csv', sep = '/'))
 
 
 # convert spei to wide format: 
@@ -122,20 +124,42 @@ range(df_spei$Series.1, na.rm = T)
 
 df_spei <- df_spei %>% 
   mutate(spei_cat = case_when(Series.1 <= -2 ~ 'ext_dry',
-                              Series.1 < -2 & Series.1 <= -1.5 ~ 'sev_dry',
-                              Series.1 < -1.5 & Series.1 <= -1 ~ 'mod_dry',
-                              Series.1 < -1 & Series.1 <= +1 ~ 'normal',
-                              Series.1 < +1 & Series.1 <= +1.5 ~ 'mod_wet',
-                              Series.1 < +1.5 & Series.1 <= +2 ~ 'sev_wet',
+                              Series.1 > -2 & Series.1 <= -1.5 ~ 'sev_dry',
+                              Series.1 > -1.5 & Series.1 <= -1 ~ 'mod_dry',
+                              Series.1 > -1 & Series.1 <= +1 ~ 'normal',
+                              Series.1 > +1 & Series.1 <= +1.5 ~ 'mod_wet',
+                              Series.1 > +1.5 & Series.1 <= +2 ~ 'sev_wet',
                               Series.1 > 2 ~ 'ext_wet'
                               ))
 
 
+df_spei <- df_spei %>% 
+  mutate(spei_cat = factor(spei_cat,
+                           levels = c('ext_dry','sev_dry', 'mod_dry','normal','mod_wet','sev_wet','ext_wet' )))
+
+# investigate NA: they orccuf ro each location in year 2000
+#df_spei %>% 
+#  filter(is.na(Series.1)) %>% 
+#  distinct(globalid)
+
 
 # Get frequency of extremely dry locations:
+# 
+library(RColorBrewer)
+display.brewer.pal(7, "BrBG")
+
 df_spei %>% 
+  filter(scale == 1) %>% 
   group_by(year, spei_cat) %>% 
-  tally()
+  tally() %>% 
+  #filter(spei_cat == 'ext_dry'|spei_cat == 'sev_dry') %>% 
+  filter(!is.na(spei_cat     )) %>% 
+  ggplot(aes(x = year,
+             y = n,
+             fill = spei_cat)) +
+  geom_col(position = "stack") + 
+  scale_fill_brewer(type = 'div', palette = "RdBu", "SPEI") + #"RdBu") #BrBG
+ theme_bw()
 
 
 df_temp %>% 
