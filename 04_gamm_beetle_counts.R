@@ -12,18 +12,18 @@ source('myPaths.R')
 
 # get libs ----------------------------------------------------------------
 
-#library(sf)
+library(sf)
 library(dplyr)
 library(data.table)
 library(tidyr)
-#library(raster)
+library(raster)
 library(rgdal)
 library(tidyverse)
 library(lubridate)
 library(patchwork)
 library(fasterize)
 library(ggpubr)
-#library(terra)
+library(terra)
 library(ggplot2)
 library(ggpubr)
 
@@ -53,7 +53,7 @@ library('itsadug')
 dat      <- fread(paste(myPath, outFolder, "dat.csv", sep = "/"))
 
 # Get SPEI and clim data:
-df_spei   <- fread(paste(myPath, outTable, 'xy_spei.csv'))
+df_spei   <- fread(paste(myPath, outTable, 'xy_spei.csv', sep = '/'))
 df_prec   <- fread(paste(myPath, outTable, 'xy_precip.csv', sep = '/'))
 df_temp   <- fread(paste(myPath, outTable, 'xy_temp.csv', sep = '/'))
 
@@ -63,19 +63,30 @@ df_tree   <- fread(paste(myPath, outTable, 'xy_treeComp.csv', sep = '/'))
 df_spruce <- fread(paste(myPath, outTable, 'xy_spruce.csv', sep = '/'))
 
 
-# convert spei to wide format: 
-df_spei2 <- df_spei %>% 
-  pivot_wider(names_from =  scale, values_from = Series.1, names_prefix = "spei")
 
-# convert to df_spei to month, year format: 
+# Get climate data for traps: --------------------------------------------------
+# this climate data are for soild drought!! not SPEI
+# xy_clim <- fread(paste(myPath, outTable, 'xy_clim.csv', sep = "/"))
+#
+# get trap coordinates
+xy        <- vect(paste(myPath, outFolder, "xy_3035.gpkg", sep = "/"), 
+                  layer = 'xy_3035') # read trap location
 
-df_spei3 <-
-  df_spei2 %>%
-  mutate(date = format(as.Date(date, "%d/%m/%Y"), "%m.%Y")) %>%
-  separate(date, c('month', 'year')) %>% 
-  mutate(month = as.numeric(month),
-         year = as.numeric(year))
 
+class(geom(xy))
+
+xy_4326 <- terra::project(xy, "epsg:4326")
+df_xy <- data.frame(x = geom(xy_4326)[,'x'],
+                    y = geom(xy_4326)[,'y'],
+                    globalid = xy_4326$globalid)
+
+df_xy3035 <- data.frame(x = geom(xy)[,'x'],
+                        y = geom(xy)[,'y'],
+                        globalid = xy$globalid)
+
+
+
+# Analyze data ------------------------------------
 
 # rename column names to join the datasets:
 df_prec <- df_prec %>% 
@@ -84,12 +95,6 @@ df_prec <- df_prec %>%
 df_temp <- df_temp %>% 
   rename(TMED = vals) %>% 
   mutate(TMED = TMED/10)  # as in the description
-
-# join data
-df_clim <- df_prec %>% 
-  full_join(df_temp, by = c("globalid", "month", "year")) %>% 
-  full_join(df_spei3, by = c("globalid", "month", "year")) #%>% 
-  
 
 # select only coniferous: == 2, 0 is no forest (eg. covers the whole 500 m buffer)
 df_conif <- df_tree %>% 
@@ -104,14 +109,52 @@ df_spei <- df_spei %>%
          year = as.numeric(year)) #%>%
 
 df_spei %>% 
+  filter(scale == 1) %>% 
+  filter(year > 2010) %>% 
   ggplot(aes(x = factor(year),
-             y = Series.1,
-             fill = factor(scale))) +
-  geom_boxplot(outlier.shape = NA ) +
+             y = Series.1)) +
+  geom_boxplot(#outlier.shape = NA, #,
+               fill = 'grey80' ) +
   geom_hline(yintercept = 0) +
   geom_hline(yintercept = -1, lty = 'dashed') +
-  theme_bw()+
-  facet_grid(.~scale) 
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 90)) + 
+  ylab('SPEI1')
+
+
+
+# SPEI plot on map: ----------------------------------------------
+df_spei_avg <- df_spei %>% 
+  filter(scale == 1) %>%
+  group_by(globalid, year ) %>% 
+  mutate(spei_med = median(Series.1))
+           
+# Convert xy data to sf object (not to spatVector from terra)
+xy_sf <- st_as_sf(xy)
+
+# merge SPEI data
+df_spei_avg_sf <- xy_sf %>% 
+  right_join(df_spei_avg, 'globalid') %>% 
+  filter(year > 2014) %>% 
+  filter(spei_med < 1)
+
+
+
+ggplot(bav_sf) +
+  geom_sf(color = 'black', 
+          fill  = 'grey93') + 
+  geom_sf(data = df_spei_avg_sf,
+          aes(color = spei_med)) + # , size = Age, size = 0.8size by factor itself!
+  scale_color_viridis(name = 'Drought islands\nmedian SPEI year <1', 
+                      alpha = 0.8,
+                      option = 'magma',
+                      direction = -1,
+                      na.value = 'transparent') +
+  facet_wrap(.~year, ncol = 4) + 
+  theme_bw()
+
+
+
 
 
 # Classify the SPEI data:
@@ -132,24 +175,48 @@ df_spei <- df_spei %>%
                               Series.1 > 2 ~ 'ext_wet'
                               ))
 
+# order spei classification
+df_spei <- df_spei %>%
+  mutate(spei_cat = factor(
+    spei_cat,
+    levels = c(
+      'ext_dry',
+      'sev_dry',
+      'mod_dry',
+      'normal',
+      'mod_wet',
+      'sev_wet',
+      'ext_wet'
+    )
+  ))
 
-df_spei <- df_spei %>% 
-  mutate(spei_cat = factor(spei_cat,
-                           levels = c('ext_dry','sev_dry', 'mod_dry','normal','mod_wet','sev_wet','ext_wet' )))
 
-# investigate NA: they orccuf ro each location in year 2000
+# convert spei long to wide format, to keep scale values as columns 
+df_spei2 <- df_spei %>% 
+  pivot_wider(!spei_cat, names_from =  scale, values_from = Series.1, names_prefix = "spei")
+
+# convert to df_spei to month, year format: 
+
+#df_spei3 <-
+ # df_spei2 %>%
+ # mutate(date = format(as.Date(date, "%d/%m/%Y"), "%m.%Y")) %>%
+ # separate(date, c('month', 'year')) %>% 
+ # mutate(month = as.numeric(month),
+  #       year = as.numeric(year))
+
+# investigate NA: they occur in each location in year 2000
 #df_spei %>% 
 #  filter(is.na(Series.1)) %>% 
 #  distinct(globalid)
 
 
-# Get frequency of extremely dry locations:
+# Get frequency of extremely dry locations: -----------------------------------------
 # 
 library(RColorBrewer)
 display.brewer.pal(7, "BrBG")
 
 df_spei %>% 
-  filter(scale == 1) %>% 
+  #filter(scale == 1) %>% 
   group_by(year, spei_cat) %>% 
   tally() %>% 
   #filter(spei_cat == 'ext_dry'|spei_cat == 'sev_dry') %>% 
@@ -162,15 +229,42 @@ df_spei %>%
  theme_bw()
 
 
-df_temp %>% 
+
+
+# join PREC, TEMP, SPEI data --------------------------------------------------
+df_clim <- df_prec %>% 
+  full_join(df_temp,  by = c("globalid", "month", "year")) %>% 
+  full_join(df_spei2, by = c("globalid", "month", "year")) #%>% 
+
+
+
+
+# Boxplots: TEMP and PRCP -------------------------------------------------
+
+
+p_temp <- df_temp %>% 
+  filter(year> 2013) %>% 
   ggplot(aes(x = factor(year),
              y = TMED)) +
-  geom_boxplot(outlier.shape = NA ) +
+  geom_boxplot(outlier.shape = 1, 
+               fill = 'lightgrey'  ) +
   geom_hline(yintercept = mean(df_temp$TMED), col="red") +
   #geom_hline(yintercept = -1, lty = 'dashed') +
   theme_bw() + 
   theme(axis.text.x = element_text(angle = 90))
 
+p_prec <- df_prec %>% 
+  filter(year> 2013) %>% 
+  ggplot(aes(x = factor(year),
+             y = PRCP)) +
+  geom_boxplot(outlier.shape = 1, fill = 'lightgrey', size = 0.5 ) +
+  geom_hline(yintercept = mean(df_prec$PRCP), col="red") +
+  #geom_hline(yintercept = -1, lty = 'dashed') +
+  theme_bw() + 
+  theme(axis.text.x = element_text(angle = 90))
+
+
+ggarrange(p_temp, p_prec)
 
 
 # Filter beetle data: get only ips ---------------------------------------------
@@ -178,26 +272,13 @@ df_temp %>%
 
 ips <- dat %>% 
   filter(year !=2014) %>% 
-  filter(art == 'Buchdrucker') %>% 
-  filter(doy > 92 &  doy < 305) # April 1st to Oct 30
+  filter(art == 'Buchdrucker') %>%
+  filter(representativ  == "Ja") %>% 
+  filter(doy > 92 &  doy < 335) # April 1st to Oct 30
 
 str(ips)
 
 
-# Get climate data for traps: --------------------------------------------------
-# this climate data are for soild drought!! not SPEI
-# xy_clim <- fread(paste(myPath, outTable, 'xy_clim.csv', sep = "/"))
-#
-# get trap coordinates
-xy        <- vect(paste(myPath, outFolder, "xy_3035.gpkg", sep = "/"), 
-                  layer = 'xy_3035') # read trap location
-
-class(geom(xy))
-
-xy_4326 <- terra::project(xy, "epsg:4326")
-df_xy <- data.frame(x = geom(xy_4326)[,'x'],
-                    y = geom(xy_4326)[,'y'],
-                    globalid = xy_4326$globalid)
 
 # Check if there is any trends in beetles numbers? -----------------------------------------
 # effect: location, effect within year, between years, between locations:
@@ -222,8 +303,6 @@ dd <- data.frame(count = c(100, 200, 300,
                  car = rep(c('a', 'b', 'd'), each = 3))
 
 doy_vec = c(70:270)
-
-#  --------------------------------------------------
 
 dd <- data.frame(cumsum = c(4, 12, 14.5,
                             8, 15, 20,
@@ -309,10 +388,15 @@ merge(df,
 ips2 <- ips %>% 
   left_join(df_clim, by = c("globalid", "year", "month")) %>% 
   left_join(df_conif , by = c("globalid")) %>% 
-  left_join(df_xy, by = c("globalid"))
+  left_join(df_xy, by = c("globalid")) # df_xy3035
 
 
-# try the predicton using the raw data
+
+
+
+
+
+# try the prediction using the raw data --------------------------------
 
 M <- list(c(1, 0.5), NA)
 m_counts <- bam(fangmenge ~
@@ -366,7 +450,9 @@ summary(m5)
 
 
 
-# Test XY relationship patter: observed vs modelled data ------------------
+
+
+# Test XY relationship pattern: observed vs modelled data ------------------
 # do not run
 # linear_model <- gam(Sources ~ SampleDepth, data = isit2)
 # summary(linear_model)
@@ -381,6 +467,8 @@ summary(m5)
 # gam_model <- gam(Sources ~ s(SampleDepth), data = isit2)
 # 
 
+
+
 # get together montly ips counts and spei: ------------------------------------------
 ips_sum <- ips %>%
   filter(representativ == 'Ja') %>% 
@@ -390,14 +478,38 @@ ips_sum <- ips %>%
 
 #  Add SPEI, temp, precip, spruce share data --------------------------------------------
 ips_sum2 <- ips_sum %>% 
-  left_join(df_clim, by = c("globalid", "year", "month")) %>% 
+  left_join(df_clim,   by = c("globalid", "year", "month")) %>% 
   left_join(df_conif , by = c("globalid")) %>% 
-  left_join(df_xy, by = c("globalid"))
+  left_join(df_spruce, by = c("globalid")) %>% 
+  left_join(df_xy,     by = c("globalid")) %>% # 3035 
+  mutate(log_sum = log(ips_sum +1 ))  # get log of the monthly values
+
+
+
+# Convert to factors to use in GAM: ---------------------------------------
+ips_sum2 <- ips_sum2 %>% 
+  mutate(globalid = factor(globalid),
+         monsto_name = factor(monsto_name)) #%>% 
+
+# add temporal autocorrelation  
+ips_sum2$AR.START <-ips_sum2$year==2015
+
+# use month-year as new variable: 
+ips_sum2 <- ips_sum2 %>% 
+  mutate(year_month = paste(year, month, sep = '_')) 
+
+
+ips_sum2 %>% 
+  filter(month != 10) %>% 
+  ggplot(aes(x = year_month,
+             y = ips_sum)) + 
+  geom_point() + 
+  theme(axis.text.x = element_text(angle = 90))
 
 
 # Investigate the Y distribution -----------------------------------
 # check for zeros, for NA
-min(ips_sum2$ips_sum)
+range(ips_sum2$ips_sum)
 
 ips_sum2 %>% 
   filter(ips_sum == 0) %>% 
@@ -405,44 +517,109 @@ ips_sum2 %>%
   distinct(globalid) %>% 
   tally()
 
+
 # about 400 records with 0 values, across 180 locations
 # has important impact!!
 # check for NA p none
-ips_sum2 %>% 
-  filter(is.na(ips_sum)) #%>% 
-  tally() %>% 
-  distinct(globalid) %>% 
-  tally()
-  
-# What distribution?
+
+# What distribution? ---------------------------------------------
   # https://towardsdatascience.com/insurance-risk-pricing-tweedie-approach-1d71207268fc
   # poisson - only for counts
   # gamma - does not take zero values
   # tweete - can handle zeros values
   
-  # Select optimal 'p' for tweetie - varies between 1 to2
-  
-  
+  # Select optimal 'p' for tweetie - varies between 1 to2 ---------------------------------------
+m <- gam(ips_sum ~ 1,ips_sum2, family = tw() )  
+m <- gam(ips_sum ~ 1,ips_sum2, family = tw(link = 'log') )  # those area teh same
+m <- gam(ips_sum ~ 1,ips_sum2, family = tw(link = 'log', a=1.85,b=1.93) )  # those area teh same, low and uppre limit for p optimization
+m <- gam(ips_sum ~ 1,ips_sum2, family = tw(link = 'log', theta = 1.85, a=1.82,b=1.99) )# the best
+m <- gam(ips_sum ~ 1,ips_sum2, family = Tweedie(p = 1.9, link = power(0.1)) ) 
+appraise(m)
+
+# Families in bam: 
+# ocat for ordered categorical data.
+# tw for Tweedie distributed data, when the power parameter relating the variance to the mean is to be estimated.
+# nb for negative binomial data when the theta parameter is to be estimated.
+# betar for proportions data on (0,1) when the binomial is not appropriate.
+# scat scaled t for heavy tailed data that would otherwise be modelled as Gaussian.
+# ziP for zero inflated Poisson data, when the zero inflation rate depends simply on the Poisson mean.
+m <- gam(ips_sum ~ 1,ips_sum2, family = nb )  
+appraise(m)
+
+m <- gam(ips_sum ~ 1,ips_sum2, family = nb(link = 'log' ))  
+appraise(m)
+
+m <- gam(ips_sum ~ 1,ips_sum2, family = nb(link = 'log', theta = 0.5 ))  
+appraise(m)
+
+m <- gam(ips_sum ~ 1,ips_sum2, family = nb(link = 'sqrt', theta = 0.5 ))  
+appraise(m)
+
+# wrong ones:
+#m <- gam(ips_sum ~ 1,ips_sum2, family = scat )  
+#appraise(m)
+
+#m <- gam(ips_sum ~ 1,ips_sum2, family = ziP )  
+#appraise(m)
+
+# Families to test: counts or aboundances:
+# poisson
+# negative binomial
+# quasi-poisson
+
+# 
+#Test negative binomial
+m <- gam(ips_sum ~ 1,ips_sum2, family = nb ) # negative binomial ,theta to be estimated
+m <- gam(log_sum ~ 1, ips_sum2 ) # gaussian
+appraise(m)
   
 # Check parameters for Tweedie
   
 
-hist(ips_sum2$ips_sum, breaks = seq(0, 52000, 500) )
+hist(log(ips_sum2$ips_sum+1))
 hist(ips_sum2$freq, breaks = seq(0, 1, 0.1) )
-hist(ips_sum2$spei12)
+hist(ips_sum2$ips_sum, breaks = seq(0, 55000, 500) )
 
 
-# convert to factors:
-ips_sum2 <- ips_sum2 %>% 
-  mutate(globalid = factor(globalid),
-         monsto_name = factor(monsto_name))
+# Check zero-inflated regression data:
+fm_zip
+
+
+
+# Check zero inflated count regession data? -------------------------------------
+library(pscl)
+
+# NOT RUN {
+## data
+data("bioChemists", package = "pscl")
+
+## without inflation
+## ("art ~ ." is "art ~ fem + mar + kid5 + phd + ment")
+fm_pois  <- glm(art ~ ., data = bioChemists, family = poisson)
+fm_qpois <- glm(art ~ ., data = bioChemists, family = quasipoisson)
+fm_nb    <- MASS::glm.nb(art ~ ., data = bioChemists)
+
+## with simple inflation (no regressors for zero component)
+fm_zip  <- zeroinfl(art ~ . | 1, data = bioChemists)
+fm_zinb <- zeroinfl(art ~ . | 1, data = bioChemists, dist = "negbin")
+
+## inflation with regressors
+## ("art ~ . | ." is "art ~ fem + mar + kid5 + phd + ment | fem + mar + kid5 + phd + ment")
+fm_zip2  <- zeroinfl(art ~ . | ., data = bioChemists)
+fm_zinb2 <- zeroinfl(art ~ . | ., data = bioChemists, dist = "negbin")
+# }
+
+
+
+
+
 
 plot(ips_sum2$spei1, ips_sum2$month )
 
 
 # Get GAM with all predictors: temp, spei, conif, XY ------------------------------------
 # check the dstribution:
-hist(ips_sum2$ips_sum)
+hist(ips_sum2$ips_sum, breaks = seq(0, 51000, 50))
 
 plot(ips_sum2$spei6, ips_sum2$ips_sum)
 
@@ -468,7 +645,7 @@ m1 <- gam(ips_sum ~ s(spei3),
           data = ips_standard,
           family = tw(link = 'log') )
 
-### Test gam only with standardized y value: -------------
+### GAM standardized y value: -------------
 m1 <- gam(ips_sum_stan ~ s(spei3), 
           data = ips_sum2)
 
@@ -486,257 +663,413 @@ ggplot(ips_sum2, aes(x = spei3, y = ips_sum_stan)) +
   theme_bw()
 
 
-# GAM: monthly sums -------------------------------------------
-knots_month <- list(doy = c(3.8, 10.5))
-
-m <- bam(ips_sum ~ s(spei1) +
-           #s(spei3) +
-           s(spei6) +
-           s(TMED, k = 100) +
-           s(PRCP) +
-           s(freq) +
-           s(month, k = 7, bs = 'cc') +
-           s(year, k=8) +
-           ti(TMED, spei6), 
-         ips_sum2, 
-         family = tw(link = "log"))
-
-
-
-k.check(m)
-plot(m, page = 1, shade=T)
-appraise(m)
-summary(m)
-
-m1 <- bam(ips_sum ~ s(spei1, k = 500) +
-            s(TMED, k =80) + 
-            s(month, k = 7, bs = 'cc') +
-            s(year, k = 8), # +
-            #s(globalid, k = 200, bs = 're'),  # 're' = random effect
-          data = ips_sum2,
-          family = tw(),    #Tweedie(1.25,power(.1)),#nb, #twlss,
-          method = 'fREML', # fast REL 
-          knots = knots,    # start and end of the cyclic term 'cc'
-          nthreads = c(4, 1), 
-          discrete = TRUE)
-
-m2 <- bam(ips_sum ~ s(spei1, k = 500, bs = 'cr') +
-            s(TMED, k =100) + 
-            s(PRCP, k =80) + 
-            s(month, k = 7, bs = 'cc') +
-            s(year, k = 8) +
-          s(globalid,  bs = 're'),  # 're' = random effect
-          data = ips_sum2,
-          family = nb, #negative binomial(),    #Tweedie(1.25,power(.1)),#nb, #twlss,
-          method = 'fREML', # fast REL 
-          knots = knots,    # start and end of the cyclic term 'cc'
-          nthreads = c(4, 1), 
-          discrete = TRUE)
-
-m3 <- bam(ips_sum ~ s(spei1, k = 500, bs = 'cr') +
-            s(TMED, k =100) + 
-            s(PRCP, k =80) + 
-            s(month, k = 7, bs = 'cc') +
-            s(year, k = 8) +
-            s(freq) +
-            s(globalid,  bs = 're'),  # 're' = random effect
-          data = ips_sum2,
-          family = nb, #negative binomial(),    #Tweedie(1.25,power(.1)),#nb, #twlss,
-          method = 'fREML', # fast REL 
-          knots = knots_month ,    # start and end of the cyclic term 'cc'
-          nthreads = c(4, 1), 
-          discrete = TRUE)
-
-m4 <- bam(ips_sum ~ s(spei1, k =800) +
-            s(TMED, k=150) + 
-            s(PRCP) + 
-            s(month, k =6) +
-            s(year, k = 8) +
-            s(freq) +
-            s(x, y, 
-              k = 100, 
-              bs = 'ds', 
-              m = c(1, 0.5)),# +
-            #s(globalid,  bs = 're'),  # 're' = random effect
-          data = ips_sum2,
-          family = tw(), #negative binomial(),    #Tweedie(1.25,power(.1)),#nb, #twlss,
-          method = 'fREML', # fast REML
-          select=F,
-          knots = knots_month,    # start and end of the cyclic term 'cc'
-          nthreads = c(4, 1), 
-          discrete = TRUE)
+# GAM: raw sums: monthly sums -------------------------------------------
+knots_month <- list(doy = c(4.2, 10.5))
 
 M <- list(c(1, 0.5), NA)
-m5 <- bam(ips_sum ~
-            s(spei1, k =80) + # drought
-            s(TMED, k=100) +  # temperature
-            s(PRCP, k = 100) +         # precip 
-            s(freq, k = 100) +         # spruce %
-            s(month, k =6) +  # months
-            s(year, k = 8) +  # year
-            s(monsto_name, k = 10, bs = 're') +
-            s(x, y, k = 200, bs = 'ds', m = c(1, 0.5))  + # 2D smooth
-           ti(TMED, year, bs = c('cc', 'tp'), k = c(15, 6))  +
-           ti(x, y, TMED, d = c(2,1), 
-              bs = c('ds','tp'), 
-              m = M, k = c(50, 10)) +
-           ti(x, y, PRCP, d = c(2,1), bs = c('ds','tp'),
-             m = M, k = c(50, 15))  +
-            ti(x, y, spei1, d = c(2,1), bs = c('ds','tp'),
-               m = M, k = c(50, 15)),
-          data = ips_sum2, 
-          method = 'fREML',
-          #family = Tweedie(p=1.1, link = power(0)),
-          family = tw(), #negative binomial(),
-         # knots = knots,
-          nthreads = 4, 
-          discrete = TRUE)
+m7 <- bam(
+  ips_sum ~ #spei_cat + s(year, by=spei_cat, k=6)  +
+    s(spei1, k = 5)  + # drought
+    s(spei3, k = 5) +
+    s(spei6, k = 5) +
+    s(spei12, k = 5) +
+    s(TMED, k = 5) +  # temperature
+    s(PRCP, k = 5)  +         # precip
+     s(freq, k = 5) +         # conif %
+   s(sp_prop) +             # spruce proportion
+    s(month, k = 7, bs = 'cc') +  # months
+     s(year, k = 5)+  # year
+    s(globalid, k = 5, bs = 're') + #random effect of trap
+     s(monsto_name, k = 5, bs = 're') + #random effect of trap pairs
+    s(
+      x,
+      y,
+      k = 5,
+      bs = 'ds',
+      m = c(1, 0.5)
+    ) + # 2D smooth
+     ti(TMED, year, bs = c('cc', 'tp'), k = c(15, 6)) +
+  ti(
+    x,
+    y,
+    TMED,
+    d = c(2, 1),
+    bs = c('ds', 'tp'),
+    m = M,
+    k = c(20, 10)
+  ) +
+    ti(
+      x,
+      y,
+      year,
+      d = c(2, 1),
+      bs = c('ds', 'tp'),
+      m = M,
+      k = c(20, 5)
+    ),#  +
+    # ti(
+    #   x,
+    #   y,
+    #   spei1,
+    #   d = c(2, 1),
+    #   bs = c('ds', 'tp'),
+    #   m = M,
+    #   k = c(20, 15)
+    # )    ,
+  data = ips_sum2,
+  AR.start=AR.START, 
+  rho=0.15,
+  method = 'fREML',
+  family = tw(),
+  knots = knots_month ,
+  nthreads = 4,
+  discrete = TRUE
+)
 
 
+ips_sum2_sept <- filter(ips_sum2, month < 10)
 
 M <- list(c(1, 0.5), NA)
-m7 <- bam(ips_sum ~
-            s(spei1, k =5) + # drought
-            s(TMED, k=5) +  # temperature
-            s(PRCP, k = 5) +         # precip 
-            s(freq, k = 5) +         # conif %
-            s(month, k =2, 'cc') +  # months
-            s(year, k = 2) +  # year
-            s(globalid, k = 5, bs = 're') +
-            s(monsto_name, k = 5, bs = 're') +
-            s(x, y, k = 5, bs = 'ds', m = c(1, 0.5))  + # 2D smooth
-            ti(TMED, year, bs = c('cc', 'tp'), k = c(15, 6)) ,# +
-            # ti(x, y, TMED, d = c(2,1), 
-            #    bs = c('ds','tp'), 
-            #    m = M, k = c(20, 10)) +
-            # ti(x, y, PRCP, d = c(2,1), bs = c('ds','tp'),
-            #    m = M, k = c(20, 15))  +
-            # ti(x, y, spei1, d = c(2,1), bs = c('ds','tp'),
-            #    m = M, k = c(20, 15)),
-          data = ips_sum2, 
-          method = 'fREML',
-          #family = Tweedie(p=1.1, link = power(0)),
-          family = tw(), #negative binomial(),
-          knots = knots_month ,
-          nthreads = 4, 
-          discrete = TRUE)
+m_rem10 <- bam(
+  ips_sum ~ #spei_cat + s(year, by=spei_cat, k=6)  +
+    s(spei1, k = 5)  + # drought
+    s(spei3, k = 5) +
+    s(spei6, k = 5) +
+    s(spei12, k = 5) +
+    s(TMED, k = 20) +  # temperature
+    s(PRCP, k = 20)  +         # precip
+    s(month, k = 6, bs = 'cc') +  # months
+    s(year, k = 5)+  # year
+    s(globalid, k = 5, bs = 're') + #random effect of trap
+    s(monsto_name, k = 5, bs = 're') + #random effect of trap pairs
+    s(freq, k = 5) +         # conif %
+    s(sp_prop) +             # spruce proportion
+     s(
+      x,
+      y,
+      k = 5,
+      bs = 'ds',
+      m = c(1, 0.5)
+    ) + # 2D smooth
+    ti(TMED, year, bs = c('cc', 'tp'), k = c(15, 6)) +
+    ti(
+      x,
+      y,
+      TMED,
+      d = c(2, 1),
+      bs = c('ds', 'tp'),
+      m = M,
+      k = c(20, 10)
+    ) +
+    ti(
+      x,
+      y,
+      year,
+      d = c(2, 1),
+      bs = c('ds', 'tp'),
+      m = M,
+      k = c(20, 5)
+    ),#  +
+  # ti(
+  #   x,
+  #   y,
+  #   spei1,
+  #   d = c(2, 1),
+  #   bs = c('ds', 'tp'),
+  #   m = M,
+  #   k = c(20, 15)
+  # )    ,
+  data = ips_sum2_sept,
+  AR.start=AR.START, 
+  rho=0.15,
+  method = 'fREML',
+  family = tw(),
+  knots = knots_month ,
+  nthreads = 4,
+  discrete = TRUE
+)
+
+
+plot(m_rem10, page = 1, scale = 0, shade = T)
+summary(m_rem10)
+appraise(m_rem10)
+
+draw(m_rem10, select = 13)  # xy
 
 
 
-summary(m7)
-plot(m7, page = 1)
-appraise(m7)
+# m7.noAR --------------------------------------------------------
+m7.noAR <- bam(
+  ips_sum ~ #spei_cat + s(year, by=spei_cat, k=6)  +
+    s(spei1, k = 5)  + # drought
+    s(spei3, k = 5) +
+    s(spei6, k = 5) +
+    s(spei12, k = 5) +
+    s(TMED, k = 5) +  # temperature
+    s(PRCP, k = 5)  +         # precip
+    s(freq, k = 5) +         # conif %
+    s(sp_prop) +             # spruce proportion
+    s(month, k = 7, bs = 'cc') +  # months
+    s(year, k = 5)+  # year
+    s(globalid, k = 5, bs = 're') + #random effect of trap
+    s(monsto_name, k = 5, bs = 're') + #random effect of trap pairs
+    s(
+      x,
+      y,
+      k = 5,
+      bs = 'ds',
+      m = c(1, 0.5)
+    ) + # 2D smooth
+    ti(TMED, year, bs = c('cc', 'tp'), k = c(15, 6)) +
+    ti(
+      x,
+      y,
+      TMED,
+      d = c(2, 1),
+      bs = c('ds', 'tp'),
+      m = M,
+      k = c(20, 10)
+    ) +
+    ti(
+      x,
+      y,
+      PRCP,
+      d = c(2, 1),
+      bs = c('ds', 'tp'),
+      m = M,
+      k = c(20, 15)
+    )  +
+    ti(
+      x,
+      y,
+      spei1,
+      d = c(2, 1),
+      bs = c('ds', 'tp'),
+      m = M,
+      k = c(20, 15)
+    ),
+  data = ips_sum2,
+  #AR.start=AR.START, 
+ # rho=0.15,
+  method = 'fREML',
+  family = tw(),
+  knots = knots_month ,
+  nthreads = 4,
+  discrete = TRUE
+)
+
+# AIC --------------------------------------------
+AIC(m7, m7.noAR )
 
 
-m5.glm <- gam(ips_sum ~
-            spei1 + # drought
-            TMED,# +  # temperature
-            # s(PRCP, k = 1) +         # precip 
-            # s(freq, k = 1) +         # spruce %
-            # s(month, k =1) +  # months
-            # s(year, k = 1) +  # year
-            # s(x, y, k = 1, bs = 'ds', m = c(1, 0.5))  + # 2D smooth
-            # ti(TMED, year, bs = c('cc', 'tp'), k = c(1, 1)),#  +
-            # # ti(x, y, TMED, d = c(2,1), 
-            #    bs = c('ds','tp'), 
-            #    m = M, k = c(50, 10)) +
-            # ti(x, y, PRCP, d = c(2,1), bs = c('ds','tp'),
-            #    m = M, k = c(50, 15))  +
-            # ti(x, y, spei1, d = c(2,1), bs = c('ds','tp'),
-            #    m = M, k = c(50, 15)),
-          data = ips_sum2, 
-          method = 'fREML',
-          #family = Tweedie(p=1.1, link = power(0)),
-          family = 'poisson') #,#tw())#, #negative binomial(),
-          # knots = knots,
-         # nthreads = 4)
+# m7.sub <- bam(
+#   ips_sum ~ #spei_cat + s(year, by=spei_cat, k=6)  +
+#     #s(spei1, k = 5)  + # drought
+#     s(spei3, k = 5) +
+#     s(spei6, k = 5) +
+#     s(spei12, k = 5) +
+#     s(TMED, k = 5) +  # temperature
+#     #s(PRCP, k = 5)  +         # precip
+#     s(freq, k = 5) +         # conif %
+#    # s(sp_prop) +             # spruce proportion
+#     s(month, k = 7, bs = 'cc') +  # months
+#     s(year, k = 5)+  # year
+#     s(globalid, k = 5, bs = 're') + #random effect of trap
+#     s(monsto_name, k = 5, bs = 're') + #random effect of trap pairs
+#     s(
+#       x,
+#       y,
+#       k = 5,
+#       bs = 'ds',
+#       m = c(1, 0.5)
+#     ) + # 2D smooth
+#     ti(TMED, year, bs = c('cc', 'tp'), k = c(15, 6)) +
+#     ti(
+#       x,
+#       y,
+#       TMED,
+#       d = c(2, 1),
+#       bs = c('ds', 'tp'),
+#       m = M,
+#       k = c(20, 10)
+#     ) +
+#     ti(
+#       x,
+#       y,
+#       PRCP,
+#       d = c(2, 1),
+#       bs = c('ds', 'tp'),
+#       m = M,
+#       k = c(20, 15)
+#     )  +
+#     ti(
+#       x,
+#       y,
+#       spei1,
+#       d = c(2, 1),
+#       bs = c('ds', 'tp'),
+#       m = M,
+#       k = c(20, 15)
+#     ) +
+#     ti(
+#       x,
+#       y,
+#       ,
+#       d = c(2, 1),
+#       bs = c('ds', 'tp'),
+#       m = M,
+#       k = c(20, 15)
+#     )
+#   data = ips_sum2,
+#   AR.start=AR.START, 
+#   rho=0.15,
+#   method = 'fREML',
+#   family = tw(),
+#   knots = knots_month ,
+#   nthreads = 4,
+#   discrete = TRUE
+# )
+# 
+# 
+# 
 
-appraise(m5.glm)
 
 
-m6 <- bam(ips_sum ~
-            s(spei1, k =80) + # drought
-            s(TMED, k=100) +  # temperature
-            s(PRCP, k = 100) +         # precip 
-            s(freq, k = 100) +         # spruce %
-            s(month, k =6) +  # months
-            s(year, k = 8) +  # year
-            s(x, y, k = 200, bs = 'ds', m = c(1, 0.5))  + # 2D smooth
-            ti(TMED, year, bs = c('cc', 'tp'), k = c(15, 6))  +
-            ti(x, y, TMED, d = c(2,1), 
-               bs = c('ds','tp'), 
-               m = M, k = c(50, 10)) +
-            ti(x, y, PRCP, d = c(2,1), bs = c('ds','tp'),
-               m = M, k = c(50, 15))  +
-            ti(x, y, spei1, d = c(2,1), bs = c('ds','tp'),
-               m = M, k = c(50, 15)),
-          data = ips_sum2, 
-          method = 'fREML',
-          #family = Tweedie(p=1.1, link = power(0)),
-          family = tw(), #negative binomial(),
-          # knots = knots,
-          nthreads = 4, 
-          discrete = TRUE)
-
+# compare more complex with less complex model: which one is better?
+AIC(m7, m7.sub)
 
 
 windows()
-appraise(m5, method = 'simulate')
-plot(m5, page = 1)
+summary(m7)
+plot(m7, page = 1, shade = T, scale = 0)
+appraise(m7)
+gratia::draw(m7, select = 13)
 
-m6 <- bam(ips_sum ~
-            s(spei1, k =800) + # drought
-            s(TMED, k=150) +  # temperature
-            s(PRCP, k = 100) +         # precip 
-            s(freq, k = 400) +         # spruce %
-            s(month, k =6) +  # months
-            s(year, k = 8) +  # year
-            s(x, y, k = 200, bs = 'ds', m = c(1, 0.5)) + # 2D smooth
-            ti(TMED, year, bs = c('cc', 'tp'), k = c(15, 6)),# +
-           # ti(x, y, TMED, d = c(2,1), bs = c('ds','tp'), 
-           #    m = M, k = c(50, 10)) +
-            # ti(x, y, PRCP, d = c(2,1), bs = c('ds','tp'),
-            #    m = M, k = c(50, 15)) +
-            # ti(x, y, spei, d = c(2,1), bs = c('ds','tp'),
-            #    m = M, k = c(50, 15)),
-          data = ips_sum2, 
-          method = 'fREML',
-          family = tw(), #negative binomial(),
-          knots = knots,
-          nthreads = 8, 
-          discrete = TRUE)
-
-# Usa scat family to account for heavy tail distribution
-# https://stat.ethz.ch/R-manual/R-devel/library/mgcv/html/scat.html
-m7 <- bam(ips_sum ~
-            s(spei1, k =800) + # drought
-            s(TMED, k=150) +  # temperature
-            s(PRCP, k = 100) +         # precip 
-            s(freq, k = 400) +         # spruce %
-            s(month, k =6) +  # months
-            s(year, k = 8) +  # year
-            s(x, y, k = 200, bs = 'ds', m = c(1, 0.5)) + # 2D smooth
-            ti(TMED, year, bs = c('cc', 'tp'), k = c(15, 6)),# +
-          # ti(x, y, TMED, d = c(2,1), bs = c('ds','tp'), 
-          #    m = M, k = c(50, 10)) +
-          # ti(x, y, PRCP, d = c(2,1), bs = c('ds','tp'),
-          #    m = M, k = c(50, 15)) +
-          # ti(x, y, spei, d = c(2,1), bs = c('ds','tp'),
-          #    m = M, k = c(50, 15)),
-          data = ips_sum2, 
-          method = 'fREML',
-          family=scat(link="identity"),
-          #family = tw(), #negative binomial(),
-          knots = knots,
-          nthreads = 8, 
-          discrete = TRUE)
-
-# m6 is a subset of m5, excluding lowimportance interactions. CHeck with AIC if it is really better?
-AIC(m5,m6,m7)
-
-appraise(m7, method = 'simulate')
+windows()
+gratia::draw(m7, select = 16)
 
 
+# Make some spatial predictions: !!! does not work!!!
+ips_sum3 <- ungroup(ips_sum2)
+exp_data <- with(ungroup(ips_sum3),
+              expand.grid(month = 6,
+                          #DoY = 180,
+                          year = seq(min(year), max(year), by = 1),
+                          x  = seq(min(x), max(x), length = 100),
+                          y  = seq(min(y), max(y), length = 100)))
+head(exp_data)
+fit <- predict(m7, exp_data)
+
+hist(predict(m7$fitted.values))
+save.image("models.RData")
+
+
+
+
+# Test small model:
+m8 <- gam(ips_sum ~ 
+            s(month, k = 6) +
+            s(year, k = 7) + 
+            s(TMED) + 
+            s(x,y),
+          data = ips_sum2,
+          family = tw()
+            )
+
+summary(m8)
+appraise(m8)
+
+
+m.logy <- bam(
+  log_sum  ~
+    s(month, k = 6, bs = 'cc') +
+    #s(year, k = 7) +
+    s(TMED, k = 80) +
+    s(PRCP, k = 10) +
+    s(spei1, k = 5)  + # drought
+    s(spei3, k = 5) +
+    s(spei6, k = 5) +
+    s(spei12, k = 5) +
+    s(freq, k = 5) +         # conif %
+    s(sp_prop) +             # spruce proportion
+    s(globalid, k = 5, bs = 're') + #random effect of trap
+    s(monsto_name, k = 5, bs = 're') + #random effect of trap pairs
+    s(x, y), # +
+    data = ips_sum2,
+  AR.start = AR.START,
+  rho = 0.15,
+  family = scat,
+  method = 'fREML',
+  knots = knots_month ,
+  nthreads = 4,
+  discrete = TRUE
+)
+
+appraise(m.logy)
+summary(m.logy)
+plot(m.logy, page = 1, )
+
+AIC(m7, m.logy)
+
+
+
+# 
+exp_data <- with(ips_sum2,
+                 expand.grid(month = 6,
+                             #DoY = 180,
+                             year = seq(min(year), max(year), by = 1),
+                             x  = seq(min(x), max(x), length = 100),
+                             y  = seq(min(y), max(y), length = 100)))
+
+exp_data<- exp_data %>% 
+  left_join(ips_sum2)
+
+
+exp_data %>% 
+  filter(!is.na(globalid))
+
+head(exp_data)
+fit <- predict(m8, exp_data)
+
+
+
+# with function -----------------------------------------------------
+str(mtcars)
+
+a2 <- with(mtcars, mpg[cyl == 8  &  disp > 350])
+
+
+
+
+# Make maps: --------------------------------------------------------------
+library(tidyverse)
+# ips_sum2 <- ips_sum2 %>% 
+#   mutate(x = as.numeric(round(x/100000, 2)),
+#          y = as.numeric(round(y/100000, 2)))#
+
+ips_sum2 <- ips_sum2  %>% 
+  mutate(across(c(x, y), round, digits = 4))
+
+
+ggplot(ips_sum2, 
+       aes(x = x, y = y)) +
+  geom_raster(aes(fill = ips_sum/10000))  + 
+  facet_wrap(~ year_month, ncol = 3) # +
+  scale_fill_viridis(name = expression(degree*C), option = 'plasma',
+                     na.value = 'transparent') +
+  coord_quickmap() +
+  theme(legend.position = 'top', legend.key.width = unit(2, 'cm'))
+
+
+# Galveston
+ggplot(pred.g, 
+       aes(x = LONGITUDE, 
+           y = LATITUDE)) +
+  geom_raster(aes(fill = Fitted)) + facet_wrap(~ YEAR, ncol = 12) +
+  scale_fill_viridis(name = expression(degree*C), option = 'plasma',
+                     na.value = 'transparent') +
+  coord_quickmap() +
+  theme(legend.position = 'top', legend.key.width = unit(2, 'cm'))
 
 # test for Tweedie family ---------------------------- --------------------
 
@@ -878,7 +1211,7 @@ ips_med <- ips %>%
 str(ips_med)
 
 # 
-knots_month <- list(doy = c(4.5, 10.5))
+knots_month <- list(doy = c(3.5, 10.5))
 m_med1 <- gam(fang_med ~ s(month, k = 7, bs = 'cc'),#+
            # s(year, k = 7), #+
           #s(globalid, k = 300),
