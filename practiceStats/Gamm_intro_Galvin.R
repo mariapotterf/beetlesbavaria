@@ -592,7 +592,8 @@ knitr::include_graphics(here('resources', 'cross-validated.png'))
 #----load-galveston-----------------------------------------------------------
 galveston <- #read_csv('C:/Users/ge45lep/Documents/stats/intro-gam-webinar-2020-master/intro-gam-webinar-2020-master/data/gbtemp.csv')
   #read_csv(here('data', 'gbtemp.csv')) %>%
-  read_csv('C:/Users/ge45lep/Documents/stats/intro-gam-webinar-2020-master/intro-gam-webinar-2020-master/data/gbtemp.csv') %>% 
+  read_csv('C:/Users/ge45lep/Documents/knowledge_base/stats/intro-gam-webinar-2020-master/intro-gam-webinar-2020-master/data/gbtemp.csv') %>% 
+  # C:\Users\ge45lep\Documents\knowledge_base\stats\intro-gam-webinar-2020-master\intro-gam-webinar-2020-master\data
   mutate(datetime = as.POSIXct(paste(DATE, TIME), 
                                format = '%m/%d/%y %H:%M', tz = "CDT"),
          STATION_ID = factor(STATION_ID), 
@@ -626,46 +627,47 @@ m <- bam(MEASUREMENT ~             # temperature
          knots = knots,    # start and end of the cyclic term 'cc'
          nthreads = c(4, 1), discrete = TRUE)
 
-m_k <- bam(MEASUREMENT ~             # temperature
-           s(ToD, k = 20) +        # how does temperature vary during a day
-           s(DoY, k = 300, bs = 'cc') + # day of the year (variation within the year)
-           s(YEAR, k = 45) +       # effect of years: changes over years 
-           s(LONGITUDE, LATITUDE,  # account for teh spatial structure 
-             k = 100, 
-             bs = 'ds', 
-             m = c(1, 0.5)) +
-           ti(DoY, YEAR, bs = c('cc', 'tp'), k = c(12, 15)) +
-           ti(LONGITUDE, LATITUDE, ToD, d = c(2,1), bs = c('ds','tp'),
-              m = list(c(1, 0.5), NA), k = c(20, 10)) +
-           ti(LONGITUDE, LATITUDE, DoY, d = c(2,1), bs = c('ds','cc'),
-              m = list(c(1, 0.5), NA), k = c(25, 12)) +
-           ti(LONGITUDE, LATITUDE, YEAR, d = c(2,1), bs = c('ds','tp'),
-              m = list(c(1, 0.5), NA), k = c(25, 15)),
-         data = galveston, 
-         method = 'fREML', # fast REL 
-         knots = knots,    # start and end of the cyclic term 'cc'
-         nthreads = c(4, 1), discrete = TRUE)
+# m_k <- bam(MEASUREMENT ~             # temperature
+#            s(ToD, k = 20) +        # how does temperature vary during a day
+#            s(DoY, k = 300, bs = 'cc') + # day of the year (variation within the year)
+#            s(YEAR, k = 45) +       # effect of years: changes over years 
+#            s(LONGITUDE, LATITUDE,  # account for teh spatial structure 
+#              k = 100, 
+#              bs = 'ds', 
+#              m = c(1, 0.5)) +
+#            ti(DoY, YEAR, bs = c('cc', 'tp'), k = c(12, 15)) +
+#            ti(LONGITUDE, LATITUDE, ToD, d = c(2,1), bs = c('ds','tp'),
+#               m = list(c(1, 0.5), NA), k = c(20, 10)) +
+#            ti(LONGITUDE, LATITUDE, DoY, d = c(2,1), bs = c('ds','cc'),
+#               m = list(c(1, 0.5), NA), k = c(25, 12)) +
+#            ti(LONGITUDE, LATITUDE, YEAR, d = c(2,1), bs = c('ds','tp'),
+#               m = list(c(1, 0.5), NA), k = c(25, 15)),
+#          data = galveston, 
+#          method = 'fREML', # fast REL 
+#          knots = knots,    # start and end of the cyclic term 'cc'
+#          nthreads = c(4, 1), discrete = TRUE)
+
 # make station ID as a smooth as well:
-m_stat <- bam(MEASUREMENT ~  
-             s(STATION_ID) +           # temperature
-             s(ToD, k = 20) +        # how does temperature vary during a day
-             s(DoY, k = 300, bs = 'cc') + # day of the year (variation within the year)
-             s(YEAR, k = 45) +       # effect of years: changes over years 
-             s(LONGITUDE, LATITUDE,  # account for teh spatial structure 
-               k = 100, 
-               bs = 'ds', 
-               m = c(1, 0.5)) +
-             ti(DoY, YEAR, bs = c('cc', 'tp'), k = c(12, 15)) +
-             ti(LONGITUDE, LATITUDE, ToD, d = c(2,1), bs = c('ds','tp'),
-                m = list(c(1, 0.5), NA), k = c(20, 10)) +
-             ti(LONGITUDE, LATITUDE, DoY, d = c(2,1), bs = c('ds','cc'),
-                m = list(c(1, 0.5), NA), k = c(25, 12)) +
-             ti(LONGITUDE, LATITUDE, YEAR, d = c(2,1), bs = c('ds','tp'),
-                m = list(c(1, 0.5), NA), k = c(25, 15)),
-           data = galveston, 
-           method = 'fREML', # fast REL 
-           knots = knots,    # start and end of the cyclic term 'cc'
-           nthreads = c(4, 1), discrete = TRUE)
+# m_stat <- bam(MEASUREMENT ~  
+#              s(STATION_ID) +           # temperature
+#              s(ToD, k = 20) +        # how does temperature vary during a day
+#              s(DoY, k = 300, bs = 'cc') + # day of the year (variation within the year)
+#              s(YEAR, k = 45) +       # effect of years: changes over years 
+#              s(LONGITUDE, LATITUDE,  # account for teh spatial structure 
+#                k = 100, 
+#                bs = 'ds', 
+#                m = c(1, 0.5)) +
+#              ti(DoY, YEAR, bs = c('cc', 'tp'), k = c(12, 15)) +
+#              ti(LONGITUDE, LATITUDE, ToD, d = c(2,1), bs = c('ds','tp'),
+#                 m = list(c(1, 0.5), NA), k = c(20, 10)) +
+#              ti(LONGITUDE, LATITUDE, DoY, d = c(2,1), bs = c('ds','cc'),
+#                 m = list(c(1, 0.5), NA), k = c(25, 12)) +
+#              ti(LONGITUDE, LATITUDE, YEAR, d = c(2,1), bs = c('ds','tp'),
+#                 m = list(c(1, 0.5), NA), k = c(25, 15)),
+#            data = galveston, 
+#            method = 'fREML', # fast REL 
+#            knots = knots,    # start and end of the cyclic term 'cc'
+#            nthreads = c(4, 1), discrete = TRUE)
 
 ## ----galveston-simple-model---------------------------------------------------
 m.sub <- bam(MEASUREMENT ~
@@ -695,8 +697,8 @@ plot(m, pages = 1, scheme = 2, shade = TRUE)
 
 
 ## ----galveston-full-model-draw------------------------------------------------
-draw(m, scales = 'free')
-
+gratia::draw(m, scales = 'free')
+hi
 
 ## ----galveston-full-predict---------------------------------------------------
 pdata <- with(galveston,
@@ -705,15 +707,15 @@ pdata <- with(galveston,
                           YEAR = seq(min(YEAR), max(YEAR), by = 1),
                           LONGITUDE = seq(min(LONGITUDE), max(LONGITUDE), length = 100),
                           LATITUDE  = seq(min(LATITUDE), max(LATITUDE), length = 100)))
-fit <- predict(m, pdata)
-ind <- exclude.too.far(pdata$LONGITUDE, pdata$LATITUDE,
+fit.g <- predict(m, pdata)
+ind.g <- exclude.too.far(pdata$LONGITUDE, pdata$LATITUDE,
                        galveston$LONGITUDE, galveston$LATITUDE, dist = 0.1)
-fit[ind] <- NA
-pred <- cbind(pdata, Fitted = fit)
+fit.g[ind.g] <- NA
+pred.g <- cbind(pdata, Fitted = fit.g)
 
 
 ## ----galveston-full-predict-plot, fig.show = 'hide'---------------------------
-plt <- ggplot(pred, aes(x = LONGITUDE, y = LATITUDE)) +
+plt <- ggplot(pred.g, aes(x = LONGITUDE, y = LATITUDE)) +
   geom_raster(aes(fill = Fitted)) + facet_wrap(~ YEAR, ncol = 12) +
   scale_fill_viridis(name = expression(degree*C), option = 'plasma', na.value = 'transparent') +
   coord_quickmap() +
@@ -722,7 +724,7 @@ plt
 
 
 ## ----galveston-full-predict-plot, echo = FALSE--------------------------------
-plt <- ggplot(pred, aes(x = LONGITUDE, y = LATITUDE)) +
+plt <- ggplot(pred.g, aes(x = LONGITUDE, y = LATITUDE)) +
   geom_raster(aes(fill = Fitted)) + facet_wrap(~ YEAR, ncol = 12) +
   scale_fill_viridis(name = expression(degree*C), option = 'plasma', na.value = 'transparent') +
   coord_quickmap() +
