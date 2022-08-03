@@ -180,12 +180,12 @@ dat_avg <- dat %>%
 
 # does the average number of beetles per trap differ between locations?
 # between years?
-dat_avg %>% 
-ggplot(aes(x = factor(year),
-           y = avg_beetles_trap,
-           fill = art)) +
+dat_avg %>%
+  ggplot(aes(x = factor(year),
+             y = avg_beetles_trap,
+             fill = art)) +
   geom_boxplot() +
-  facet_wrap(.~art , scales = 'free_y') +
+  facet_wrap(. ~ art , scales = 'free_y') +
   theme(legend.position = 'bottom')
 
 
@@ -208,13 +208,20 @@ dat <- dat %>%
 # Make a boxplot of mean values between populations and years intervals:
 # Correctly order levels
 dat_avg <- dat_avg %>% 
+  mutate(drought_period = case_when(
+    year < 2018 ~  'before',
+    year >= 2018 ~ 'after')) 
+
+
+
+dat_avg <- dat_avg %>% 
   mutate(drought_period = factor(drought_period,
                                  levels=c('before', 'after')))
                                  
      
 
 
-# geom smooth plot
+# geom boxplot plot
 dat_avg %>% 
   ggplot() +
   geom_boxplot(aes(x = drought_period,
@@ -482,17 +489,54 @@ buch_df <- xy_sf %>%
 
 
 # Plot spatial data ------------------------------------
+library(RColorBrewer )
+display.brewer.pal(7, "BrBG")
 
+buch_df_f <- buch_df %>% 
+  filter(bav_sum > 3000)
 # 
 windows()
-buch_df %>% 
-  filter(year == 2021) %>% 
-  ggplot() + 
-  geom_sf(aes(color = bav_sum ))  + # , size = 0.5 , size = AREA
-  scale_color_continuous(low = "lightgreen", 
-                         high = "darkgreen",
-                         space = "Lab", 
-                         na.value = "red", guide = "colourbar")#+
+#buch_df %>% 
+  #filter(year == 2021) %>% 
+ggplot(bav_sf) +
+  geom_sf(color = 'black', 
+        fill  = 'grey93') + 
+  geom_sf(data = buch_df_f,
+          aes(color = bav_sum,
+              size = bav_sum)) + # , size = Age, size = 0.8size by factor itself!
+  #geom_sf(buch_df, aes(color = bav_sum ))  + # , size = 0.5 , size = AREA
+  #scale_color_continuous(low = "#FFFF00",
+                       #  high = "#990000",
+                       #  space = "Lab",
+                       #  na.value = "transparent",
+                       # guide = "colourbar") +
+  scale_color_viridis(name = 'Beetle count/trap', 
+                      alpha = 0.8,
+                     option = 'magma',
+                     direction = -1,
+                     na.value = 'transparent') +
+  facet_wrap(.~year) + 
+  theme_bw()
+
+
+
+
+# try to plot variogram:  ----------------------------------
+library(gstat)
+
+#buch_df2 <- data.frame(buch_df) %>% 
+  
+
+?variogram
+vgm1<- variogram(log(bav_sum)~1,buch_df)
+plot(vgm1, type='b', main='Co-variogram')
+
+
+
+
+
+# Test fr Morans'I: ---------------------------
+Moran.I(ozone$Av8top, ozone.dists.inv) 
 
 
 
