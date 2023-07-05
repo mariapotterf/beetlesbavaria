@@ -339,11 +339,97 @@ ips_sum <- ips %>%
   group_by(year,falsto_name, globalid) %>% 
   summarize(sum_year = sum(fangmenge, na.rm = T)) %>% 
  # mutate(falsto_name2 = str_replace_all(falsto_name,' ','_')) %>% 
-  mutate(trap_n = as.numeric(gsub("\\D", "", falsto_name))) # extract numeric: get the trap number (1, 2,3) as a group
-  
+  mutate(trap_n = as.numeric(gsub("\\D", "", falsto_name))) %>% # extract numeric: get the trap number (1, 2,3) as a group
+  left_join(df_xy, by = c("globalid")) # df_xy3035
 
 
 nrow(ips_sum)
+
+ips_sum_15 <-ips_sum %>% 
+  filter(year == 2015)
+
+
+ips_sum_20 <-ips_sum %>% 
+  filter(year == 2020)
+
+# -----------------------------------------------------------------
+
+
+# Local variation analysis (LISA):
+# can be done per year
+library(spdep)
+
+# Get LISA: 
+
+# Create a spatial points data frame
+coordinates(ips_sum_15) <- ~ x + y
+coordinates(ips_sum_20) <- ~ x + y
+
+# Create queen contiguity neighbors object
+nb_15 <- knn2nb(knearneigh(coordinates(ips_sum_15),
+                        k = 1),  # nearest neighbor
+             sym = TRUE)
+nb_20 <- knn2nb(knearneigh(coordinates(ips_sum_20),
+                           k = 1),  # nearest neighbor
+                sym = TRUE)
+
+
+
+lisa_res_15<-localmoran(ips_sum_15$sum_year, nb2listw(nb_15))
+lisa_res_20<-localmoran(ips_sum_20$sum_year, nb2listw(nb_20))
+
+
+# add Lisa to points:
+ips_sum_15$Morans_I <-lisa_res_15[,1] # get the first column: Ii - local moran  stats
+ips_sum_20$Morans_I <-lisa_res_20[,1] # get the first column: Ii - local moran  stats
+
+
+# convert to sf object:
+ips_sum_15_sf <- st_as_sf(ips_sum_15)
+ips_sum_20_sf <- st_as_sf(ips_sum_20)
+
+ggplot() +
+  geom_sf(data = ips_sum_20_sf, 
+             aes(#x = x, 
+                 #y = y, 
+                 color = Morans_I)) +
+  scale_color_gradient(low = "white", 
+                       high = "red", 
+                       name = "Moran's I") +
+  theme_minimal()
+
+
+
+# Global Moran
+
+# get more distant neighbors:
+nb_g_15 <- knn2nb(knearneigh(coordinates(ips_sum_15),
+                           k = 20),  # nearest neighbor
+                sym = TRUE)
+nb_g_20 <- knn2nb(knearneigh(coordinates(ips_sum_20),
+                           k = 20),  # nearest neighbor
+                sym = TRUE)
+
+
+# Calculate the global Moran's I
+global_moran_15 <- moran.test(ips_sum_15$sum_year, nb2listw(nb_g_15) )
+global_moran_20 <- moran.test(ips_sum_20$sum_year, nb2listw(nb_g_20) )
+
+
+
+
+
+
+
+# example:
+
+data(afcon, package="spData")
+oid <- order(afcon$id)
+resI <- localmoran(afcon$totcon, nb2listw(paper.nb))
+printCoefmat(data.frame(resI[oid,], 
+                        row.names=afcon$name[oid]),
+             check.names=FALSE)
+
 # 
 # # Dummy example: Extrapolate values over days SKIP!!!:----------------------------------------------
 # # How to interpolate values between dates?
