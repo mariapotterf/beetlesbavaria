@@ -65,7 +65,7 @@ df_spruce <- fread(paste(myPath, outTable, 'xy_spruce.csv', sep = '/'))
 
 
 # Get climate data for traps: --------------------------------------------------
-# this climate data are for soild drought!! not SPEI
+# this climate data are for soil drought!! not SPEI
 # xy_clim <- fread(paste(myPath, outTable, 'xy_clim.csv', sep = "/"))
 #
 # get trap coordinates
@@ -84,6 +84,47 @@ df_xy3035 <- data.frame(x = geom(xy)[,'x'],
                         y = geom(xy)[,'y'],
                         globalid = xy$globalid)
 
+
+
+
+
+# Do neighboring traps correlate in beetle numbers?
+head(dat)
+
+dat2 <- 
+  dat %>% 
+  separate( falsto_name, c('loc', 'trap_n'), sep = ' ')
+  #separate(falsto_name, c("loc", 'trap_n'))
+
+dat2 <- dat %>%
+  mutate(trap_pair = as.numeric(str_extract(falsto_name, "[0-9]+")))
+
+unique(dat2$trap_n)
+# 1 2 3 
+
+# are 1 and 3 consistently indicating different groups? or is it 2-3, or 1-3?
+# quick overview: subset only data that have coorrect 1/2:
+df1 <-dat2 %>% 
+  filter(trap_pair == 1 ) %>% 
+  dplyr::select(monsto_name, year, month, doy, fangmenge, art)
+
+df2 <-dat2 %>% 
+  filter(trap_pair == 2 ) %>% 
+  dplyr::select(monsto_name, year, month, doy, fangmenge, art)
+
+# merge df1 & df2
+dd <- df1 %>% 
+  left_join(df2, by = c("monsto_name", "year", "month", "doy", "art"))
+
+plot(dd$fangmenge.x, dd$fangmenge.y )
+cor(dd$fangmenge.x, dd$fangmenge.y )
+
+ggplot(dd, aes(x = fangmenge.x,
+               y = fangmenge.y)) +
+  geom_point(alpha = 0.5) +
+  geom_smooth()
+
+corr <- gam(fangmenge.y  ~ s(fangmenge.x, bs = "cs"), dat = dd)
 
 
 # Analyze data ------------------------------------
@@ -291,76 +332,89 @@ ips$globalid <- factor(ips$globalid)
 length(unique(ips$globalid))
 
 
-
-# Dummy example: Extrapolate values over days SKIP!!!:----------------------------------------------
-# How to interpolate values between dates?
-dd <- data.frame(count = c(100, 200, 300,
-                           10, 15, 480,
-                           300, 50, 40),
-                 doy = c(90, 150, 230,
-                         87, 135, 235,
-                         85, 120, 240),
-                 car = rep(c('a', 'b', 'd'), each = 3))
-
-doy_vec = c(70:270)
-
-dd <- data.frame(cumsum = c(4, 12, 14.5,
-                            8, 15, 20,
-                            10, 20, 40),
-                 doy = c(4, 10, 15,
-                         5, 11, 14,
-                         5, 10, 15),
-                 gp = rep(c('a', 'b', 'd'), each = 3))
-
-doy_df = data.frame(doy = rep(c(2:20), 3),
-                    gp = rep(c('a', 'b', 'd'), each = 19))
-
-# complete the df by wished doy
-dd %>% 
-  right_join(doy_df) %>% 
-  arrange(gp, doy)
-
-# Solution: 
-dd$flag <- 0
-
-res1 <- by(dd, dd$gp, \(x) {
-  a <- cbind(merge(x[-3], 
-                   data.frame(doy=do.call(seq.int, 
-                                          as.list(range(x$doy)))), 
-                   all=TRUE), 
-             gp=el(x$gp))
-  na <- is.na(a$cumsum)
-  int <- with(a, spline(doy, 
-                        cumsum, 
-                        n=nrow(a)))$y
-  transform(a, 
-            cumsum=replace(cumsum, na, int[na]), 
-            flag=replace(flag, is.na(flag), 1))
-}) |> do.call(what=rbind)
-res1
+# Get sums of IPS beetle per year/trap: April 31 to September 30
+ips_sum <- ips %>% 
+  ungroup(.) %>% 
+  #dplyr::select(representativ == 'ja') %>% 
+  group_by(year,falsto_name, globalid) %>% 
+  summarize(sum_year = sum(fangmenge, na.rm = T)) %>% 
+ # mutate(falsto_name2 = str_replace_all(falsto_name,' ','_')) %>% 
+  mutate(trap_n = as.numeric(gsub("\\D", "", falsto_name))) # extract numeric: get the trap number (1, 2,3) as a group
+  
 
 
-
-
-# from answer: ------------------------------------------
-res1 <- by(dd, dd$gp, \(x) {
-  a <-
-    cbind(merge(x[-3], data.frame(doy = do.call(
-      seq.int, as.list(range(x$doy))
-    )), all = TRUE), gp = el(x$gp))
-  na <- is.na(a$cumsum)
-  int <- with(a, spline(doy, cumsum, n = nrow(a)))$y
-  # transform(a, cumsum=replace(cumsum, na, int[na]), flag=replace(flag, is.na(flag), 1))
-  df <-
-    transform(a,
-              cumsum = replace(cumsum, na, int[na]),
-              flag = replace(flag, is.na(flag), 1))
-  merge(df, data.frame(doy = 2:20, gp = el(a$gp)), all = TRUE) |> {
-    \(.) .[order(.$doy),]
-  }()
-}) |> do.call(what = rbind)
-res1
-
+nrow(ips_sum)
+# 
+# # Dummy example: Extrapolate values over days SKIP!!!:----------------------------------------------
+# # How to interpolate values between dates?
+# # Skip the variation within a year!!!
+# dd <- data.frame(count = c(100, 200, 300,
+#                            10, 15, 480,
+#                            300, 50, 40),
+#                  doy = c(90, 150, 230,
+#                          87, 135, 235,
+#                          85, 120, 240),
+#                  car = rep(c('a', 'b', 'd'), each = 3))
+# 
+# doy_vec = c(70:270)
+# 
+# dd <- data.frame(cumsum = c(4, 12, 14.5,
+#                             8, 15, 20,
+#                             10, 20, 40),
+#                  doy = c(4, 10, 15,
+#                          5, 11, 14,
+#                          5, 10, 15),
+#                  gp = rep(c('a', 'b', 'd'), each = 3))
+# 
+# doy_df = data.frame(doy = rep(c(2:20), 3),
+#                     gp = rep(c('a', 'b', 'd'), each = 19))
+# 
+# # complete the df by wished doy
+# dd %>% 
+#   right_join(doy_df) %>% 
+#   arrange(gp, doy)
+# 
+# # Solution: 
+# dd$flag <- 0
+# 
+# res1 <- by(dd, dd$gp, \(x) {
+#   a <- cbind(merge(x[-3], 
+#                    data.frame(doy=do.call(seq.int, 
+#                                           as.list(range(x$doy)))), 
+#                    all=TRUE), 
+#              gp=el(x$gp))
+#   na <- is.na(a$cumsum)
+#   int <- with(a, spline(doy, 
+#                         cumsum, 
+#                         n=nrow(a)))$y
+#   transform(a, 
+#             cumsum=replace(cumsum, na, int[na]), 
+#             flag=replace(flag, is.na(flag), 1))
+# }) |> do.call(what=rbind)
+# res1
+# 
+# 
+# 
+# 
+# # from answer: ------------------------------------------
+# res1 <- by(dd, dd$gp, \(x) {
+#   a <-
+#     cbind(merge(x[-3], data.frame(doy = do.call(
+#       seq.int, as.list(range(x$doy))
+#     )), all = TRUE), gp = el(x$gp))
+#   na <- is.na(a$cumsum)
+#   int <- with(a, spline(doy, cumsum, n = nrow(a)))$y
+#   # transform(a, cumsum=replace(cumsum, na, int[na]), flag=replace(flag, is.na(flag), 1))
+#   df <-
+#     transform(a,
+#               cumsum = replace(cumsum, na, int[na]),
+#               flag = replace(flag, is.na(flag), 1))
+#   merge(df, data.frame(doy = 2:20, gp = el(a$gp)), all = TRUE) |> {
+#     \(.) .[order(.$doy),]
+#   }()
+# }) |> do.call(what = rbind)
+# res1
+# 
 
 
 
@@ -526,7 +580,7 @@ ips_sum2 %>%
   # https://towardsdatascience.com/insurance-risk-pricing-tweedie-approach-1d71207268fc
   # poisson - only for counts
   # gamma - does not take zero values
-  # tweete - can handle zeros values
+  # tweedie - can handle zeros values
   
   # Select optimal 'p' for tweetie - varies between 1 to2 ---------------------------------------
 m <- gam(ips_sum ~ 1,ips_sum2, family = tw() )  
@@ -725,6 +779,26 @@ m7 <- bam(
   nthreads = 4,
   discrete = TRUE
 )
+
+
+# !! does not work !!! Test Tweedie and hurdle/zero inflated :from glmmTMB package
+library(glmmTMB)
+library(MuMIn)
+
+m8. <- glmmTMB(
+  ips_sum ~ TMED#,
+    ,
+  data = ips_sum2)
+
+summary(m8.)
+
+dredge(m8.)
+
+
+
+
+
+
 
 
 ips_sum2_sept <- filter(ips_sum2, month < 10)
