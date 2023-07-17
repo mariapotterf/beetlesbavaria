@@ -53,7 +53,7 @@ dat      <- fread(paste(myPath, outFolder, "dat.csv", sep = "/"))
 # ---------------------------------------------------------
 
 # data: counts 
-# counts are discrete data
+# counts are discrete data, bounded by 0, always positive
 # test families:
 # Poisson - count or aboundance data
 # negative binomial - count or abundance with overdispersion
