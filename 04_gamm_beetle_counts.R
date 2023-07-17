@@ -494,11 +494,28 @@ testDispersion(simulationOutput)
 
 
 # try zero inflated model:
+library(pscl)
+
+# Fit a zero-inflated negative binomial model
+m_zero <- zeroinfl(sum_beetle ~ temp*year + prec, 
+                   dist = "negbin", data = ips2)
+
+# View the model summary
+summary(m_zero)
 
 
 
 
 
+
+
+
+
+
+
+
+
+AIC(m_zero,glm1)
 
 
 # example
