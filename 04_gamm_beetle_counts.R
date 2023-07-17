@@ -44,6 +44,8 @@ library("viridis")
 library('readr')
 library('gganimate')
 library('itsadug')
+library(DHARMa)
+library(MASS)
 
 
 
@@ -332,12 +334,12 @@ ips$globalid <- factor(ips$globalid)
 length(unique(ips$globalid))
 
 
-# Get sums of IPS beetle per year/trap: April 31 to September 30
+# Get sums of IPS beetle per year/trap: April 31 to October 30
 ips_sum <- ips %>% 
   ungroup(.) %>% 
   #dplyr::select(representativ == 'ja') %>% 
   group_by(year,falsto_name, globalid) %>% 
-  summarize(sum_year = sum(fangmenge, na.rm = T)) %>% 
+  summarize(sum_beetle = sum(fangmenge, na.rm = T)) %>% 
  # mutate(falsto_name2 = str_replace_all(falsto_name,' ','_')) %>% 
   mutate(trap_n = as.numeric(gsub("\\D", "", falsto_name))) %>% # extract numeric: get the trap number (1, 2,3) as a group
   left_join(df_xy, by = c("globalid")) # df_xy3035
@@ -375,8 +377,8 @@ nb_20 <- knn2nb(knearneigh(coordinates(ips_sum_20),
 
 
 
-lisa_res_15<-localmoran(ips_sum_15$sum_year, nb2listw(nb_15))
-lisa_res_20<-localmoran(ips_sum_20$sum_year, nb2listw(nb_20))
+lisa_res_15<-localmoran(ips_sum_15$sum_beetle, nb2listw(nb_15))
+lisa_res_20<-localmoran(ips_sum_20$sum_beetle, nb2listw(nb_20))
 
 
 # add Lisa to points:
@@ -412,12 +414,123 @@ nb_g_20 <- knn2nb(knearneigh(coordinates(ips_sum_20),
 
 
 # Calculate the global Moran's I
-global_moran_15 <- moran.test(ips_sum_15$sum_year, nb2listw(nb_g_15) )
-global_moran_20 <- moran.test(ips_sum_20$sum_year, nb2listw(nb_g_20) )
+global_moran_15 <- moran.test(ips_sum_15$sum_beetle, nb2listw(nb_g_15) )
+global_moran_20 <- moran.test(ips_sum_20$sum_beetle, nb2listw(nb_g_20) )
+
+# !!!
+
+
+
+# Simpler lm: with counts:
+# get countsper year
+# avg temp, spei, PRCP :april - oct
+df_clim_veg <- df_clim %>% 
+  filter(year > 2014 & year < 2022  ) %>% 
+  filter(month > 3 & month < 11 ) %>% # vegetation period: April 1 - Oct 31
+  group_by(globalid, year) %>% 
+  summarise(prec = mean(PRCP),
+            temp = mean(TMED),
+            m_spei1 = mean(spei1, na.rm = T),
+            m_spei3 = mean(spei3, na.rm = T),
+            m_spei6 = mean(spei6, na.rm = T),
+            m_spei12 = mean(spei12, na.rm = T)
+            )
+
+
+# model raw counts??? !!! -----------------------------------
+ips2 <- ips_sum %>% # sum up beetle counts per veg season, on yearly basis
+  left_join(df_clim_veg, by = c("globalid", "year")) %>% # , "month" 
+  left_join(df_conif , by = c("globalid")) %>% 
+  left_join(df_xy, by = c("globalid", 'x', 'y')) # df_xy3035
+
+
+
+# Do drivers importance change over time? --------------
+# ChatGPT: 
+# To test if the importance of drivers explaining variability changed over time: 
+# perform temporal interaction analysis - 
+# allows to assess whether the relationships between the drivers and the response variable differ across different time periods. 
+
+# check hist of conts
+hist(ips2$sum_beetle)
+median(ips2$sum_beetle)
+mean(ips2$sum_beetle)
+
+
+ggplot(ips2, aes(x = sum_beetle)) + 
+  geom_histogram(colour = 4, fill = "white", 
+                 bins = 5000)
+
+# check for 0
+ips2 %>% 
+  filter(sum_beetle == 0) # 0 yes!! but only around 20, vey little
+
+fitdistr(ips2$sum_beetle, 'Poisson')
+
+
+# poisson: mean and variance are equal
+# negative-binmial - allows for overdispersion (variance excees the mean) - not my case
+
+glm1 <- glm(sum_beetle ~ temp + prec + temp:year + temp:year,
+   data = ips2,
+   family = "poisson",
+   na.action = "na.fail")
+
+# Explore teh model summary:
+summary(glm1)
+anova(glm1)
+MuMIn::dredge(glm1)
+
+# explore residuals
+windows()
+simulationOutput <- DHARMa::simulateResiduals(fittedModel = glm1, 
+                                      plot = T)
+# Yay! the QQ plot shows that we have some issues, residuals are not independent
+
+# test if the residuals are the same as random?
+testDispersion(simulationOutput)
 
 
 
 
+# try zero inflated model:
+
+
+
+
+
+
+
+# example
+# Assuming you have a dataset called 'data' with columns 'response', 'driver1', 'driver2', and 'time'
+
+ggplot(ips2, aes(x = year, 
+                 y = sum_beetle)) + 
+  geom_point() +
+  stat_smooth(method = "glm")
+
+
+# Fit a linear regression model for each time period
+model <- lm(sum_beetle ~ temp + prec + year + 
+              temp:year + prec:year, 
+            data = ips2)
+
+# Perform an analysis of variance (ANOVA) to assess the significance of the interaction terms
+anova(model)
+
+# Assess the significance of the interaction terms
+summary(model)
+
+windows()
+plot(model, 1)
+
+
+
+# try again gam:
+gam1 <- gam(sum_beetle ~ s(temp, by = year) +
+               s(prec, by = year), 
+            data = ips2)
+summary(gam1)
 
 
 
