@@ -441,8 +441,8 @@ df_clim_veg <- df_clim %>%
 ips2 <- ips_sum %>% # sum up beetle counts per veg season, on yearly basis
   left_join(df_clim_veg, by = c("globalid", "year")) %>% # , "month" 
   left_join(df_conif , by = c("globalid")) %>% 
-  left_join(df_xy, by = c("globalid", 'x', 'y')) # df_xy3035
-
+  left_join(df_xy, by = c("globalid", 'x', 'y')) %>% # df_xy3035
+  mutate(year = as.factor(as.character(year)))
 
 
 # Do drivers importance change over time? --------------
@@ -471,7 +471,7 @@ fitdistr(ips2$sum_beetle, 'Poisson')
 # poisson: mean and variance are equal
 # negative-binmial - allows for overdispersion (variance excees the mean) - not my case
 
-glm1 <- glm(sum_beetle ~ temp + prec + temp:year + temp:year,
+glm1 <- glm(sum_beetle ~ temp + prec + temp:as.numeric(year) + m_spei3,
    data = ips2,
    family = "poisson",
    na.action = "na.fail")
@@ -496,30 +496,51 @@ testDispersion(simulationOutput)
 # try zero inflated model:
 library(pscl)
 
+install.packages("countreg", repos = "http://R-Forge.R-project.org")
+library("countreg")
+
+#https://stackoverflow.com/questions/43075911/examining-residuals-and-visualizing-zero-inflated-poission-r
+
 # Fit a zero-inflated negative binomial model
-m_zero <- zeroinfl(sum_beetle ~ temp*year + prec, 
+m_zero <- zeroinfl(sum_beetle ~ temp*year + m_spei3, 
                    dist = "negbin", data = ips2)
 
 # View the model summary
 summary(m_zero)
 
 
+# simply plot effects: 
+plot(allEffects(m_zero))
 
 
+# Compute the correlation matrix
+cor_matrix <- cor(ips2[, c(#"year",
+                           "temp", 
+                           'prec',
+                           #"m_spei1",
+                           "m_spei3"#,
+                           #"m_spei6",
+                           #"m_spei12"
+                           )])
+
+# View the correlation matrix
+print(cor_matrix)
 
 
+# variance inflation factor (VIF)
+# Load the 'car' package (if not already loaded)
+library(car)
+
+# Compute the VIF values
+vif_values <- vif(lm(temp ~ m_spei12 + prec + m_spei1, 
+                     data = ips2))
+
+vif_values
 
 
+#AIC(m_zero,glm1)
 
 
-
-
-
-AIC(m_zero,glm1)
-
-
-# example
-# Assuming you have a dataset called 'data' with columns 'response', 'driver1', 'driver2', and 'time'
 
 ggplot(ips2, aes(x = year, 
                  y = sum_beetle)) + 
@@ -548,6 +569,17 @@ gam1 <- gam(sum_beetle ~ s(temp, by = year) +
                s(prec, by = year), 
             data = ips2)
 summary(gam1)
+
+
+
+
+
+
+
+
+
+
+
 
 
 
