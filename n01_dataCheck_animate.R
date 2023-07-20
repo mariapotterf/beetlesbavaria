@@ -83,7 +83,7 @@ dat <- dat %>%
   dplyr::mutate(year  = lubridate::year(kont_dat), 
                 month = lubridate::month(kont_dat), 
                 day   = lubridate::day(kont_dat),
-                doy   =  lubridate::yday(kont_dat) + 1)  # as POXIT data has January 1st at 0
+                doy   = lubridate::yday(kont_dat) + 1)  # as POXIT data has January 1st at 0
 
 
 # get basic stats: count by beetles over year, counts by records/traps
@@ -125,6 +125,26 @@ dat %>%
   distinct(globalid) %>% 
   count()
 
+# usefull period: 2015-2021 (2014 does not have counts per trap, only sum by year)
+#   art            year     n
+#   <chr>         <dbl> <int>
+# 1 Buchdrucker    2014     1
+# 2 Buchdrucker    2015   203
+# 3 Buchdrucker    2016   234
+# 4 Buchdrucker    2017   224
+# 5 Buchdrucker    2018   247
+# 6 Buchdrucker    2019   244
+# 7 Buchdrucker    2020   251
+# 8 Buchdrucker    2021   246
+# 9  Kupferstecher  2014     1
+# 10 Kupferstecher  2015   203
+# 11 Kupferstecher  2016   234
+# 12 Kupferstecher  2017   224
+# 13 Kupferstecher  2018   247
+# 14 Kupferstecher  2019   244
+# 15 Kupferstecher  2020   251
+# 16 Kupferstecher  2021   246
+
 
 # --------------------------------------------------------------------
 #              Standardize beetle counts/trap/year
@@ -157,6 +177,62 @@ dat_avg <- dat %>%
             freq_visit  = length(unique(kont_dat)),
             avg_beetles_trap = sum_beetles/freq_visit) #%>%
 
+
+# check revisit times:
+dat_avg %>% 
+  ungroup() %>% 
+  distinct(freq_visit) %>% 
+  pull() %>% 
+  hist()
+
+# 6 recrding months: need at least 12 recordings!! or 10..
+# 
+
+
+# about 93 records have 0 sum beetles per year (11 ips, 83 pityogenes), ad checked only once per year! 
+# check:
+# Buchdrucker 2015 {4826784B-6D9B-4CB6-B431-14132184BCB7}
+dat %>% 
+  filter(globalid == "{4826784B-6D9B-4CB6-B431-14132184BCB7}")
+
+# or have 0 sum beetles, but checked 22 times!! per season! (Pityogenes)
+#Kupferstecher 2016 {9FD90E97-9C4E-478F-9A89-724C74C95FDC}
+dat %>% 
+  filter(globalid == "{9FD90E97-9C4E-478F-9A89-724C74C95FDC}" & year == 2016 
+         #& art == "Kupferstecher"
+         ) %>% 
+  arrange(kont_dat)
+
+
+# get unique site numbers: one globalid can have two traps: one for Ips, one for Pityogenes;
+# seems that traps with zeros are consistent...
+zero_ips_traps <- dat_avg %>% 
+  filter(sum_beetles == 0 & art == 'Buchdrucker') %>% 
+  ungroup(.) %>% 
+  dplyr::distinct(globalid) %>% 
+  pull()
+  
+# 12 locations of zero beetles for IPS:
+dat_avg %>% 
+  filter(globalid == "9A355BAA-43CC-4004-BFF8-8A3BEF2C1263") %>% 
+  # dplyr::filter(globalid %in% zero_ips_traps) #%>% 
+  filter(art == 'Buchdrucker')
+
+dat %>% 
+  filter(art == 'Buchdrucker') %>% 
+  filter(globalid == "9A355BAA-43CC-4004-BFF8-8A3BEF2C1263" & year == 2020)# %>% 
+  
+
+# check distribution and zeros:
+dat_avg %>% 
+  ggplot(aes(x = avg_beetles_trap)) +
+  geom_histogram(bins = 500)
+
+
+# how many zeros I have for mean beetles per trap??
+dat_avg %>% 
+  filter(avg_beetles_trap == 0) %>% 
+  View()
 
 # what is average revisit time?
 # number of days: April to October: 212 days
