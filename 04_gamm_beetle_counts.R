@@ -58,6 +58,7 @@ dat      <- fread(paste(myPath, outFolder, "dat.csv", sep = "/"))
 df_spei   <- fread(paste(myPath, outTable, 'xy_spei.csv', sep = '/'))
 df_prec   <- fread(paste(myPath, outTable, 'xy_precip.csv', sep = '/'))
 df_temp   <- fread(paste(myPath, outTable, 'xy_temp.csv', sep = '/'))
+# get elevation as well!!!
 
 # Get coniferous cover data: coniferous == 2! 
 # spruce: share of spruce
@@ -104,6 +105,12 @@ dat2 <- dat %>%
 unique(dat2$trap_n)
 # 1 2 3 
 
+# check for traps: 1, 2,3, - if there is NA, maybe replaed by other trap?
+dat2 %>% 
+ # select(monsto_name, year, art, fangmenge) %>% 
+  filter(monsto_name == 'Berg' & year == 2015 & month == 4 & art == 'Buchdrucker' )
+#2015     4 Berg               28    NA    - no, simply missing count of beetles
+
 # are 1 and 3 consistently indicating different groups? or is it 2-3, or 1-3?
 # quick overview: subset only data that have coorrect 1/2:
 df1 <-dat2 %>% 
@@ -118,15 +125,79 @@ df2 <-dat2 %>%
 dd <- df1 %>% 
   left_join(df2, by = c("monsto_name", "year", "month", "doy", "art"))
 
-plot(dd$fangmenge.x, dd$fangmenge.y )
-cor(dd$fangmenge.x, dd$fangmenge.y )
 
-ggplot(dd, aes(x = fangmenge.x,
+# check correlation for individual secies?
+dd_ips <- dd %>% 
+  filter(art == 'Buchdrucker')# %>% 
+
+# aggeraget by months instead of teh DOY:
+dd_ips_sum <- 
+  dd_ips %>% 
+  group_by(year, month, monsto_name) %>% 
+  summarise(trap1 = sum(fangmenge.x),
+            trap2 = sum(fangmenge.y)) %>%
+  ungroup() %>%
+  filter(complete.cases(.))
+
+
+# tau autokoralacia - korelacia v case
+# pozriet differences v casoch
+# elevation?
+
+
+ggplot(dd_ips_sum, aes(x = trap1, 
+                       y = trap2)) +
+  geom_point()+
+  geom_smooth(method = 'gam')
+  
+
+m_gam <- gam(trap2~s(trap1), 
+          data = dd_ips_sum, 
+          family = poisson, 
+          na.action = na.omit)
+
+summary(m_gam)
+plot(m_gam)
+
+
+m2 <- lm(trap1~I(trap2^2), 
+          data = dd_ips_sum, 
+         # family = poisson, 
+          na.action = na.omit)
+
+summary(m2)
+plot(m2)
+
+
+
+cor(dd_ips_sum$trap1,dd_ips_sum$trap2) # COR: 0.76
+#aov(m1)
+
+plot(m2, all = T)  # shows the residuals
+
+plot(x = dd_ips_sum$trap1, y= dd_ips_sum$trap2, 
+     main = "Main title", 
+     xlab = "X axis title", ylab = "Y axis title",
+     pch = 19, frame = FALSE)
+abline(m2, col = "blue")
+
+plot(dd_ips$fangmenge.x, dd_ips$fangmenge.y )
+cor(dd_ips$fangmenge.x, dd_ips$fangmenge.y )
+
+ggplot(dd_ips, aes(x = fangmenge.x,
                y = fangmenge.y)) +
   geom_point(alpha = 0.5) +
-  geom_smooth()
+  geom_smooth('lm')
 
-corr <- gam(fangmenge.y  ~ s(fangmenge.x, bs = "cs"), dat = dd)
+
+glm_traps <- glm(fangmenge.y  ~ fangmenge.x, family = "negbin", 
+            dat = dd_ips)
+
+summary(glm_traps)
+
+windows()
+simulationOutput <- simulateResiduals(fittedModel = glm_traps, 
+                                      plot = T)
 
 
 # Analyze data ------------------------------------
@@ -441,10 +512,10 @@ df_clim_veg <- df_clim %>%
 ips2 <- ips_sum %>% # sum up beetle counts per veg season, on yearly basis
   left_join(df_clim_veg, by = c("globalid", "year")) %>% # , "month" 
   left_join(df_conif , by = c("globalid")) %>% 
-  left_join(df_xy, by = c("globalid", 'x', 'y')) %>% # df_xy3035
-  mutate(year = as.factor(as.character(year)))
+  left_join(df_xy, by = c("globalid", 'x', 'y')) #%>% # df_xy3035
+  #mutate(year = as.factor(as.character(year)))
 
-
+write.csv(ips2, 'C:/Users/ge45lep/Documents/2022_BarkBeetles_Bavaria/outTable/ips_sum.csv')
 # Do drivers importance change over time? --------------
 # ChatGPT: 
 # To test if the importance of drivers explaining variability changed over time: 
