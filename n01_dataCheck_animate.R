@@ -26,6 +26,12 @@ out_path = 'C:/Users/ge45lep/Documents/2022_BarkBeetles_Bavaria'
 # Load RData table
 load(paste(path, 'BoMo_2015_2021_Rohdaten.RData', sep = "/"))
 
+
+# Vars
+doy.start  =  91
+doy.end    = 304
+veg.period = doy.start:doy.end
+
 # Read XY coordinates -----------------------------------------------------------
 # need to save the csv fil as a new file, otherwise it did not work
 # or use teh  version 3: now it worked with the original one! 
@@ -50,7 +56,7 @@ plot(xy_sf["OBJECTID"])
 xy_sf <- st_transform(xy_sf, crs = 3035)
 
 
-# Get dynamics data -------------------------------------------------------------- 
+# Get beetle count data -------------------------------------------------------------- 
 
 # Change name of the table
 # for dat
@@ -87,7 +93,8 @@ dat <- dat %>%
 
 
 # get basic stats: count by beetles over year, counts by records/traps
-nrow(dat)
+nrow(dat) # >73.000 rows
+
 
 # Some basic plotting
 dat %>% 
@@ -98,6 +105,7 @@ dat %>%
              fill = art,
              group = year)) +
   geom_point() +
+  geom_line() +
  # ylim(0, 250000) +
   facet_grid(.~art)
 
@@ -109,6 +117,13 @@ dat <- dat %>%
   mutate(drought_period = case_when(
     year < 2018 ~  'before',
     year >= 2018 ~ 'after')) 
+
+# Correctly order levels
+dat <- dat %>% 
+  mutate(drought_period = factor(drought_period,
+                                 levels=c('before', 'after')))
+
+
 
 # Get number of traps per year to calculate the mean beetle count per trap
 #trap_n <- 
@@ -125,6 +140,16 @@ dat %>%
   distinct(globalid) %>% 
   count()
 
+# First, replace all spaces by '_'
+dat <- dat %>% 
+  mutate(falsto_name2 = gsub(' ', '_', falsto_name)) %>% 
+  mutate(trap_pair = as.numeric(str_extract(falsto_name, "[0-9]+"))) # get the trap pair number
+
+
+ 
+ggplot(dat, aes(x = doy,
+                y = cumsum)) +
+  geom_line()
 # usefull period: 2015-2021 (2014 does not have counts per trap, only sum by year)
 #   art            year     n
 #   <chr>         <dbl> <int>
@@ -171,7 +196,7 @@ dat %>%
 # Calculate the mean number of beetles per trap over the season
 # corrected for revisit frequency
 dat_avg <- dat %>% 
-  group_by(art, year, globalid) %>% 
+  group_by(art, year, globalid,drought_period ) %>% 
   summarize(sum_beetles = sum(fangmenge, na.rm = T),
             sum_trap    = length(unique(globalid)),
             freq_visit  = length(unique(kont_dat)),
@@ -190,7 +215,7 @@ dat_avg %>%
 
 
 # about 93 records have 0 sum beetles per year (11 ips, 83 pityogenes), ad checked only once per year! 
-# check:
+# check: ---------------------------------------------------
 # Buchdrucker 2015 {4826784B-6D9B-4CB6-B431-14132184BCB7}
 dat %>% 
   filter(globalid == "{4826784B-6D9B-4CB6-B431-14132184BCB7}")
@@ -206,8 +231,15 @@ dat %>%
 
 # get unique site numbers: one globalid can have two traps: one for Ips, one for Pityogenes;
 # seems that traps with zeros are consistent...
-zero_ips_traps <- dat_avg %>% 
+zero_catch_id <- dat_avg %>% 
   filter(sum_beetles == 0 & art == 'Buchdrucker') %>% 
+  ungroup(.) %>% 
+  dplyr::distinct(globalid) %>% 
+  pull()
+
+# low revisit time
+low_visit_id <- dat_avg %>% 
+  filter(freq_visit < 10 & art == 'Buchdrucker') %>% 
   ungroup(.) %>% 
   dplyr::distinct(globalid) %>% 
   pull()
@@ -215,21 +247,41 @@ zero_ips_traps <- dat_avg %>%
 # 12 locations of zero beetles for IPS:
 dat_avg %>% 
   filter(globalid == "9A355BAA-43CC-4004-BFF8-8A3BEF2C1263") %>% 
-  # dplyr::filter(globalid %in% zero_ips_traps) #%>% 
+  # dplyr::filter(globalid %in% zero_catch_id) #%>% 
   filter(art == 'Buchdrucker')
 
 dat %>% 
   filter(art == 'Buchdrucker') %>% 
   filter(globalid == "9A355BAA-43CC-4004-BFF8-8A3BEF2C1263" & year == 2020)# %>% 
-  
+
+# buchdrucker has here 23 revisits ad still 0 beetles? - check location
+# Buchdrucker 2016 1557D362-F231-4A47-9976-7063820397C1 0 1 23
+dat %>% 
+  filter(art == 'Buchdrucker') %>% # has zero, check the Brunnthal 2
+  filter(globalid == "1557D362-F231-4A47-9976-7063820397C1" & year == 2016)# %>% 
+
+
+dat %>% 
+  filter(art == 'Buchdrucker') %>% # has zero, check the Brunnthal 2: has normal values
+  filter(falsto_name          == "Brunnthal_2" )# %>% 
+
 
 # check distribution and zeros:
 dat_avg %>% 
   ggplot(aes(x = avg_beetles_trap)) +
-  geom_histogram(bins = 500)
+  geom_histogram(bins = 1000)
 
 
-# how many zeros I have for mean beetles per trap??
+
+# Inspect data ------------------------------------------------------------
+
+# check for zeros presence - present! 
+# how many zeros I have for sum beetles per trap?? - if 0 beetles over whole year, it is suspicious..
+
+# filter data:
+#  - set dates: April 1st (DOY 91, DOY 92 lap year) to Oct 31  (304) - from Phenips
+#  - check revisit times: exclude if traps not collecte reularly! (eg. 10 times over the season: April 1st to Oct 30)
+
 dat_avg %>% 
   filter(avg_beetles_trap == 0) %>% 
   View()
@@ -245,12 +297,12 @@ hist(212/dat_avg$freq_visit)
 
 # Calculate the mean number of beetles per trap over the season
 # corrected for revisit frequency
-dat_avg <- dat %>% 
-  group_by(art, year, globalid) %>% 
-  summarize(sum_beetles = sum(fangmenge, na.rm = T),
-            sum_trap    = length(unique(globalid)),
-            freq_visit  = length(unique(kont_dat)),
-            avg_beetles_trap = sum_beetles/freq_visit)
+# dat_avg <- dat %>% 
+#   group_by(art, year, globalid) %>% 
+#   summarize(sum_beetles = sum(fangmenge, na.rm = T),
+#             sum_trap    = length(unique(globalid)),
+#             freq_visit  = length(unique(kont_dat)),
+#             avg_beetles_trap = sum_beetles/freq_visit)
 
 
 
@@ -265,36 +317,9 @@ dat_avg %>%
   theme(legend.position = 'bottom')
 
 
-dat <- dat %>% 
-  mutate(drought_period = case_when(
-    year < 2018 ~  'before',
-    year >= 2018 ~ 'after')) 
-
-# Correctly order levels
-dat <- dat %>% 
-  mutate(drought_period = factor(drought_period,
-                                 levels=c('before', 'after')))
 
 
 
-
-
-
-# 
-# Make a boxplot of mean values between populations and years intervals:
-# Correctly order levels
-dat_avg <- dat_avg %>% 
-  mutate(drought_period = case_when(
-    year < 2018 ~  'before',
-    year >= 2018 ~ 'after')) 
-
-
-
-dat_avg <- dat_avg %>% 
-  mutate(drought_period = factor(drought_period,
-                                 levels=c('before', 'after')))
-                                 
-     
 
 
 # geom boxplot plot
@@ -315,7 +340,7 @@ dat_avg %>%
 # Check development of counts over one year
 windows()
   dat %>% 
-  filter(month > 4 ) %>%             #  &  art == "Buchdrucker"
+  filter(doy %in% veg.period ) %>%             #  &  art == "Buchdrucker"
   ggplot(aes(x = doy,                # DOY = Day of the Year
              y = fangmenge,
              color = factor(year))) +
@@ -330,7 +355,7 @@ windows()
 # for overall counts:
 windows()
 dat %>% 
-  filter(month > 4 ) %>%             #  &  art == "Buchdrucker"
+  filter(doy %in% veg.period ) %>%           #  &  art == "Buchdrucker"
   ggplot(aes(x = doy,                # DOY = Day of the Year
              y = fangmenge,
              color = drought_period )) +
@@ -351,7 +376,8 @@ dat %>%
 
 # Calculate the sums per day & year, then plot the data
 dat %>% 
-  filter(month > 4 & year == 2017) %>%             #  &  art == "Buchdrucker"
+  filter(doy %in% veg.period) %>%             #  &  art == "Buchdrucker"
+  filter(year == 2017 ) %>% 
   group_by(doy, art, year)  %>% 
   summarize(my_sum = sum(fangmenge, na.rm = T)) #  %>% 
   ggplot(aes(x = doy,                # DOY = Day of the Year
@@ -372,8 +398,6 @@ dat %>%
 # Plot only time series of IT if there can be seems some seasonality: ----------------
   
 dat %>% 
- # filter(month > 4 & year == 2017) %>%             #  &  art == "Buchdrucker"
-  #filter(art == 'Buchdrucker') %>% 
   group_by(kont_dat, art)  %>%
     summarize(bav_sum = sum(fangmenge, na.rm = T))   %>%
     ggplot(aes(x = kont_dat,
@@ -391,79 +415,100 @@ dat %>%
 # variations between traps???
 # ---------------------------------------------------------
   
-# spliut in two groups: 1&2
+# split in two groups: 1&2
 head(dat)
   
 # 
 sort(unique(dat$falsto_name2))
 
-# First, replace all spaces by '_'
-dat <- dat %>% 
-  mutate(falsto_name2 = gsub(' ', '_', falsto_name)) %>% 
-  mutate(pair_grp = as.numeric(gsub("\\D", "", falsto_name2)))
 
 
 # compare counts by groups:
 dat %>% 
-  filter(pair_grp != 3 & year > 2014) %>% 
+  filter(trap_pair != 3 & year > 2014) %>% 
   ggplot(aes(y = fangmenge/10000,
              x = factor(year),
-             fill = factor(pair_grp))) +
+             fill = factor(trap_pair))) +
   geom_boxplot() +
   scale_y_continuous(trans='log10') +
   facet_grid(.~art)
   
+
+
+# Clean data: IPS ---------------------------------------------------------
+# - keep IPS
+# - vegetation period: doy
+# - years
+# - frequent recording: 10 revisit times at least
+# - remove the '3' groups???
+dat.ips.clean <- dat %>% 
+  filter(doy %in% veg.period) %>% 
+  filter(year > 2014) %>% 
+  filter(art == 'Buchdrucker') %>%
+  #mutate(globalid = gsub(paste(c("[{]", "[}]"), collapse = "|"), "", globalid) ) %>% # remove parantheses 
+  ungroup(.) %>% 
+  dplyr::filter(!globalid %in% low_visit_id) %>%  # remove traps with low visit time (nee to check this for year?)
+  dplyr::filter(!globalid %in% zero_catch_id) %>% # exclude if zero beetles caught per whole year
+  dplyr::filter(trap_pair  %in% c(1,2))  %>%      # exclude if not trap pair (1-2)
+  filter(representativ == 'Ja') 
+  
+# get cumulative sums of beetles per year - properly order data first!
+dat.ips.clean <- 
+  dat.ips.clean %>% 
+  group_by(globalid, art, year) %>% 
+  arrange(kont_dat) %>% 
+  mutate(cumsum = cumsum(fangmenge) ) #%>% 
+# filter(globalid == '{0010C7C3-C8BC-44D3-8F6E-4445CB8B1DC9}' & art == 'Buchdrucker') %>% 
+# select(kont_dat, fangmenge, falsto_name, cumsum, doy) %>% 
+# arrange(year) %>% 
+# View()
+
+  
+length(unique(dat.ips.clean$globalid))
+
+windows()
+hist(dat.ips.clean$fangmenge)
 
 # convert data for counts on 1 and counts on 2:
 # in yx format:
+# are 1 and 3 consistently indicating different groups? or is it 2-3, or 1-3?
+# quick overview: subset only data that have coorrect 1/2:
+df1 <-dat.ips.clean %>% 
+  filter(trap_pair == 1 ) %>% 
+  dplyr::select(monsto_name, year, month, doy, fangmenge, art)
 
-dat_pairs <- dat %>% 
-  filter(pair_grp != 3 & year > 2014) %>% 
-  dplyr::select('year', 'fangmenge', 'pair_grp', 'art', 'monsto_name')
+df2 <-dat.ips.clean %>% 
+  filter(trap_pair == 2 ) %>% 
+  dplyr::select(monsto_name, year, month, doy, fangmenge, art)
+
+# merge df1 & df2
+dd <- df1 %>% 
+  left_join(df2, by = c("monsto_name", "year", "month", "doy", "art"))
 
 
-# split in two grousp
-dat_pairs1 <- dat_pairs %>% 
-  filter(pair_grp == 1) %>% 
-  rename(fangmenge1 = fangmenge)
+# aggeraget by months instead of teh DOY:
+dd_sum <- 
+  dd %>% 
+  group_by(year, month, monsto_name) %>% 
+  summarise(trap1 = sum(fangmenge.x),
+            trap2 = sum(fangmenge.y)) %>%
+  ungroup() %>%
+  filter(complete.cases(.))
 
-dat_pairs2 <- dat_pairs %>% 
-  filter(pair_grp == 2) %>% 
-  rename(fangmenge2 = fangmenge)
+# od Laca: ----------
+# tau autokoralacia - korelacia v case
+# pozriet differences v casoch
+# elevation?
 
-# join data tables
-dat_pairs_out <- dat_pairs1 %>% 
-  left_join(dat_pairs2, by=c('year', 'art', 'monsto_name'))
+
+ggplot(dd_sum, aes(x = trap1, 
+                       y = trap2)) +
+  geom_point()+
+  geom_smooth(method = 'gam')
+
+
   
-  
-# variation between catched numbers:
 
-dat %>% 
-  filter(pair_grp != 3 & year > 2014) %>% 
-  ggplot(aes(y = fangmenge/10000,
-             x = factor(year),
-             fill = factor(pair_grp))) +
-  geom_boxplot() +
-  scale_y_continuous(trans='log10') +
-  facet_grid(.~art)
-
-
-# Check if individual captures correlate between paired locations?
-windows()
-dat_pairs_out %>% 
-  filter(art == 'Buchdrucker') %>%  
-  ggplot(aes(y = fangmenge1,
-             x = fangmenge2,
-             color = art)) +
-  geom_point() #+
-  scale_y_continuous(trans='log10') +
-  facet_grid(.~art)
-
-
-# seems weird: just check on single locations?
-  dat %>% 
-    filter(monsto_name == 'Hemau' & year == 2021)
-  
 # ----------------------------------------------
 #              ROLLING AVERAGES
 # ----------------------------------------------
@@ -535,7 +580,8 @@ data.table::fwrite(dat, paste(out_path, 'outSpatial/dat.csv', sep = "/"))
 # Get total sum of buchdrucker over year --------------------------------------------------------
 dat_sum <- 
   dat %>%  
-  dplyr::filter(doy > 91  & year != 2014) %>%  # & art == 'Buchdrucker'
+  dplyr::filter(doy > 92 &  doy < 335 & # April 1st to Oct 30
+            year != 2014) %>%  # & art == 'Buchdrucker'
   group_by(year, art) %>% 
   mutate(bav_sum = sum(fangmenge, na.rm =T))# %>% 
   #ggplot(aes(y = bav_sum,
@@ -546,7 +592,7 @@ dat_sum <-
 
 # get the summary data to merge with XY coordinates!  
 dat.sum.IT <-   dat %>%  
-  dplyr::filter(doy > 91  & year != 2014 & art == 'Buchdrucker') %>%  # & art == 'Buchdrucker'
+  dplyr::filter(doy > 92 &  doy < 335  & year != 2014 & art == 'Buchdrucker') %>%  # & art == 'Buchdrucker'
   group_by(year, month, art, globalid) %>% 
   mutate(bav_sum = sum(fangmenge, na.rm =T)) %>%  
   mutate(time = paste(year, month, sep = '_')) %>% 
@@ -554,10 +600,21 @@ dat.sum.IT <-   dat %>%
  
 
 
+dat.sum.IT.year <-   dat %>%  
+  dplyr::filter(doy > 92 &  doy < 335  & year != 2014 & art == 'Buchdrucker') %>%  # & art == 'Buchdrucker'
+  group_by(year, art, globalid) %>% 
+  mutate(bav_sum = sum(fangmenge, na.rm =T)) %>%  
+ # mutate(time = paste(year, month, sep = '_')) %>% 
+  dplyr::select(bav_sum, globalid, year) #%>% 
+
+
 
 # Merge spatial data with sum data by globalid
 buch_df <- xy_sf %>% 
   right_join(dat.sum.IT, 'globalid')
+
+buch_df_year <- xy_sf %>% 
+  right_join(dat.sum.IT.year, 'globalid')
 
 
 
@@ -644,7 +701,80 @@ bav_sf <- de_sf %>%
   dplyr::filter(name_en == "Bavaria")
 
 
+
+
+# facet plot
+ggplot(bav_sf) +   # base map
+  geom_sf(color = 'black', 
+          fill  = 'grey93') + 
+  geom_sf(data = buch_df_year,
+          aes(color = bav_sum,
+              size = bav_sum)) + # , size = Age, size = 0.8size by factor itself!
+  colorspace::scale_color_continuous_sequential(palette = "Heat") +
+ # annotation_scale(location = "bl", 
+#                   width_hint = 0.4) +
+  theme_void() +
+  facet_wrap(~year) +
+  xlab("Longitude") + 
+  ylab("Latitude") +
+  labs(title = 'Ips population counts',
+     color  = "Ips [sum]",
+     size = "Ips [sum]")
+
+
+
+
+
+
+# GIf by years --------------------------------------------------------
+
 # 
+# need to recheck!! gg anime makes a png, but not a video 
+p<-ggplot(bav_sf) +   # base map
+  geom_sf(color = 'black', 
+          fill  = 'grey93') + 
+  geom_sf(data = buch_df_year,
+          aes(color = bav_sum,
+              size = bav_sum)) + # , size = Age, size = 0.8size by factor itself!
+  # viridis::scale_color_viridis(discrete = FALSE, option = "viridis",
+  #                             na.value = "red") +
+  #scale_color_gradientn(colours = #colorspace::hcl_palettes(palette = "Dark 2")
+   #                      colorspace::heat_hcl(7)
+    #                   ) +
+  colorspace::scale_color_continuous_sequential(palette = "Heat") +
+  annotation_scale(location = "bl", width_hint = 0.4) +
+  theme_bw() +
+  xlab("Longitude") + 
+  ylab("Latitude") +
+  # gganimate specific bits: ------------------
+labs(title = 'IT beetle population counts {current_frame}',
+     color  = "IT Beetle [count]") +
+  transition_manual(year) +
+  
+  ease_aes('linear')
+
+
+# animate with the gifski renderer
+animate(p, renderer = gifski_renderer())
+
+
+hcl_palettes("sequential (single-hue)", n = 7, plot = TRUE)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# GIF: months and years -------------------------------------------------------- 
 # need to recheck!! gg anime makes a png, but not a video 
 p<-ggplot(bav_sf) +   # base map
   geom_sf(color = 'black', 
