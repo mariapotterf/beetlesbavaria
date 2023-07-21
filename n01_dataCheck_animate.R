@@ -457,17 +457,41 @@ dat.ips.clean <-
   dat.ips.clean %>% 
   group_by(globalid, art, year) %>% 
   arrange(kont_dat) %>% 
-  mutate(cumsum = cumsum(fangmenge) ) #%>% 
-# filter(globalid == '{0010C7C3-C8BC-44D3-8F6E-4445CB8B1DC9}' & art == 'Buchdrucker') %>% 
-# select(kont_dat, fangmenge, falsto_name, cumsum, doy) %>% 
-# arrange(year) %>% 
+  mutate(cumsum = cumsum(fangmenge) ,
+         diff   = fangmenge - lag(fangmenge)  
+         )# %>% 
+# filter(globalid == '{0010C7C3-C8BC-44D3-8F6E-4445CB8B1DC9}' & art == 'Buchdrucker') %>%
+# select(kont_dat, fangmenge, falsto_name, cumsum, 
+#        diff, 
+#        doy) %>%
+# arrange(year) %>%
 # View()
 
   
+
+# check plot of differences:
+# compare counts by groups:
+dat.ips.clean %>% 
+  ggplot(aes(y = diff,
+             x = doy,
+             color = year)) +
+  #geom_point() + 
+  stat_summary(fun = mean, geom="line") + 
+  facet_grid(year~.)
+
+
+  
+
+
+
+
+
 length(unique(dat.ips.clean$globalid))
 
 windows()
-hist(dat.ips.clean$fangmenge)
+hist(dat.ips.clean$cumsum)
+
+filter(dat.ips.clean)
 
 # convert data for counts on 1 and counts on 2:
 # in yx format:
