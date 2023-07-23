@@ -55,6 +55,12 @@ plot(xy_sf["OBJECTID"])
 # Change projection to common european one: 3035
 xy_sf <- st_transform(xy_sf, crs = 3035)
 
+# Get the letters to upper cases - to merge with beetle counts
+xy_sf <-
+  xy_sf %>% 
+  mutate(globalid = toupper(globalid))
+
+
 
 # Get beetle count data -------------------------------------------------------------- 
 
@@ -125,12 +131,7 @@ dat <- dat %>%
 
 
 
-# Get number of traps per year to calculate the mean beetle count per trap
-#trap_n <- 
-  dat %>% 
-    group_by(art, year, globalid) %>% 
-    count()
-  
+
 # How may traps in total?  
 length(unique(dat$globalid)) # 490 traps
 
@@ -145,11 +146,11 @@ dat <- dat %>%
   mutate(falsto_name2 = gsub(' ', '_', falsto_name)) %>% 
   mutate(trap_pair = as.numeric(str_extract(falsto_name, "[0-9]+"))) # get the trap pair number
 
+# remove the parantheses
+dat <- dat %>% 
+  mutate(globalid =  gsub("\\{|\\}", "", globalid))  
 
  
-ggplot(dat, aes(x = doy,
-                y = cumsum)) +
-  geom_line()
 # usefull period: 2015-2021 (2014 does not have counts per trap, only sum by year)
 #   art            year     n
 #   <chr>         <dbl> <int>
@@ -171,9 +172,8 @@ ggplot(dat, aes(x = doy,
 # 16 Kupferstecher  2021   246
 
 
-# --------------------------------------------------------------------
-#              Standardize beetle counts/trap/year
-# --------------------------------------------------------------------
+
+# Standardize beetle counts/trap/year --------------------------------------------------------------------
 
 
 # how to get the average number of beetles per trap per year?
@@ -193,8 +193,7 @@ ggplot(dat, aes(x = doy,
 # 4 Kupferstecher  2016      14506         23
 
 
-# Calculate the mean number of beetles per trap over the season
-# corrected for revisit frequency
+# Calculate the mean number of beetles per trap over the season ----------------
 dat_avg <- dat %>% 
   group_by(art, year, globalid,drought_period ) %>% 
   summarize(sum_beetles = sum(fangmenge, na.rm = T),
@@ -218,12 +217,12 @@ dat_avg %>%
 # check: ---------------------------------------------------
 # Buchdrucker 2015 {4826784B-6D9B-4CB6-B431-14132184BCB7}
 dat %>% 
-  filter(globalid == "{4826784B-6D9B-4CB6-B431-14132184BCB7}")
+  filter(globalid == "4826784B-6D9B-4CB6-B431-14132184BCB7")
 
 # or have 0 sum beetles, but checked 22 times!! per season! (Pityogenes)
 #Kupferstecher 2016 {9FD90E97-9C4E-478F-9A89-724C74C95FDC}
 dat %>% 
-  filter(globalid == "{9FD90E97-9C4E-478F-9A89-724C74C95FDC}" & year == 2016 
+  filter(globalid == "9FD90E97-9C4E-478F-9A89-724C74C95FDC" & year == 2016 
          #& art == "Kupferstecher"
          ) %>% 
   arrange(kont_dat)
@@ -282,9 +281,6 @@ dat_avg %>%
 #  - set dates: April 1st (DOY 91, DOY 92 lap year) to Oct 31  (304) - from Phenips
 #  - check revisit times: exclude if traps not collecte reularly! (eg. 10 times over the season: April 1st to Oct 30)
 
-dat_avg %>% 
-  filter(avg_beetles_trap == 0) %>% 
-  View()
 
 # what is average revisit time?
 # number of days: April to October: 212 days
@@ -294,15 +290,6 @@ hist(212/dat_avg$freq_visit)
 
 # some sites have been revisited every 7 days!
 # calculation works great!
-
-# Calculate the mean number of beetles per trap over the season
-# corrected for revisit frequency
-# dat_avg <- dat %>% 
-#   group_by(art, year, globalid) %>% 
-#   summarize(sum_beetles = sum(fangmenge, na.rm = T),
-#             sum_trap    = length(unique(globalid)),
-#             freq_visit  = length(unique(kont_dat)),
-#             avg_beetles_trap = sum_beetles/freq_visit)
 
 
 
@@ -409,30 +396,6 @@ dat %>%
   
   
   
-  
-  
-# -------------------------------------------------------------
-# variations between traps???
-# ---------------------------------------------------------
-  
-# split in two groups: 1&2
-head(dat)
-  
-# 
-sort(unique(dat$falsto_name2))
-
-
-
-# compare counts by groups:
-dat %>% 
-  filter(trap_pair != 3 & year > 2014) %>% 
-  ggplot(aes(y = fangmenge/10000,
-             x = factor(year),
-             fill = factor(trap_pair))) +
-  geom_boxplot() +
-  scale_y_continuous(trans='log10') +
-  facet_grid(.~art)
-  
 
 
 # Clean data: IPS ---------------------------------------------------------
@@ -467,7 +430,43 @@ dat.ips.clean <-
 # arrange(year) %>%
 # View()
 
+# Extrapolate counts over each DOY - to get counts per day -------------
+# dat.ips.clean %>% 
+#   group_by(globalid, art, year) %>% 
+#   arrange(doy) %>% 
+ # expand(doy, veg.period)
+
+ 
+##### example -----------------------------------------------------
+df <- data.frame(count = c(10,15,23),
+                doy = c(6, 11,15))
+doy.df<- data.frame(doy = 5:20)
+# exampnd values
+doy.df  %>% 
+  full_join(df) %>% 
+  arrange(doy) 
   
+
+# calculate between dates: does not make sense: try map with the values instead
+#   Joining, by = "doy"
+# count doy   daily
+# 1     NA   5 0
+# 2     10   6 10
+# 3     NA   7  1
+# 4     NA   8  1
+# 5     NA   9  1
+# 6     NA  10  1
+# 7     15  11
+# 8     NA  12
+# 9     NA  13
+# 10    NA  14
+# 11    23  15
+# 12    NA  16
+# 13    NA  17
+# 14    NA  18
+# 15    NA  19
+# 16    NA  20
+ 
 
 # check plot of differences:
 # compare counts by groups:
@@ -480,11 +479,6 @@ dat.ips.clean %>%
   facet_grid(year~.)
 
 
-  
-
-
-
-
 
 length(unique(dat.ips.clean$globalid))
 
@@ -493,8 +487,7 @@ hist(dat.ips.clean$cumsum)
 
 filter(dat.ips.clean)
 
-# convert data for counts on 1 and counts on 2:
-# in yx format:
+# convert data for counts on 1 and counts on 2: ---------------------
 # are 1 and 3 consistently indicating different groups? or is it 2-3, or 1-3?
 # quick overview: subset only data that have coorrect 1/2:
 df1 <-dat.ips.clean %>% 
@@ -533,12 +526,8 @@ ggplot(dd_sum, aes(x = trap1,
 
   
 
-# ----------------------------------------------
-#              ROLLING AVERAGES
-# ----------------------------------------------
-  
-   
-  
+
+
 # Get the rolling averages & and plot population counts by DOY over years --------------
   
   # April 1st  = DOY 91
@@ -573,18 +562,8 @@ dat %>%
 # 
 summary(dat)
 
-# Join data with XY coordinates by globalid   ---------------------------------------------------
-
-dat <- dat %>% 
-  mutate(globalid =  gsub("\\{|\\}", "", globalid))  
 
 
-# for coordinates table --------------------------------------------------------------------------
-
-# Get the letters to upper cases
-xy_sf <-
-  xy_sf %>% 
-  mutate(globalid = toupper(globalid))
 
 
 
@@ -698,6 +677,8 @@ Moran.I(ozone$Av8top, ozone.dists.inv)
 
 
 
+
+
 # R animate: ------------------------------------------------
 
 
@@ -745,6 +726,82 @@ ggplot(bav_sf) +   # base map
      color  = "Ips [sum]",
      size = "Ips [sum]")
 
+
+
+# Max increase in counts per year & gap ----------------------------------------------------
+
+# find min DOY of the max diff per year and location: plot on map ----------------
+max.diff.doy <- dat.ips.clean %>% 
+  group_by(globalid, year, falsto_name2) %>% 
+  slice(which.max(diff))
+
+max.diff.doy.sf <- xy_sf %>% 
+  right_join(max.diff.doy, 'globalid')
+
+
+# check range DOY:
+max.diff.doy.sf %>% 
+  as.data.frame() %>% 
+  group_by(year) %>% 
+  summarise(min = min(doy),
+            max = max(doy),
+            mean = mean(doy))
+
+# the main diference in counts happends earlier in the season
+avg.doy <- mean(dat.ips.clean$doy)
+
+dat.ips.clean %>% 
+  ggplot(aes(y = doy,
+             x = factor(year))) +
+  geom_boxplot() +
+  geom_hline(yintercept = avg.doy, lty = 'dashed', col = "red")
+  #stat_summary(fun = mean, geom="line")
+
+
+# anova : http://www.sthda.com/english/wiki/one-way-anova-test-in-r#check-your-data
+
+# one way anova - finds that there are differenes, we don't know where
+res.aov <- aov(doy ~ factor(year), dat.ips.clean)
+
+summary(res.aov)
+
+# multiple way anova = pairwise comparison between groups
+TukeyHSD(res.aov) # challengin to read differences, if many groups
+
+pairwise.t.test(dat.ips.clean$doy, factor(dat.ips.clean$year),
+                p.adjust.method = "BH")
+
+
+### check assumptions:
+# 1. Homogeneity of variances
+plot(res.aov, 1)
+
+# 2. Normality
+plot(res.aov, 2)
+
+
+
+# facet plot
+ggplot(bav_sf) +   # base map
+  geom_sf(color = 'black', 
+          fill  = 'grey93') + 
+  geom_sf(data = max.diff.doy.sf,
+          aes(color = doy,
+              size = diff)
+          ) + # , size = Age, size = 0.8size by factor itself!
+  colorspace::scale_color_continuous_sequential(palette = "Heat", alpha = 0.8) +
+  # annotation_scale(location = "bl", 
+  #                   width_hint = 0.4) +
+  theme_void() +
+  facet_wrap(~year) +
+  xlab("Longitude") + 
+  ylab("Latitude") +
+  labs(title = 'DOY of max increase',
+       color  = "DOY",
+       size = "Ips [sum]")
+
+
+ggplot()
 
 
 
