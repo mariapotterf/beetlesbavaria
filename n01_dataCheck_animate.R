@@ -415,77 +415,77 @@ dat.ips.clean <- dat %>%
   dplyr::filter(trap_pair  %in% c(1,2))  %>%      # exclude if not trap pair (1-2)
   filter(representativ == 'Ja') 
   
-# get cumulative sums of beetles per year - properly order data first!
-dat.ips.clean <- 
+  
+# Get daily counts
+df.daily <-  
   dat.ips.clean %>% 
-  group_by(globalid, art, year) %>% 
-  arrange(kont_dat) %>% 
-  mutate(cumsum = cumsum(fangmenge) ,
-         diff   = fangmenge - lag(fangmenge)  
-         )# %>% 
-# filter(globalid == '{0010C7C3-C8BC-44D3-8F6E-4445CB8B1DC9}' & art == 'Buchdrucker') %>%
-# select(kont_dat, fangmenge, falsto_name, cumsum, 
-#        diff, 
-#        doy) %>%
-# arrange(year) %>%
-# View()
+    group_by(globalid,art, year) %>% 
+    arrange(kont_dat) %>% # order the data
+    mutate(
+      period = diff(c(doy.start, doy))+1,  # get difference between two consecutive numbers
+      daily  = fangmenge/period,           # average beetle counts per day
+      sum = daily*period,                  # to check counts
+      cumsum = cumsum(sum),
+      diff   = daily - lag(daily) ) #%>%   # difference between average daily values
+   # filter(globalid == '0010C7C3-C8BC-44D3-8F6E-4445CB8B1DC9' & art == 'Buchdrucker') %>%
+   # select(kont_dat, fangmenge, falsto_name, cumsum,daily,
+  #         diff,
+   #        doy) %>%
+  #  arrange(year) %>%
+  #  View()
 
-# Extrapolate counts over each DOY - to get counts per day -------------
-# dat.ips.clean %>% 
-#   group_by(globalid, art, year) %>% 
-#   arrange(doy) %>% 
- # expand(doy, veg.period)
+  
+  
 
  
 ##### example -----------------------------------------------------
-df <- data.frame(count = c(10,15,23),
-                doy = c(6, 11,15))
-doy.df<- data.frame(doy = 5:20)
-# exampnd values
-doy.df  %>% 
-  full_join(df) %>% 
-  arrange(doy) 
-  
 
-# calculate between dates: does not make sense: try map with the values instead
-#   Joining, by = "doy"
-# count doy   daily
-# 1     NA   5 0
-# 2     10   6 10
-# 3     NA   7  1
-# 4     NA   8  1
-# 5     NA   9  1
-# 6     NA  10  1
-# 7     15  11
-# 8     NA  12
-# 9     NA  13
-# 10    NA  14
-# 11    23  15
-# 12    NA  16
-# 13    NA  17
-# 14    NA  18
-# 15    NA  19
-# 16    NA  20
+# https://stackoverflow.com/questions/76806372/count-number-caught-per-day-from-longer-intervals
+
+
+  df <- data.frame(gr = rep(c('a','b'), each = 3),
+                   count = c(10,15,23, 
+                             5, 10, 100),
+                   doy = c(6, 11,15,
+                           7,12,19))
+
+# example base R
+  first_day <- 5
+  df$period <- diff(c(first_day, df$doy))+1
+  df$daily <- df$count/df$period  
+
+# Example tidyr with groups
+  df %>% 
+    group_by(gr) %>% 
+    mutate(
+           period = diff(c(first_day, doy))+1,
+           daily  = count/period,
+           sum = daily*period,
+           cumsum = cumsum(sum))
+    
+    
  
-
-# check plot of differences:
+  
+  
+# check plot of differences: ---------------------------------------
 # compare counts by groups:
-dat.ips.clean %>% 
+  df.daily %>% 
   ggplot(aes(y = diff,
              x = doy,
              color = year)) +
   #geom_point() + 
+    coord_cartesian(ylim = c(0,500)) + # only '+' values (increase)
   stat_summary(fun = mean, geom="line") + 
   facet_grid(year~.)
 
 
 
-length(unique(dat.ips.clean$globalid))
+length(unique(df.daily$globalid))
 
 windows()
-hist(dat.ips.clean$cumsum)
+hist(df.daily$daily)
 
-filter(dat.ips.clean)
+filter(df.daily)
 
 # convert data for counts on 1 and counts on 2: ---------------------
 # are 1 and 3 consistently indicating different groups? or is it 2-3, or 1-3?
@@ -525,44 +525,6 @@ ggplot(dd_sum, aes(x = trap1,
 
 
   
-
-
-
-# Get the rolling averages & and plot population counts by DOY over years --------------
-  
-  # April 1st  = DOY 91
- dat %>%  
-  dplyr::filter(doy > 91) %>% 
-  dplyr::arrange(doy) %>% 
-    dplyr::group_by(year, art) %>% 
-    dplyr::mutate(mean_25     = zoo::rollmean(fangmenge , k = 25, fill = NA)) %>% 
-    dplyr::ungroup() %>% 
-   ggplot(aes(x = doy, 
-              y = mean_25,
-              group = factor(year),
-              color = factor(year))) + 
-   geom_line(alpha = 0.2, color = 'grey20') + 
-   geom_smooth() +
-   facet_grid(art~., scales = 'free') +
-   scale_color_viridis_d()
-
-
-  
-
-# Some data have counts in Jan-Feb??
-dat %>% 
-  filter(month < 4) %>% 
-  ungroup() %>% 
-  distinct(kont_dat) %>%
-  pull() 
-  print(n = 40)
-
-  
-  
-# 
-summary(dat)
-
-
 
 
 
@@ -750,6 +712,7 @@ max.diff.doy.sf %>%
 # the main diference in counts happends earlier in the season
 avg.doy <- mean(dat.ips.clean$doy)
 
+windows()
 dat.ips.clean %>% 
   ggplot(aes(y = doy,
              x = factor(year))) +
@@ -772,13 +735,88 @@ pairwise.t.test(dat.ips.clean$doy, factor(dat.ips.clean$year),
                 p.adjust.method = "BH")
 
 
-### check assumptions:
+### check ANOVA assumptions:
+# 1. Homogeneity of variances
+# 2. Normality
+
+
 # 1. Homogeneity of variances
 plot(res.aov, 1)
+
+# test for homonenity f variance: 
+library(car)
+# high p-value = variances are the same (H0) 
+leveneTest(doy ~ factor(year), data = dat.ips.clean)
+# low p-values, so variancs are different ->
+
+# use ANOVA with no assumption of equal variances
+res.aov_no_equal <- oneway.test(doy ~ factor(year), data = dat.ips.clean)
+
+summary(res.aov_no_equal)
+
+### t-test for not equal variances : ---------------------------
+pairwise.t.test(dat.ips.clean$doy, factor(dat.ips.clean$year),
+                p.adjust.method = "BH", pool.sd = FALSE)
+
 
 # 2. Normality
 plot(res.aov, 2)
 
+# check by Shapiro-Wilk test for residuals
+# Extract the residuals
+aov_residuals <- residuals(object = res.aov )
+# Run Shapiro-Wilk test # does not work, have more values then 5000
+shapiro.test(x = aov_residuals )
+
+
+# run rather Kruskal-Wallis test - not equal variances
+kruskal.test(doy ~ factor(year), data = dat.ips.clean)
+
+summary(krusk)
+
+# post-hoc test: pairwise-wilcox
+wilk <-pairwise.wilcox.test(dat.ips.clean$doy, factor(dat.ips.clean$year),
+                     p.adjust.method = "BH")
+# get matrix of p-values for further ploting
+wilk$p.value
+
+p.vals <- replace(wilk$p.value,wilk$p.value>0.05,1)
+
+
+# show p-values - first transformation is needed, 
+# as this is the opposite of the corr() plot - larger is better,
+# while in p-values smaller is better
+# https://stackoverflow.com/questions/61861049/how-plot-results-from-a-pairwise-wilcox-test
+my_transformed_pvals=-log10(p.vals)  # negative of 'log' works, as all p-vals are <1
+
+library ( corrplot)
+corrplot(as.matrix(my_transformed_pvals),is.corr=F)
+corrplot(as.matrix(p.vals),is.corr=F)
+
+
+# !!! my groups are not independent! they are colected on teh same traps, 
+# they are autocorrelated!
+# use anova with repeated measures:
+
+
+
+
+# Coefficient of variation -------------------------------------------------------
+# Sample beetle count data (mean counts per year)
+years <- c(2017, 2018, 2019, 2020, 2021)
+mean_counts <- c(50, 60, 55, 75, 70)
+
+# Sample standard deviation data for each year
+std_dev <- c(10, 8, 12, 15, 10)
+
+# Calculate coefficient of variation (CV) for each year
+cv_values <- (std_dev / mean_counts) * 100
+
+# Create a plot to illustrate temporal variability using CV
+windows()
+plot(years, cv_values, type='o', col='blue', pch=16, lty=1, xlab='Year', ylab='Coefficient of Variation (CV %)',
+     main='Temporal Variability of Beetle Counts per Year')
+grid()
 
 
 # facet plot
