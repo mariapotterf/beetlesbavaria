@@ -545,7 +545,7 @@ data.table::fwrite(dat, paste(out_path, 'outSpatial/dat.csv', sep = "/"))
 # Get total sum of buchdrucker over year --------------------------------------------------------
 dat_sum <- 
   dat %>%  
-  dplyr::filter(doy > 92 &  doy < 335 & # April 1st to Oct 30
+  dplyr::filter(doy >= doy.start &  doy <= doy.end & # April 1st to Oct 30
             year != 2014) %>%  # & art == 'Buchdrucker'
   group_by(year, art) %>% 
   mutate(bav_sum = sum(fangmenge, na.rm =T))# %>% 
@@ -557,7 +557,7 @@ dat_sum <-
 
 # get the summary data to merge with XY coordinates!  
 dat.sum.IT <-   dat %>%  
-  dplyr::filter(doy > 92 &  doy < 335  & year != 2014 & art == 'Buchdrucker') %>%  # & art == 'Buchdrucker'
+  dplyr::filter(doy >= doy.start &  doy <= doy.end  & year != 2014 & art == 'Buchdrucker') %>%  # & art == 'Buchdrucker'
   group_by(year, month, art, globalid) %>% 
   mutate(bav_sum = sum(fangmenge, na.rm =T)) %>%  
   mutate(time = paste(year, month, sep = '_')) %>% 
@@ -566,7 +566,7 @@ dat.sum.IT <-   dat %>%
 
 
 dat.sum.IT.year <-   dat %>%  
-  dplyr::filter(doy > 92 &  doy < 335  & year != 2014 & art == 'Buchdrucker') %>%  # & art == 'Buchdrucker'
+  dplyr::filter(doy >= doy.start &  doy <= doy.end & year != 2014 & art == 'Buchdrucker') %>%  # & art == 'Buchdrucker'
   group_by(year, art, globalid) %>% 
   mutate(bav_sum = sum(fangmenge, na.rm =T)) %>%  
  # mutate(time = paste(year, month, sep = '_')) %>% 
@@ -670,30 +670,12 @@ bav_sf <- de_sf %>%
 
 
 
-# facet plot
-ggplot(bav_sf) +   # base map
-  geom_sf(color = 'black', 
-          fill  = 'grey93') + 
-  geom_sf(data = buch_df_year,
-          aes(color = bav_sum,
-              size = bav_sum)) + # , size = Age, size = 0.8size by factor itself!
-  colorspace::scale_color_continuous_sequential(palette = "Heat") +
- # annotation_scale(location = "bl", 
-#                   width_hint = 0.4) +
-  theme_void() +
-  facet_wrap(~year) +
-  xlab("Longitude") + 
-  ylab("Latitude") +
-  labs(title = 'Ips population counts',
-     color  = "Ips [sum]",
-     size = "Ips [sum]")
-
 
 
 # Max increase in counts per year & gap ----------------------------------------------------
 
 # find min DOY of the max diff per year and location: plot on map ----------------
-max.diff.doy <- dat.ips.clean %>% 
+max.diff.doy <- df.daily %>% 
   group_by(globalid, year, falsto_name2) %>% 
   slice(which.max(diff))
 
@@ -707,31 +689,124 @@ max.diff.doy.sf %>%
   group_by(year) %>% 
   summarise(min = min(doy),
             max = max(doy),
-            mean = mean(doy))
+            mean = mean(doy),
+            sd = sd(doy),
+            median = median(doy))
+
+
+# Check Max increase population
+max.diff.doy.sf %>% 
+  as.data.frame() %>% 
+  group_by(year) %>% 
+  summarise(min = min(diff),
+            max = max(diff),
+            mean = mean(diff),
+            sd = sd(diff),
+            median = median(diff))
+
 
 # the main diference in counts happends earlier in the season
-avg.doy <- mean(dat.ips.clean$doy)
+avg.doy <- mean(df.daily$doy)
 
 windows()
-dat.ips.clean %>% 
+df.daily %>% 
   ggplot(aes(y = doy,
              x = factor(year))) +
-  geom_boxplot() +
+  geom_violin() +
+  stat_summary() +
   geom_hline(yintercept = avg.doy, lty = 'dashed', col = "red")
   #stat_summary(fun = mean, geom="line")
 
 
-# anova : http://www.sthda.com/english/wiki/one-way-anova-test-in-r#check-your-data
 
+# facet map plots -------------------------------------------------------------------
+## overall: DOY f max increase
+ggplot(bav_sf) +   # base map
+  geom_sf(color = 'black', 
+          fill  = 'grey33') + 
+  geom_sf(data = max.diff.doy.sf,
+          aes(color = doy#,
+              #size = diff
+          )
+  ) + # , size = Age, size = 0.8size by factor itself!
+  colorspace::scale_color_continuous_sequential(palette = "Heat", alpha = 0.8,
+                                                rev = FALSE) + # reverse order  = sooner = darker color
+  # annotation_scale(location = "bl", 
+  #                   width_hint = 0.4) +
+  theme_void() +
+  facet_wrap(~year) +
+  xlab("Longitude") + 
+  ylab("Latitude") +
+  labs(title = 'DOY of max increase/trap/day',
+       color  = "DOY",
+       size = "Ips [sum]")
+
+
+
+## filter  DOY 150 = July 31 ----------------------------------------------------
+ggplot(bav_sf) +   # base map
+  geom_sf(color = 'black', 
+          fill  = 'grey33') + 
+  geom_sf(data = filter(max.diff.doy.sf, doy <= 150),
+          aes(color = doy#,
+              #size = diff
+              )
+  ) + # , size = Age, size = 0.8size by factor itself!
+  colorspace::scale_color_continuous_sequential(palette = "Heat", alpha = 0.8,
+                                                rev = FALSE) + # reverse order  = sooner = darker color
+  # annotation_scale(location = "bl", 
+  #                   width_hint = 0.4) +
+  theme_void() +
+  facet_wrap(~year) +
+  xlab("Longitude") + 
+  ylab("Latitude") +
+  labs(title = 'DOY of max increase/trap/day',
+       color  = "DOY",
+       size = "Ips [sum]")
+
+
+# 2.population increase -------------------------------------------------------------
+ggplot(bav_sf) +   # base map
+  geom_sf(color = 'black', 
+          fill  = 'grey33') + 
+  geom_sf(data = max.diff.doy.sf,
+          aes(color = diff#,
+              #size = diff
+          )
+  ) + # , size = Age, size = 0.8size by factor itself!
+  colorspace::scale_color_continuous_sequential(palette = "Heat", alpha = 0.8,
+                                                rev = TRUE) + # reverse order  = sooner = darker color
+  # annotation_scale(location = "bl", 
+  #                   width_hint = 0.4) +
+  theme_void() +
+  facet_wrap(~year) +
+  xlab("Longitude") + 
+  ylab("Latitude") +
+  labs(title = 'Max population size/trap/day',
+       #color  = "DOY",
+       size = "Ips increase [day/trap]")
+
+
+# two aspects: the max increase in season
+#              the size of population
+# driver: previous year population??
+
+
+
+
+
+# ANOVA : # does the DOY of max increase differes between years?  ----------------
+#http://www.sthda.com/english/wiki/one-way-anova-test-in-r#check-your-data
+# 
 # one way anova - finds that there are differenes, we don't know where
-res.aov <- aov(doy ~ factor(year), dat.ips.clean)
+res.aov <- aov(doy ~ factor(year), max.diff.doy.sf)
 
 summary(res.aov)
 
 # multiple way anova = pairwise comparison between groups
 TukeyHSD(res.aov) # challengin to read differences, if many groups
 
-pairwise.t.test(dat.ips.clean$doy, factor(dat.ips.clean$year),
+pairwise.t.test(max.diff.doy.sf$doy, factor(max.diff.doy.sf$year),
                 p.adjust.method = "BH")
 
 
@@ -746,16 +821,16 @@ plot(res.aov, 1)
 # test for homonenity f variance: 
 library(car)
 # high p-value = variances are the same (H0) 
-leveneTest(doy ~ factor(year), data = dat.ips.clean)
+leveneTest(doy ~ factor(year), data = max.diff.doy.sf)
 # low p-values, so variancs are different ->
 
 # use ANOVA with no assumption of equal variances
-res.aov_no_equal <- oneway.test(doy ~ factor(year), data = dat.ips.clean)
+res.aov_no_equal <- oneway.test(doy ~ factor(year), data = max.diff.doy.sf)
 
-summary(res.aov_no_equal)
+
 
 ### t-test for not equal variances : ---------------------------
-pairwise.t.test(dat.ips.clean$doy, factor(dat.ips.clean$year),
+pairwise.t.test(max.diff.doy.sf$doy, factor(max.diff.doy.sf$year),
                 p.adjust.method = "BH", pool.sd = FALSE)
 
 
@@ -766,16 +841,15 @@ plot(res.aov, 2)
 # Extract the residuals
 aov_residuals <- residuals(object = res.aov )
 # Run Shapiro-Wilk test # does not work, have more values then 5000
-shapiro.test(x = aov_residuals )
+shapiro.test(x = aov_residuals )  # not normaly distributed
 
 
 # run rather Kruskal-Wallis test - not equal variances
-kruskal.test(doy ~ factor(year), data = dat.ips.clean)
+kruskal.test(doy ~ factor(year), data = max.diff.doy.sf)
 
-summary(krusk)
 
 # post-hoc test: pairwise-wilcox
-wilk <-pairwise.wilcox.test(dat.ips.clean$doy, factor(dat.ips.clean$year),
+wilk <-pairwise.wilcox.test(max.diff.doy.sf$doy, factor(max.diff.doy.sf$year),
                      p.adjust.method = "BH")
 # get matrix of p-values for further ploting
 wilk$p.value
@@ -798,11 +872,13 @@ corrplot(as.matrix(p.vals),is.corr=F)
 # they are autocorrelated!
 # use anova with repeated measures:
 
+aov_rep <- aov(doy~factor(year)+Error(factor(globalid)), data = max.diff.doy.sf)
+summary(aov_rep)
 
 
 
 # Coefficient of variation -------------------------------------------------------
-# Sample beetle count data (mean counts per year)
+# EXAMPLE : Sample beetle count data (mean counts per year)
 years <- c(2017, 2018, 2019, 2020, 2021)
 mean_counts <- c(50, 60, 55, 75, 70)
 
@@ -818,28 +894,40 @@ plot(years, cv_values, type='o', col='blue', pch=16, lty=1, xlab='Year', ylab='C
      main='Temporal Variability of Beetle Counts per Year')
 grid()
 
-
-# facet plot
-ggplot(bav_sf) +   # base map
-  geom_sf(color = 'black', 
-          fill  = 'grey93') + 
-  geom_sf(data = max.diff.doy.sf,
-          aes(color = doy,
-              size = diff)
-          ) + # , size = Age, size = 0.8size by factor itself!
-  colorspace::scale_color_continuous_sequential(palette = "Heat", alpha = 0.8) +
-  # annotation_scale(location = "bl", 
-  #                   width_hint = 0.4) +
-  theme_void() +
-  facet_wrap(~year) +
-  xlab("Longitude") + 
-  ylab("Latitude") +
-  labs(title = 'DOY of max increase',
-       color  = "DOY",
-       size = "Ips [sum]")
+# CV for daily counts data ---------------------------------------------------------------
+# for whole data, not just the max increase
+df.daily %>%
+  group_by(year, globalid, art) %>% 
+  summarize(mean = mean(daily),
+            sd  = sd(daily),
+            cv  = sd/mean) %>%  # can be turned to % by '*100'
+  ggplot(aes(x = factor(year),
+             y = cv)) +
+  geom_violin() +
+  stat_summary() +
+  ggtitle('CV of daily beetle counts')
 
 
-ggplot()
+# CV of DOY of the max beetle increase ------------------
+max.diff.doy %>%
+  ungroup(.) %>% 
+  group_by(year) %>% 
+  summarize(mean = mean(doy),
+            sd   = sd(doy, na.rm=TRUE) ,
+            cv   = sd/mean) %>%  # can be turned to % by '*100'
+  ggplot(aes(x = year,
+             y = cv)) +
+  geom_line() +
+ # stat_summary() +
+  ggtitle('CV of DOY of max beetle increase')
+
+  
+
+# Interpret CV: smaller CV is better
+# 1/10 (sd/mean)  = 0.1
+# 5/10 (sd/mean)  = 0.5
+
+
 
 
 
