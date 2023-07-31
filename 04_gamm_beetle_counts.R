@@ -99,25 +99,23 @@ dat2 <-
   separate( falsto_name, c('loc', 'trap_n'), sep = ' ')
   #separate(falsto_name, c("loc", 'trap_n'))
 
-dat2 <- dat %>%
-  mutate(trap_pair = as.numeric(str_extract(falsto_name, "[0-9]+")))
 
-unique(dat2$trap_n)
+unique(dat$trap_n)
 # 1 2 3 
 
 # check for traps: 1, 2,3, - if there is NA, maybe replaed by other trap?
-dat2 %>% 
+dat %>% 
  # select(monsto_name, year, art, fangmenge) %>% 
   filter(monsto_name == 'Berg' & year == 2015 & month == 4 & art == 'Buchdrucker' )
 #2015     4 Berg               28    NA    - no, simply missing count of beetles
 
 # are 1 and 3 consistently indicating different groups? or is it 2-3, or 1-3?
 # quick overview: subset only data that have coorrect 1/2:
-df1 <-dat2 %>% 
+df1 <-dat %>% 
   filter(trap_pair == 1 ) %>% 
   dplyr::select(monsto_name, year, month, doy, fangmenge, art)
 
-df2 <-dat2 %>% 
+df2 <-dat %>% 
   filter(trap_pair == 2 ) %>% 
   dplyr::select(monsto_name, year, month, doy, fangmenge, art)
 
@@ -494,7 +492,7 @@ global_moran_20 <- moran.test(ips_sum_20$sum_beetle, nb2listw(nb_g_20) )
 
 # Simpler lm: with counts:
 # get countsper year
-# avg temp, spei, PRCP :april - oct
+# avg temp, spei, PRCP :april 31 - oct 30 
 df_clim_veg <- df_clim %>% 
   filter(year > 2014 & year < 2022  ) %>% 
   filter(month > 3 & month < 11 ) %>% # vegetation period: April 1 - Oct 31
