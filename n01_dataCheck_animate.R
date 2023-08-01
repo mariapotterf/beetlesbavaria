@@ -86,8 +86,6 @@ str(dat)
 # Buchdrucker  : Ips typographus 
 # Kupferstecher: Pityogenes chalcographus   
 
-# The counts of Kupferstecher needs to be divided by 10!!
-
 
 # Variation within a year?
 # yes, need to split in year, months, dates
@@ -122,10 +120,7 @@ dat %>%
 dat <- dat %>% 
   mutate(drought_period = case_when(
     year < 2018 ~  'before',
-    year >= 2018 ~ 'after')) 
-
-# Correctly order levels
-dat <- dat %>% 
+    year >= 2018 ~ 'after')) %>% 
   mutate(drought_period = factor(drought_period,
                                  levels=c('before', 'after')))
 
@@ -141,7 +136,7 @@ dat %>%
   distinct(globalid) %>% 
   count()
 
-# First, replace all spaces by '_'
+# First, replace all spaces by '_', get trap_pair number 
 dat <- dat %>% 
   mutate(falsto_name2 = gsub(' ', '_', falsto_name)) %>% 
   mutate(trap_pair = as.numeric(str_extract(falsto_name, "[0-9]+"))) # get the trap pair number
@@ -229,6 +224,49 @@ dat %>%
 
 
 # get unique site numbers: one globalid can have two traps: one for Ips, one for Pityogenes;
+
+  
+# 12 locations of zero beetles for IPS: -----------------------------------------
+# dat_avg %>% 
+#   filter(globalid == "9A355BAA-43CC-4004-BFF8-8A3BEF2C1263") %>% 
+#   filter(art == 'Buchdrucker')
+# 
+# dat %>% 
+#   filter(art == 'Buchdrucker') %>% 
+#   filter(globalid == "9A355BAA-43CC-4004-BFF8-8A3BEF2C1263" & year == 2020)# %>% 
+# 
+# # buchdrucker has here 23 revisits ad still 0 beetles? - check location
+# # Buchdrucker 2016 1557D362-F231-4A47-9976-7063820397C1 0 1 23
+# dat %>% 
+#   filter(art == 'Buchdrucker') %>% # has zero, check the Brunnthal 2
+#   filter(globalid == "1557D362-F231-4A47-9976-7063820397C1" & year == 2016)# %>% 
+# 
+# 
+# dat %>% 
+#   filter(art == 'Buchdrucker') %>% # has zero, check the Brunnthal 2: has normal values
+#   filter(falsto_name          == "Brunnthal_2" )# %>% 
+# 
+# 
+# # check distribution and zeros:
+# dat_avg %>% 
+#   ggplot(aes(x = avg_beetles_trap)) +
+#   geom_histogram(bins = 1000)
+# 
+
+
+# Inspect data ------------------------------------------------------------
+
+# check for zeros presence - present! 
+# how many zeros I have for sum beetles per trap?? - if 0 beetles over whole year, it is suspicious..
+
+# filter data:
+#  - set dates: April 1st (DOY 91, DOY 92 lap year) to Oct 31  (304) - from Phenips
+#  - check revisit times: exclude if traps not collecte reularly! (eg. 10 times over the season: April 1st to Oct 30)
+
+# Filter traps: -------------------------------------------------------------- 
+# 1) by 0 sum beetles per year
+# 2) by low revisit frequency - once per year
+
 # zero count for whole year, with single recording times... seems fishy
 # seems that traps with zeros are consistent...
 zero_catch_id <- dat_avg %>% 
@@ -243,54 +281,6 @@ low_visit_id <- dat_avg %>%
   ungroup(.) %>% 
   dplyr::distinct(globalid) %>% 
   pull()
-  
-# 12 locations of zero beetles for IPS: -----------------------------------------
-dat_avg %>% 
-  filter(globalid == "9A355BAA-43CC-4004-BFF8-8A3BEF2C1263") %>% 
-  # dplyr::filter(globalid %in% zero_catch_id) #%>% 
-  filter(art == 'Buchdrucker')
-
-dat %>% 
-  filter(art == 'Buchdrucker') %>% 
-  filter(globalid == "9A355BAA-43CC-4004-BFF8-8A3BEF2C1263" & year == 2020)# %>% 
-
-# buchdrucker has here 23 revisits ad still 0 beetles? - check location
-# Buchdrucker 2016 1557D362-F231-4A47-9976-7063820397C1 0 1 23
-dat %>% 
-  filter(art == 'Buchdrucker') %>% # has zero, check the Brunnthal 2
-  filter(globalid == "1557D362-F231-4A47-9976-7063820397C1" & year == 2016)# %>% 
-
-
-dat %>% 
-  filter(art == 'Buchdrucker') %>% # has zero, check the Brunnthal 2: has normal values
-  filter(falsto_name          == "Brunnthal_2" )# %>% 
-
-
-# check distribution and zeros:
-dat_avg %>% 
-  ggplot(aes(x = avg_beetles_trap)) +
-  geom_histogram(bins = 1000)
-
-
-
-# Inspect data ------------------------------------------------------------
-
-# check for zeros presence - present! 
-# how many zeros I have for sum beetles per trap?? - if 0 beetles over whole year, it is suspicious..
-
-# filter data:
-#  - set dates: April 1st (DOY 91, DOY 92 lap year) to Oct 31  (304) - from Phenips
-#  - check revisit times: exclude if traps not collecte reularly! (eg. 10 times over the season: April 1st to Oct 30)
-
-
-# what is average revisit time?
-# number of days: April to October: 212 days
-range(212/dat_avg$freq_visit)
-
-hist(212/dat_avg$freq_visit)
-
-# some sites have been revisited every 7 days!
-# calculation works great!
 
 
 
