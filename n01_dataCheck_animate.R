@@ -145,7 +145,16 @@ dat <- dat %>%
 dat <- dat %>% 
   mutate(globalid =  gsub("\\{|\\}", "", globalid))  
 
- 
+# how many traps per year, per pair trap?
+dat %>% 
+  group_by(art, year, trap_pair) %>% 
+  distinct(globalid) %>% 
+  count() #%>% 
+  #View()
+
+# trap_pair == 3 I an exclude, there is only one trap added per year
+
+
 # usefull period: 2015-2021 (2014 does not have counts per trap, only sum by year)
 #   art            year     n
 #   <chr>         <dbl> <int>
@@ -211,17 +220,17 @@ dat_avg %>%
 # about 93 records have 0 sum beetles per year (11 ips, 83 pityogenes), ad checked only once per year! 
 # check: ---------------------------------------------------
 # Buchdrucker 2015 {4826784B-6D9B-4CB6-B431-14132184BCB7}
-dat %>% 
-  filter(globalid == "4826784B-6D9B-4CB6-B431-14132184BCB7")
-
-# or have 0 sum beetles, but checked 22 times!! per season! (Pityogenes)
-#Kupferstecher 2016 {9FD90E97-9C4E-478F-9A89-724C74C95FDC}
-dat %>% 
-  filter(globalid == "9FD90E97-9C4E-478F-9A89-724C74C95FDC" & year == 2016 
-         #& art == "Kupferstecher"
-         ) %>% 
-  arrange(kont_dat)
-
+# dat %>% 
+#   filter(globalid == "4826784B-6D9B-4CB6-B431-14132184BCB7")
+# 
+# # or have 0 sum beetles, but checked 22 times!! per season! (Pityogenes)
+# #Kupferstecher 2016 {9FD90E97-9C4E-478F-9A89-724C74C95FDC}
+# dat %>% 
+#   filter(globalid == "9FD90E97-9C4E-478F-9A89-724C74C95FDC" & year == 2016 
+#          #& art == "Kupferstecher"
+#          ) %>% 
+#   arrange(kont_dat)
+# 
 
 # get unique site numbers: one globalid can have two traps: one for Ips, one for Pityogenes;
 
@@ -309,40 +318,7 @@ dat_avg %>%
 #  scale_y_continuous(limits = c(0,25000)) +
   facet_wrap(.~art, scales = 'free') +
   theme(legend.position = 'bottom')
-  # summarize(my_mean = mean(fangmenge, na.rm = T),
-  #           my_med = median(fangmenge, na.rm = T))# %>% 
-
-
-
   
-# Check development of counts over one year
-windows()
-  dat %>% 
-  filter(doy %in% veg.period ) %>%             #  &  art == "Buchdrucker"
-  ggplot(aes(x = doy,                # DOY = Day of the Year
-             y = fangmenge,
-             color = factor(year))) +
-    #geom_point() +
-    geom_smooth(method = 'loess') +  #'gam' 
-  scale_y_log10()+
-  scale_color_viridis_d() + 
-  facet_grid(.~ art)
-  #coord_trans(ytrans="pow10")
-
-
-# for overall counts:
-windows()
-dat %>% 
-  filter(doy %in% veg.period ) %>%           #  &  art == "Buchdrucker"
-  ggplot(aes(x = doy,                # DOY = Day of the Year
-             y = fangmenge,
-             color = drought_period )) +
-  #geom_point() +
-  geom_smooth(method = 'loess') +  #'gam' 
-  scale_y_log10()+
-  scale_color_viridis_d() + 
-  facet_grid(.~ art)
-#coord_trans(ytrans="pow10")
 
 
 
@@ -351,22 +327,6 @@ dat %>%
 
 
 
-
-# Calculate the sums per day & year, then plot the data
-dat %>% 
-  filter(doy %in% veg.period) %>%             #  &  art == "Buchdrucker"
-  filter(year == 2017 ) %>% 
-  group_by(doy, art, year)  %>% 
-  summarize(my_sum = sum(fangmenge, na.rm = T)) #  %>% 
-  ggplot(aes(x = doy,                # DOY = Day of the Year
-             y = my_sum,
-             color = factor(year))) +
-  geom_point() +
-  geom_line() + 
-  #scale_y_log10()+
-  scale_color_viridis_d() + 
-  facet_wrap(.~ art, scales = 'free')
-#coord_trans(ytrans="pow10")
 
 
 
