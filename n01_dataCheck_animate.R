@@ -28,8 +28,8 @@ load(paste(path, 'BoMo_2015_2021_Rohdaten.RData', sep = "/"))
 
 
 # Vars
-doy.start  =  91
-doy.end    = 304
+doy.start  =  91 # April 1st
+doy.end    = 304 # Oct 30
 veg.period = doy.start:doy.end
 
 # Read XY coordinates -----------------------------------------------------------
@@ -229,6 +229,7 @@ dat %>%
 
 
 # get unique site numbers: one globalid can have two traps: one for Ips, one for Pityogenes;
+# zero count for whole year, with single recording times... seems fishy
 # seems that traps with zeros are consistent...
 zero_catch_id <- dat_avg %>% 
   filter(sum_beetles == 0 & art == 'Buchdrucker') %>% 
@@ -243,7 +244,7 @@ low_visit_id <- dat_avg %>%
   dplyr::distinct(globalid) %>% 
   pull()
   
-# 12 locations of zero beetles for IPS:
+# 12 locations of zero beetles for IPS: -----------------------------------------
 dat_avg %>% 
   filter(globalid == "9A355BAA-43CC-4004-BFF8-8A3BEF2C1263") %>% 
   # dplyr::filter(globalid %in% zero_catch_id) #%>% 
@@ -1011,32 +1012,7 @@ animate(p, renderer = gifski_renderer())
 
 
 
-# ===============================================================================
-# Try if the gganimate actually works: now works widh gifski renderer!!!
 
-library(ggplot2)
-library(gganimate)
-theme_set(theme_bw())
-
-library(gapminder)
-head(gapminder)
-
-# make a plot
-p <- ggplot(
-  gapminder, 
-  aes(x = gdpPercap, y=lifeExp, size = pop, colour = country)
-) +
-  geom_point(show.legend = FALSE, alpha = 0.7) +
-  scale_color_viridis_d() +
-  scale_size(range = c(2, 12)) +
-  scale_x_log10() +
-  labs(x = "GDP per capita", y = "Life expectancy")
-p
-
-p<-  p + transition_time(year) +
-  labs(title = "Year: {frame_time}")
-
-install.packages("gifski")
-library(gifski)
-
-animate(p, renderer = gifski_renderer())
+# Save selected dfs in R object: ------------------------------------------------------------
+#save(df,                   # what the df has  
+#     file="outData/df.Rdata")
