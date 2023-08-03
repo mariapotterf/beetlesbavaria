@@ -19,6 +19,13 @@ library(ggplot2)
 library(zoo)
 library(data.table)
 
+
+# Colors libs 
+library(RColorBrewer)
+library(scales)
+library(viridis)
+
+
 # get data
 path = 'C:/Users/ge45lep/Documents/2022_BarkBeetles_Bavaria/rawData/Fwd__Borkenkäferforschung__Datentransfer'
 out_path = 'C:/Users/ge45lep/Documents/2022_BarkBeetles_Bavaria'
@@ -263,6 +270,7 @@ dat_avg %>%
 # 
 
 
+
 # Inspect data ------------------------------------------------------------
 
 # check for zeros presence - present! 
@@ -295,6 +303,8 @@ low_visit_id <- dat_avg %>%
 
 # does the average number of beetles per trap differ between locations?
 # between years?
+dev.off()
+
 dat_avg %>%
   ggplot(aes(x = factor(year),
              y = avg_beetles_trap,
@@ -308,30 +318,8 @@ dat_avg %>%
 
 
 
-
-# geom boxplot plot
-dat_avg %>% 
-  ggplot() +
-  geom_boxplot(aes(x = drought_period,
-                   y = avg_beetles_trap,
-                   fill = art)) +
-#  scale_y_continuous(limits = c(0,25000)) +
-  facet_wrap(.~art, scales = 'free') +
-  theme(legend.position = 'bottom')
   
-
-
-
-
-
-
-
-
-
-
-
-  
-# May data: time series data:
+# My data: time series data: -----------------------------------------------------
   
 # Plot only time series of IT if there can be seems some seasonality: ----------------
   
@@ -350,16 +338,15 @@ dat %>%
 
 
 # Clean data: IPS ---------------------------------------------------------
-# - keep IPS
+# - keep only IPS
 # - vegetation period: doy
-# - years
+# - years: 2015-2021
 # - frequent recording: 10 revisit times at least
-# - remove the '3' groups???
+# - remove the '3rd' trap
 dat.ips.clean <- dat %>% 
   filter(doy %in% veg.period) %>% 
   filter(year > 2014) %>% 
   filter(art == 'Buchdrucker') %>%
-  #mutate(globalid = gsub(paste(c("[{]", "[}]"), collapse = "|"), "", globalid) ) %>% # remove parantheses 
   ungroup(.) %>% 
   dplyr::filter(!globalid %in% low_visit_id) %>%  # remove traps with low visit time (nee to check this for year?)
   dplyr::filter(!globalid %in% zero_catch_id) %>% # exclude if zero beetles caught per whole year
@@ -367,19 +354,19 @@ dat.ips.clean <- dat %>%
   filter(representativ == 'Ja') 
   
   
-# Get daily counts
+# Get daily counts per trap (averaged by the revisit time)
 df.daily <-  
   dat.ips.clean %>% 
     group_by(globalid,art, year) %>% 
     arrange(kont_dat) %>% # order the data
     mutate(
       period = diff(c(doy.start, doy))+1,  # get difference between two consecutive numbers
-      daily  = fangmenge/period,           # average beetle counts per day
-      sum = daily*period,                  # to check counts
+      avg_day_count  = fangmenge/period,           # average beetle counts per day
+      sum = avg_day_count*period,                  # to check counts
       cumsum = cumsum(sum),
-      diff   = daily - lag(daily) ) #%>%   # difference between average daily values
+      diff   = avg_day_count - lag(avg_day_count) ) #%>%   # difference between average avg_day_count values
    # filter(globalid == '0010C7C3-C8BC-44D3-8F6E-4445CB8B1DC9' & art == 'Buchdrucker') %>%
-   # select(kont_dat, fangmenge, falsto_name, cumsum,daily,
+   # select(kont_dat, fangmenge, falsto_name, cumsum,avg_day_count,
   #         diff,
    #        doy) %>%
   #  arrange(year) %>%
@@ -389,57 +376,28 @@ df.daily <-
   
 
  
-##### example -----------------------------------------------------
-
-# https://stackoverflow.com/questions/76806372/count-number-caught-per-day-from-longer-intervals
-
-
-  df <- data.frame(gr = rep(c('a','b'), each = 3),
-                   count = c(10,15,23, 
-                             5, 10, 100),
-                   doy = c(6, 11,15,
-                           7,12,19))
-
-# example base R
-  first_day <- 5
-  df$period <- diff(c(first_day, df$doy))+1
-  df$daily <- df$count/df$period  
-
-# Example tidyr with groups
-  df %>% 
-    group_by(gr) %>% 
-    mutate(
-           period = diff(c(first_day, doy))+1,
-           daily  = count/period,
-           sum = daily*period,
-           cumsum = cumsum(sum))
-    
-    
- 
-  
-  
 # check plot of differences: ---------------------------------------
 # compare counts by groups:
-  df.daily %>% 
+p_count_diff <- df.daily %>% 
   ggplot(aes(y = diff,
              x = doy,
-             color = year)) +
+             color = factor(year))) +
   #geom_point() + 
-    coord_cartesian(ylim = c(0,500)) + # only '+' values (increase)
+ #   coord_cartesian(ylim = c(0,500)) + # only '+' values (increase)
   stat_summary(fun = mean, geom="line") + 
-  facet_grid(year~.)
+  facet_grid(year~.) +
+  theme_bw() +
+  ylab('Difference in IPS counts')
 
 
 
-length(unique(df.daily$globalid))
 
 windows()
-hist(df.daily$daily)
-
-filter(df.daily)
+hist(df.daily$avg_day_count)
 
 # convert data for counts on 1 and counts on 2: ---------------------
 # are 1 and 3 consistently indicating different groups? or is it 2-3, or 1-3?
+# 3 is removed (since 08/01/2023)
 # quick overview: subset only data that have coorrect 1/2:
 df1 <-dat.ips.clean %>% 
   filter(trap_pair == 1 ) %>% 
@@ -463,21 +421,21 @@ dd_sum <-
   ungroup() %>%
   filter(complete.cases(.))
 
-# od Laca: ----------
-# tau autokoralacia - korelacia v case
-# pozriet differences v casoch
-# elevation?
 
-
+## visualize trap1 vs trap2 ----------------------------------------
 ggplot(dd_sum, aes(x = trap1, 
                        y = trap2)) +
   geom_point()+
-  geom_smooth(method = 'gam')
+  geom_smooth(method = 'lm')
 
 
-  
+m_lm <- lm(trap1~trap2, dd_sum)
+summary(m_lm)
 
 
+m_glm <- glm(trap1~trap2, dd_sum, family = poisson)
+summary(m_glm)
+plot(m_gam, 1)
 
 
 # Export XY and DAT table -------------------------------------------------
@@ -486,174 +444,90 @@ ggplot(dd_sum, aes(x = trap1,
 # Make a use of gpkg in R: https://inbo.github.io/tutorials/tutorials/spatial_standards_vector/
 # Write the output XY files in 3035 coordinate
 xy_sf %>% 
-  st_write(paste(out_path, "outSpatial/xy_3035.gpkg", sep = '/'), append=FALSE)
+ st_write(paste(out_path, "outSpatial/xy_3035.gpkg", sep = '/'), append=FALSE)
 
-
+# export RAW data
 data.table::fwrite(dat, paste(out_path, 'outSpatial/dat.csv', sep = "/"))
 
 
 
-# Get total sum of buchdrucker over year --------------------------------------------------------
-dat_sum <- 
-  dat %>%  
-  dplyr::filter(doy >= doy.start &  doy <= doy.end & # April 1st to Oct 30
-            year != 2014) %>%  # & art == 'Buchdrucker'
-  group_by(year, art) %>% 
-  mutate(bav_sum = sum(fangmenge, na.rm =T))# %>% 
-  #ggplot(aes(y = bav_sum,
-  #           x = year,
-  #           color = art)) + 
-  #geom_line()
-  
-
-# get the summary data to merge with XY coordinates!  
-dat.sum.IT <-   dat %>%  
-  dplyr::filter(doy >= doy.start &  doy <= doy.end  & year != 2014 & art == 'Buchdrucker') %>%  # & art == 'Buchdrucker'
-  group_by(year, month, art, globalid) %>% 
-  mutate(bav_sum = sum(fangmenge, na.rm =T)) %>%  
-  mutate(time = paste(year, month, sep = '_')) %>% 
-  dplyr::select(bav_sum, globalid, time) #%>% 
- 
-
-
-dat.sum.IT.year <-   dat %>%  
-  dplyr::filter(doy >= doy.start &  doy <= doy.end & year != 2014 & art == 'Buchdrucker') %>%  # & art == 'Buchdrucker'
+# get the summary IPS data to merge with XY coordinates!  
+ips.year.sum <-   dat.ips.clean %>%     
   group_by(year, art, globalid) %>% 
   mutate(bav_sum = sum(fangmenge, na.rm =T)) %>%  
- # mutate(time = paste(year, month, sep = '_')) %>% 
   dplyr::select(bav_sum, globalid, year) #%>% 
 
 
-
 # Merge spatial data with sum data by globalid
-buch_df <- xy_sf %>% 
-  right_join(dat.sum.IT, 'globalid')
-
-buch_df_year <- xy_sf %>% 
-  right_join(dat.sum.IT.year, 'globalid')
+ips.year.sum_sf <- xy_sf %>% 
+  right_join(ips.year.sum, 'globalid')
 
 
 
 
-
-
-# Plot spatial data ------------------------------------
-library(RColorBrewer )
-display.brewer.pal(7, "BrBG")
-
-buch_df_f <- buch_df %>% 
-  filter(bav_sum > 3000)
-# 
-windows()
-#buch_df %>% 
-  #filter(year == 2021) %>% 
-ggplot(bav_sf) +
-  geom_sf(color = 'black', 
-        fill  = 'grey93') + 
-  geom_sf(data = buch_df_f,
-          aes(color = bav_sum,
-              size = bav_sum)) + # , size = Age, size = 0.8size by factor itself!
-  #geom_sf(buch_df, aes(color = bav_sum ))  + # , size = 0.5 , size = AREA
-  #scale_color_continuous(low = "#FFFF00",
-                       #  high = "#990000",
-                       #  space = "Lab",
-                       #  na.value = "transparent",
-                       # guide = "colourbar") +
-  scale_color_viridis(name = 'Beetle count/trap', 
-                      alpha = 0.8,
-                     option = 'magma',
-                     direction = -1,
-                     na.value = 'transparent') +
-  facet_wrap(.~year) + 
-  theme_bw()
-
-
-
-
-# try to plot variogram:  ----------------------------------
-library(gstat)
-
-#buch_df2 <- data.frame(buch_df) %>% 
-  
-
-?variogram
-vgm1<- variogram(log(bav_sum)~1,buch_df)
-plot(vgm1, type='b', main='Co-variogram')
-
-
-
-
-
-# Test fr Morans'I: ---------------------------
-Moran.I(ozone$Av8top, ozone.dists.inv) 
-
-
-
-
-
-
-# R animate: ------------------------------------------------
-
-
-# Get data:
-library(gapminder)
-
-# Charge libraries:
-library(ggplot2)
-library(gganimate)
-library(transformr)
-library(gifski)  # needed for correct rendering of the animation
-
+# Get spatial data libs -----------------------------------------------------------------
 library(rnaturalearth) # for map data
 library(ggspatial)
 
 
-
-
-# get spatial data: 
-# get and bind country data
+# get spatial data ------------------------------------------------------------------ 
 de_sf <- ne_states(country = "germany", returnclass = "sf")
 
 # Get only bavaria
 bav_sf <- de_sf %>% 
   dplyr::filter(name_en == "Bavaria")
 
+buch_df_f <- ips.year.sum_sf %>% 
+  filter(bav_sum > 3000)
 
+# for visibility, only beetles sums > 3000/year/trap are shown!
+ggplot(bav_sf) +
+  geom_sf(color = 'black', 
+          fill  = 'grey93') + 
+  geom_sf(data = buch_df_f,
+          aes(color = bav_sum,
+              size = bav_sum)) + # , size = Age, size = 0.8size by factor itself!
+  scale_color_viridis(name = 'Beetle sum/year/trap', 
+                      alpha = 0.8,
+                      option = 'magma',
+                      direction = -1,
+                      na.value = 'transparent') +
+  facet_wrap(.~year) + 
+  theme_void()
 
-
-
-
-# Max increase in counts per year & gap ----------------------------------------------------
-
+# Max increase in counts per year & trap ----------------------------------------------------
 # find min DOY of the max diff per year and location: plot on map ----------------
 max.diff.doy <- df.daily %>% 
   group_by(globalid, year, falsto_name2) %>% 
   slice(which.max(diff))
 
-max.diff.doy.sf <- xy_sf %>% 
+max.diff.doy.sf <- xy_sf %>%   # to keep the sf structure, need to add df to sf
   right_join(max.diff.doy, 'globalid')
 
 
 # check range DOY:
-max.diff.doy.sf %>% 
+max.diff.doy %>% 
   as.data.frame() %>% 
   group_by(year) %>% 
   summarise(min = min(doy),
             max = max(doy),
             mean = mean(doy),
             sd = sd(doy),
+            cv = sd/mean,
             median = median(doy))
 
 
 # Check Max increase population
-max.diff.doy.sf %>% 
+max.diff.doy %>% 
   as.data.frame() %>% 
   group_by(year) %>% 
   summarise(min = min(diff),
             max = max(diff),
             mean = mean(diff),
             sd = sd(diff),
-            median = median(diff))
+            cv = sd/mean,
+            median = median(diff)
+            )
 
 
 # the main diference in counts happends earlier in the season
@@ -672,18 +546,19 @@ df.daily %>%
 
 # facet map plots -------------------------------------------------------------------
 ## overall: DOY f max increase
-ggplot(bav_sf) +   # base map
+p_doy_max_increase <- ggplot(bav_sf) +   # base map
   geom_sf(color = 'black', 
-          fill  = 'grey33') + 
+          fill  = 'grey80') + 
   geom_sf(data = max.diff.doy.sf,
-          aes(color = doy#,
-              #size = diff
+          aes(color = doy,
+              size = diff
           )
-  ) + # , size = Age, size = 0.8size by factor itself!
-  colorspace::scale_color_continuous_sequential(palette = "Heat", alpha = 0.8,
-                                                rev = FALSE) + # reverse order  = sooner = darker color
-  # annotation_scale(location = "bl", 
-  #                   width_hint = 0.4) +
+  ) + 
+  scale_color_viridis(name = 'DOY of max increase', 
+                      alpha = 0.8,
+                      option = 'magma',
+                      direction = 1,
+                      na.value = 'transparent') +
   theme_void() +
   facet_wrap(~year) +
   xlab("Longitude") + 
@@ -694,26 +569,51 @@ ggplot(bav_sf) +   # base map
 
 
 
-## filter  DOY 150 = July 31 ----------------------------------------------------
-ggplot(bav_sf) +   # base map
+## filter  DOY 150 = May 30 ----------------------------------------------------
+windows()
+p_doy_max_increase150 <- ggplot(bav_sf) +   # base map
   geom_sf(color = 'black', 
-          fill  = 'grey33') + 
+          fill  = 'grey85') + 
   geom_sf(data = filter(max.diff.doy.sf, doy <= 150),
-          aes(color = doy#,
-              #size = diff
+          aes(color = doy,
+              size = diff
               )
-  ) + # , size = Age, size = 0.8size by factor itself!
-  colorspace::scale_color_continuous_sequential(palette = "Heat", alpha = 0.8,
-                                                rev = FALSE) + # reverse order  = sooner = darker color
-  # annotation_scale(location = "bl", 
-  #                   width_hint = 0.4) +
+  ) + 
+  scale_color_viridis(name = 'DOY of max increase', 
+                      alpha = 0.8,
+                      option = 'magma',
+                      direction = 1,
+                      na.value = 'transparent') +
   theme_void() +
   facet_wrap(~year) +
   xlab("Longitude") + 
   ylab("Latitude") +
   labs(title = 'DOY of max increase/trap/day',
+       subtitle = 'DOY <= 150',
        color  = "DOY",
        size = "Ips [sum]")
+
+
+# does earlier DOY occurs with the higher size?
+windows()
+p_diff_doy <- max.diff.doy %>% 
+  #filter(doy < 151) %>% 
+  ggplot(aes(x = doy,
+             y = diff,
+             color = factor(year)))+
+  geom_point() +
+  facet_grid(year~.) +
+  ylab('Max increase of beetle counts\n[diff]') +
+  theme_bw()
+  
+
+
+#DOY
+# 100 April 10
+# 150 May 30
+# 200 July 19
+# 211 July 30
+# 250 SEpt 7
 
 
 # 2.population increase -------------------------------------------------------------
@@ -733,7 +633,7 @@ ggplot(bav_sf) +   # base map
   facet_wrap(~year) +
   xlab("Longitude") + 
   ylab("Latitude") +
-  labs(title = 'Max population size/trap/day',
+  labs(title = 'Max increase/trap/day',
        #color  = "DOY",
        size = "Ips increase [day/trap]")
 
@@ -744,87 +644,6 @@ ggplot(bav_sf) +   # base map
 
 
 
-
-
-# ANOVA : # does the DOY of max increase differes between years?  ----------------
-#http://www.sthda.com/english/wiki/one-way-anova-test-in-r#check-your-data
-# 
-# one way anova - finds that there are differenes, we don't know where
-res.aov <- aov(doy ~ factor(year), max.diff.doy.sf)
-
-summary(res.aov)
-
-# multiple way anova = pairwise comparison between groups
-TukeyHSD(res.aov) # challengin to read differences, if many groups
-
-pairwise.t.test(max.diff.doy.sf$doy, factor(max.diff.doy.sf$year),
-                p.adjust.method = "BH")
-
-
-### check ANOVA assumptions:
-# 1. Homogeneity of variances
-# 2. Normality
-
-
-# 1. Homogeneity of variances
-plot(res.aov, 1)
-
-# test for homonenity f variance: 
-library(car)
-# high p-value = variances are the same (H0) 
-leveneTest(doy ~ factor(year), data = max.diff.doy.sf)
-# low p-values, so variancs are different ->
-
-# use ANOVA with no assumption of equal variances
-res.aov_no_equal <- oneway.test(doy ~ factor(year), data = max.diff.doy.sf)
-
-
-
-### t-test for not equal variances : ---------------------------
-pairwise.t.test(max.diff.doy.sf$doy, factor(max.diff.doy.sf$year),
-                p.adjust.method = "BH", pool.sd = FALSE)
-
-
-# 2. Normality
-plot(res.aov, 2)
-
-# check by Shapiro-Wilk test for residuals
-# Extract the residuals
-aov_residuals <- residuals(object = res.aov )
-# Run Shapiro-Wilk test # does not work, have more values then 5000
-shapiro.test(x = aov_residuals )  # not normaly distributed
-
-
-# run rather Kruskal-Wallis test - not equal variances
-kruskal.test(doy ~ factor(year), data = max.diff.doy.sf)
-
-
-# post-hoc test: pairwise-wilcox
-wilk <-pairwise.wilcox.test(max.diff.doy.sf$doy, factor(max.diff.doy.sf$year),
-                     p.adjust.method = "BH")
-# get matrix of p-values for further ploting
-wilk$p.value
-
-p.vals <- replace(wilk$p.value,wilk$p.value>0.05,1)
-
-
-# show p-values - first transformation is needed, 
-# as this is the opposite of the corr() plot - larger is better,
-# while in p-values smaller is better
-# https://stackoverflow.com/questions/61861049/how-plot-results-from-a-pairwise-wilcox-test
-my_transformed_pvals=-log10(p.vals)  # negative of 'log' works, as all p-vals are <1
-
-library ( corrplot)
-corrplot(as.matrix(my_transformed_pvals),is.corr=F)
-corrplot(as.matrix(p.vals),is.corr=F)
-
-
-# !!! my groups are not independent! they are colected on teh same traps, 
-# they are autocorrelated!
-# use anova with repeated measures:
-
-aov_rep <- aov(doy~factor(year)+Error(factor(globalid)), data = max.diff.doy.sf)
-summary(aov_rep)
 
 
 
@@ -849,8 +668,8 @@ grid()
 # for whole data, not just the max increase
 df.daily %>%
   group_by(year, globalid, art) %>% 
-  summarize(mean = mean(daily),
-            sd  = sd(daily),
+  summarize(mean = mean(avg_day_count),
+            sd  = sd(avg_day_count),
             cv  = sd/mean) %>%  # can be turned to % by '*100'
   ggplot(aes(x = factor(year),
              y = cv)) +
@@ -861,7 +680,7 @@ df.daily %>%
 
 # CV of DOY of the max beetle increase ------------------
 max.diff.doy %>%
-  ungroup(.) %>% 
+#  ungroup(.) %>% 
   group_by(year) %>% 
   summarize(mean = mean(doy),
             sd   = sd(doy, na.rm=TRUE) ,
@@ -884,85 +703,22 @@ max.diff.doy %>%
 
 
 
-# GIf by years --------------------------------------------------------
-
-# 
-# need to recheck!! gg anime makes a png, but not a video 
-p<-ggplot(bav_sf) +   # base map
-  geom_sf(color = 'black', 
-          fill  = 'grey93') + 
-  geom_sf(data = buch_df_year,
-          aes(color = bav_sum,
-              size = bav_sum)) + # , size = Age, size = 0.8size by factor itself!
-  # viridis::scale_color_viridis(discrete = FALSE, option = "viridis",
-  #                             na.value = "red") +
-  #scale_color_gradientn(colours = #colorspace::hcl_palettes(palette = "Dark 2")
-   #                      colorspace::heat_hcl(7)
-    #                   ) +
-  colorspace::scale_color_continuous_sequential(palette = "Heat") +
-  annotation_scale(location = "bl", width_hint = 0.4) +
-  theme_bw() +
-  xlab("Longitude") + 
-  ylab("Latitude") +
-  # gganimate specific bits: ------------------
-labs(title = 'IT beetle population counts {current_frame}',
-     color  = "IT Beetle [count]") +
-  transition_manual(year) +
-  
-  ease_aes('linear')
-
-
-# animate with the gifski renderer
-animate(p, renderer = gifski_renderer())
-
-
-hcl_palettes("sequential (single-hue)", n = 7, plot = TRUE)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-# GIF: months and years -------------------------------------------------------- 
-# need to recheck!! gg anime makes a png, but not a video 
-p<-ggplot(bav_sf) +   # base map
-  geom_sf(color = 'black', 
-          fill  = 'grey93') + 
-  geom_sf(data = buch_df,
-          aes(color = bav_sum,
-              size = bav_sum)) + # , size = Age, size = 0.8size by factor itself!
- # viridis::scale_color_viridis(discrete = FALSE, option = "viridis",
-  #                             na.value = "red") +
-  scale_fill_gradientn(colours = colorspace::heat_hcl(7)) +
-  annotation_scale(location = "bl", width_hint = 0.4) +
-  theme_bw() +
-  xlab("Longitude") + 
-  ylab("Latitude") +
-  # gganimate specific bits: ------------------
-  labs(title = 'IT beetle population counts {current_frame}',
-       color  = "IT Beetle [count]") +
-  transition_manual(time) +
-  #transition_time(year) +
-  ease_aes('linear')
-
-
-# animate with the gifski renderer
-animate(p, renderer = gifski_renderer())
-
-
-
-
-
-
 # Save selected dfs in R object: ------------------------------------------------------------
-#save(df,                   # what the df has  
-#     file="outData/df.Rdata")
+save(
+     df.daily,                   # avg daily beetle counts (adjusted by revisit times), over DOY 
+     dat_avg,                    # avg number per beetles/trap per vegetation season (), over whole year
+     dat.ips.clean,              # filtered raw IPS counts
+     max.diff.doy,               # max increase in beetle counts per DOY
+     max.diff.doy.sf,            # sf: max increase in beetle counts per DOY
+     p_count_diff,               # plot: difference in beetle daily counts  
+     p_doy_max_increase,         # map: all locations
+     p_doy_max_increase150,      # map: filter early locations
+     p_diff_doy,                 # scatter plot per year
+     file="outData/ips.Rdata")
+
+
+# Spatial data for maps:
+save(xy_sf,                      # trap location (one Globalid is ised for both IPS & Chalcographus!)
+     de_sf,                      # germany shp
+     bav_sf,                     # bavaria shp
+     file="outData/spatial.Rdata") 
