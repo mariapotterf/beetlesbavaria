@@ -180,10 +180,9 @@ elev<- get_elev_raster(xy, z = 12)
 # Calculate aspect, topography, slope, TRI = terrain roughness index
 slope     <- terra::terrain(elev, 'slope',     neighbors = 4)
 aspect    <- terra::terrain(elev, 'aspect',    neighbors = 4)
-tpi       <- terra::terrain(elev, 'TPI',       neighbors = 4)
+tpi       <- terra::terrain(elev, 'TPI',       neighbors = 4) # TPI (Topographic Position Index) is the difference between the value of a cell and the mean value of its 8 surrounding cells. 
 tri       <- terra::terrain(elev, 'TRI',       neighbors = 4)
-roughness <- terra::terrain(elev, 'roughness', neighbors = 4)
-
+roughness <- terra::terrain(elev, 'roughness', neighbors = 4) # difference between min and max 
 
 # Extract values to XY points, creates a vector
 xy2 <- xy
