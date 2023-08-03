@@ -86,7 +86,7 @@ Regional vs global variation?
 - counts per day =  corrected by the frequency of trap emptying to have average beetles counts per day.
 
 
-### Filtering: 
+### Curate the data: 
 
 - vegetation period: April 1st to Oct 30
 - remove:
@@ -122,6 +122,15 @@ RQ: Does the increase in population happens earlier in year?
 - BY how many beetles?
 
 
+```{r map_p_doy_max_increase, fig.width = 6, fig.height = 6, echo = F, fig.cap="Density distribution of RA1 (Dominant type) for two types of management (Dead and Clear-cut)."}
+
+p_doy_max_increase  
+
+```
 
 
+```{r map_p_doy_max_increase160, fig.width = 6, fig.height = 6, echo = F, fig.cap="Density distribution of RA1 (Dominant type) for two types of management (Dead and Clear-cut)."}
 
+p_doy_max_increase150  
+
+```
