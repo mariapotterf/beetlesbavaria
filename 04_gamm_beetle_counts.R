@@ -49,10 +49,15 @@ library(MASS)
 
 
 
+load("outData/ips.Rdata")
 
+# max.diff.doy # has max difference of counts, and respective DOY
 
 # Get beetle counts
-dat      <- fread(paste(myPath, outFolder, "dat.csv", sep = "/"))
+dat.ips.clean      # dat <- fread(paste(myPath, outFolder, "dat.csv", sep = "/"))
+
+# get DOY of max increase
+max.diff.doy 
 
 # Get SPEI and clim data:
 df_spei   <- fread(paste(myPath, outTable, 'xy_spei.csv', sep = '/'))
@@ -68,8 +73,11 @@ df_spruce <- fread(paste(myPath, outTable, 'xy_spruce.csv', sep = '/'))
 # Get geo data: elevation, slope, roughness...
 xy_topo      <- vect(paste(myPath, outFolder, "xy_3035_topo.gpkg", sep = "/"), 
                   layer = 'xy_3035_topo') # read trap location
+# convert to DF
 df_topo <- as.data.frame(xy_topo)
 
+# Spatial data: 
+xy_sf  # XY as sf data
 
 # Get climate data for traps: --------------------------------------------------
 # this climate data are for soil drought!! not SPEI
@@ -95,31 +103,31 @@ df_xy3035 <- data.frame(x = geom(xy)[,'x'],
 
 
 
-# Do neighboring traps correlate in beetle numbers?
-head(dat)
+# Do neighboring traps correlate in beetle numbers? --------------------------
+head(dat.ips.clean)
 
 dat2 <- 
-  dat %>% 
+  dat.ips.clean %>% 
   separate( falsto_name, c('loc', 'trap_n'), sep = ' ')
   #separate(falsto_name, c("loc", 'trap_n'))
 
 
-unique(dat$trap_n)
+unique(dat.ips.clean$trap_n)
 # 1 2 3 
 
 # check for traps: 1, 2,3, - if there is NA, maybe replaed by other trap?
-dat %>% 
+dat.ips.clean %>% 
  # select(monsto_name, year, art, fangmenge) %>% 
   filter(monsto_name == 'Berg' & year == 2015 & month == 4 & art == 'Buchdrucker' )
 #2015     4 Berg               28    NA    - no, simply missing count of beetles
 
 # are 1 and 3 consistently indicating different groups? or is it 2-3, or 1-3?
 # quick overview: subset only data that have coorrect 1/2:
-df1 <-dat %>% 
+df1 <-dat.ips.clean %>% 
   filter(trap_pair == 1 ) %>% 
   dplyr::select(monsto_name, year, month, doy, fangmenge, art)
 
-df2 <-dat %>% 
+df2 <-dat.ips.clean %>% 
   filter(trap_pair == 2 ) %>% 
   dplyr::select(monsto_name, year, month, doy, fangmenge, art)
 
@@ -143,8 +151,6 @@ dd_ips_sum <-
 
 
 # tau autokoralacia - korelacia v case
-# pozriet differences v casoch
-# elevation?
 
 
 ggplot(dd_ips_sum, aes(x = trap1, 
@@ -219,14 +225,14 @@ df_conif <- df_tree %>%
 
 # plot TEMP and SPEI --------------------------------------------------------
 df_spei <- df_spei %>%
+  filter(year > 2013) %>% 
   mutate(date = format(as.Date(date, "%d/%m/%Y"), "%m.%Y")) %>%
   separate(date, c('month', 'year')) %>%
   mutate(month = as.numeric(month),
          year = as.numeric(year)) #%>%
 
 df_spei %>% 
-  filter(scale == 1) %>% 
-  filter(year > 2010) %>% 
+  filter(scale == 1) %>% # SPEI1 is for current month??
   ggplot(aes(x = factor(year),
              y = Series.1)) +
   geom_boxplot(#outlier.shape = NA, #,
@@ -242,20 +248,18 @@ df_spei %>%
 # SPEI plot on map: ----------------------------------------------
 df_spei_avg <- df_spei %>% 
   filter(scale == 1) %>%
+  filter(year > 2014) %>% 
   group_by(globalid, year ) %>% 
-  mutate(spei_med = median(Series.1))
+  summarize(spei_med = median(Series.1))
            
-# Convert xy data to sf object (not to spatVector from terra)
-xy_sf <- st_as_sf(xy)
 
 # merge SPEI data
 df_spei_avg_sf <- xy_sf %>% 
   right_join(df_spei_avg, 'globalid') %>% 
-  filter(year > 2014) %>% 
-  filter(spei_med < 1)
+  filter(year > 2014) 
 
 
-
+# map: SPEI:lower number = dryer conditions 
 ggplot(bav_sf) +
   geom_sf(color = 'black', 
           fill  = 'grey93') + 
@@ -267,7 +271,7 @@ ggplot(bav_sf) +
                       direction = -1,
                       na.value = 'transparent') +
   facet_wrap(.~year, ncol = 4) + 
-  theme_bw()
+  theme_void()
 
 
 
@@ -309,7 +313,10 @@ df_spei <- df_spei %>%
 
 # convert spei long to wide format, to keep scale values as columns 
 df_spei2 <- df_spei %>% 
-  pivot_wider(!spei_cat, names_from =  scale, values_from = Series.1, names_prefix = "spei")
+  pivot_wider(!spei_cat, 
+              names_from =  scale, 
+              values_from = Series.1, 
+              names_prefix = "spei")
 
 # convert to df_spei to month, year format: 
 
@@ -383,32 +390,21 @@ p_prec <- df_prec %>%
 ggarrange(p_temp, p_prec)
 
 
-# Filter beetle data: get only ips ---------------------------------------------
-
-
-ips <- dat %>% 
-  filter(year !=2014) %>% 
-  filter(art == 'Buchdrucker') %>%
-  filter(representativ  == "Ja") %>% 
-  filter(doy > 92 &  doy < 335) # April 1st to Oct 30
-
-str(ips)
-
 
 
 # Check if there is any trends in beetles numbers? -----------------------------------------
 # effect: location, effect within year, between years, between locations:
 
-head(ips)
-str(ips)
+head(dat.ips.clean)
+str(dat.ips.clean)
 
-ips$globalid <- factor(ips$globalid)
+dat.ips.clean$globalid <- factor(dat.ips.clean$globalid)
 
-length(unique(ips$globalid))
+length(unique(dat.ips.clean$globalid))
 
 
 # Get sums of IPS beetle per year/trap: April 31 to October 30
-ips_sum <- ips %>% 
+ips_sum <- dat.ips.clean %>% 
   ungroup(.) %>% 
   #dplyr::select(representativ == 'ja') %>% 
   group_by(year,falsto_name, globalid) %>% 
