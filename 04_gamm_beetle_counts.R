@@ -58,13 +58,17 @@ dat      <- fread(paste(myPath, outFolder, "dat.csv", sep = "/"))
 df_spei   <- fread(paste(myPath, outTable, 'xy_spei.csv', sep = '/'))
 df_prec   <- fread(paste(myPath, outTable, 'xy_precip.csv', sep = '/'))
 df_temp   <- fread(paste(myPath, outTable, 'xy_temp.csv', sep = '/'))
-# get elevation as well!!!
+
 
 # Get coniferous cover data: coniferous == 2! 
 # spruce: share of spruce
 df_tree   <- fread(paste(myPath, outTable, 'xy_treeComp.csv', sep = '/'))
 df_spruce <- fread(paste(myPath, outTable, 'xy_spruce.csv', sep = '/'))
 
+# Get geo data: elevation, slope, roughness...
+xy_topo      <- vect(paste(myPath, outFolder, "xy_3035_topo.gpkg", sep = "/"), 
+                  layer = 'xy_3035_topo') # read trap location
+df_topo <- as.data.frame(xy_topo)
 
 
 # Get climate data for traps: --------------------------------------------------
