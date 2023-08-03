@@ -1,0 +1,127 @@
+---
+title: "Ips population dynamic in Bavaria (2015-2021)"
+author: "Mária Potterf"
+date:  "`r Sys.Date()`"
+output: 
+  bookdown::html_document2:
+    toc: true
+    toc_depth: 2
+knit: (function(input, ...) {
+    rmarkdown::render(
+      input,
+      output_dir = "../outReports",
+      output_file = file.path("../outReports", glue::glue('Beetles_dyn_{Sys.Date()}'
+    )))
+  })
+
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, tidy = TRUE, tidy.opts = list(comment = FALSE), message = F, warning = F)
+knitr::opts_chunk$set(fig.width=6, fig.height=3) 
+
+```
+
+
+```{css, echo=FALSE}
+p.caption {
+  font-size: 0.8em;
+}
+```
+
+
+```{r setup-root}
+
+knitr::opts_knit$set(root.dir = rprojroot::find_rstudio_root_file('C:/Users/ge45lep/Documents/2022_BarkBeetles_Bavaria/beetlesbavaria'))
+
+```
+
+
+```{r, check-dir, include=FALSE}
+#knitr::opts_knit$set(root.dir = "C:/Users/ge45lep/Documents/2021_Franconia_mortality/r_franconia_mortality")
+
+#getwd()
+```
+
+
+```{r, read-data, include = F}
+
+load(file = "outData/ips.Rdata")
+load(file = "outData/spatial.Rdata")
+```
+
+# To explore
+
+Variation of beetle population dynamics over time and space: how does the beetle counts change over time and space?
+
+- Ips typographus, maybe Pityogenes chalcographus (?)
+- earlier/steeper beetle counts per year?
+
+What are the drivers?
+
+- spruce%
+- SPEI (drougt) index
+- elevation
+- temp
+- precipitation
+
+Regional vs global variation?
+
+- are the traps near by more similar than the traps further away?
+
+
+# Input
+
+## Beetle trap dataset overview
+
+- collected whole year, roughtly in two weeks interval (range 7 - 30 days)
+- individual trap ID - same 'globalid' for Ips and Pityogenes
+
+[tbd]
+
+## Counts processing
+
+- count per year = sum of beetles per trap/year over vegetation period
+- counts per day =  corrected by the frequency of trap emptying to have average beetles counts per day.
+
+
+### Filtering: 
+
+- vegetation period: April 1st to Oct 30
+- remove:
+
+ + if revisit times is less then 10 per season
+ + zero beetles cought per whole season 
+ + trap number 3 (not a pair: 1 or 2)
+ + only 'representative' == "Ja"
+ 
+
+# Descriptive stats
+
+```{r}
+hist(df.daily$avg_day_count)
+```
+
+
+DOY overview
+
+DOY
+
+- 100 April 10
+- 150 May 30
+- 200 July 19
+- 211 July 30
+- 250 SEpt 7
+
+# Temporal variation of beetles counts/traps/day
+
+RQ: Does the increase in population happens earlier in year?
+
+- what is the DOY of the max increase of beetles daily counts between two consecutive days?
+- BY how many beetles?
+
+
+
+
+
