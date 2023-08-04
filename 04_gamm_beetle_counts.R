@@ -48,18 +48,20 @@ library(DHARMa)
 library(MASS)
 
 
-
+# load cleaned data
 load("outData/ips.Rdata")
+load("outData/spatial.Rdata")
 
-# max.diff.doy # has max difference of counts, and respective DOY
-
-# Get beetle counts
+# Get beetle counts - corrected, instead of previous 'dat'
 dat.ips.clean      # dat <- fread(paste(myPath, outFolder, "dat.csv", sep = "/"))
+max.diff.doy       # get DOY of max increase
+ 
+# Spatial data: 
+xy_sf  # XY as sf data
 
-# get DOY of max increase
-max.diff.doy 
 
-# Get SPEI and clim data:
+
+# Get SPEI and clim data: they are for whole year! check only veg season?
 df_spei   <- fread(paste(myPath, outTable, 'xy_spei.csv', sep = '/'))
 df_prec   <- fread(paste(myPath, outTable, 'xy_precip.csv', sep = '/'))
 df_temp   <- fread(paste(myPath, outTable, 'xy_temp.csv', sep = '/'))
@@ -75,9 +77,10 @@ xy_topo      <- vect(paste(myPath, outFolder, "xy_3035_topo.gpkg", sep = "/"),
                   layer = 'xy_3035_topo') # read trap location
 # convert to DF
 df_topo <- as.data.frame(xy_topo)
+df_topo <- df_topo %>% 
+  dplyr::select(c('globalid', 'elev','slope', 'aspect', 'tpi', 'tri', 'roughness'))
+  #dplyr::select(globalid:roughness)
 
-# Spatial data: 
-xy_sf  # XY as sf data
 
 # Get climate data for traps: --------------------------------------------------
 # this climate data are for soil drought!! not SPEI
@@ -225,14 +228,19 @@ df_conif <- df_tree %>%
 
 # plot TEMP and SPEI --------------------------------------------------------
 df_spei <- df_spei %>%
-  filter(year > 2013) %>% 
   mutate(date = format(as.Date(date, "%d/%m/%Y"), "%m.%Y")) %>%
   separate(date, c('month', 'year')) %>%
   mutate(month = as.numeric(month),
-         year = as.numeric(year)) #%>%
+         year = as.numeric(year)) %>%
+  filter(year > 2013)
+
+# check scales
+unique(df_spei$scale)
+spei_scale = 12  # visually tested all '1,3,6,12', and the most contrasting is spei12:
+# very low 2016, and 2014-2015m 2017-2018
 
 df_spei %>% 
-  filter(scale == 1) %>% # SPEI1 is for current month??
+  filter(scale == spei_scale) %>% 
   ggplot(aes(x = factor(year),
              y = Series.1)) +
   geom_boxplot(#outlier.shape = NA, #,
@@ -241,22 +249,21 @@ df_spei %>%
   geom_hline(yintercept = -1, lty = 'dashed') +
   theme_bw() +
   theme(axis.text.x = element_text(angle = 90)) + 
-  ylab('SPEI1')
+  ylab(paste('SPEI', spei_scale))
 
 
 
 # SPEI plot on map: ----------------------------------------------
 df_spei_avg <- df_spei %>% 
-  filter(scale == 1) %>%
-  filter(year > 2014) %>% 
+  filter(scale == spei_scale) %>%
+  #filter(year > 2014) %>% 
   group_by(globalid, year ) %>% 
   summarize(spei_med = median(Series.1))
            
 
 # merge SPEI data
 df_spei_avg_sf <- xy_sf %>% 
-  right_join(df_spei_avg, 'globalid') %>% 
-  filter(year > 2014) 
+  right_join(df_spei_avg, 'globalid') 
 
 
 # map: SPEI:lower number = dryer conditions 
@@ -265,11 +272,15 @@ ggplot(bav_sf) +
           fill  = 'grey93') + 
   geom_sf(data = df_spei_avg_sf,
           aes(color = spei_med)) + # , size = Age, size = 0.8size by factor itself!
-  scale_color_viridis(name = 'Drought islands\nmedian SPEI year <1', 
-                      alpha = 0.8,
-                      option = 'magma',
-                      direction = -1,
-                      na.value = 'transparent') +
+  # scale_color_viridis(name = 'Drought islands\nmedian SPEI year <1', 
+  #                     alpha = 0.8,
+  #                     option = 'magma',
+  #                     direction = -1,
+  #                     na.value = 'transparent') +
+  scale_color_distiller(type = 'div', 
+                        palette = "RdBu", 
+                        direction = 1, 
+                        "SPEI") + 
   facet_wrap(.~year, ncol = 4) + 
   theme_void()
 
@@ -318,19 +329,6 @@ df_spei2 <- df_spei %>%
               values_from = Series.1, 
               names_prefix = "spei")
 
-# convert to df_spei to month, year format: 
-
-#df_spei3 <-
- # df_spei2 %>%
- # mutate(date = format(as.Date(date, "%d/%m/%Y"), "%m.%Y")) %>%
- # separate(date, c('month', 'year')) %>% 
- # mutate(month = as.numeric(month),
-  #       year = as.numeric(year))
-
-# investigate NA: they occur in each location in year 2000
-#df_spei %>% 
-#  filter(is.na(Series.1)) %>% 
-#  distinct(globalid)
 
 
 # Get frequency of extremely dry locations: -----------------------------------------
@@ -339,7 +337,6 @@ library(RColorBrewer)
 display.brewer.pal(7, "BrBG")
 
 df_spei %>% 
-  #filter(scale == 1) %>% 
   group_by(year, spei_cat) %>% 
   tally() %>% 
   #filter(spei_cat == 'ext_dry'|spei_cat == 'sev_dry') %>% 
@@ -406,11 +403,8 @@ length(unique(dat.ips.clean$globalid))
 # Get sums of IPS beetle per year/trap: April 31 to October 30
 ips_sum <- dat.ips.clean %>% 
   ungroup(.) %>% 
-  #dplyr::select(representativ == 'ja') %>% 
   group_by(year,falsto_name, globalid) %>% 
   summarize(sum_beetle = sum(fangmenge, na.rm = T)) %>% 
- # mutate(falsto_name2 = str_replace_all(falsto_name,' ','_')) %>% 
-  mutate(trap_n = as.numeric(gsub("\\D", "", falsto_name))) %>% # extract numeric: get the trap number (1, 2,3) as a group
   left_join(df_xy, by = c("globalid")) # df_xy3035
 
 
@@ -467,7 +461,8 @@ ggplot() +
   scale_color_gradient(low = "white", 
                        high = "red", 
                        name = "Moran's I") +
-  theme_minimal()
+  theme_void() +
+  ggtitle('Moran I 2020')
 
 
 
@@ -489,13 +484,12 @@ global_moran_20 <- moran.test(ips_sum_20$sum_beetle, nb2listw(nb_g_20) )
 # !!!
 
 
-
 # Simpler lm: with counts:
 # get countsper year
 # avg temp, spei, PRCP :april 31 - oct 30 
 df_clim_veg <- df_clim %>% 
   filter(year > 2014 & year < 2022  ) %>% 
-  filter(month > 3 & month < 11 ) %>% # vegetation period: April 1 - Oct 31
+  filter(month %in% 4:10) %>% # vegetation period: April 1 - Oct 31
   group_by(globalid, year) %>% 
   summarise(prec = mean(PRCP),
             temp = mean(TMED),
@@ -510,10 +504,11 @@ df_clim_veg <- df_clim %>%
 ips2 <- ips_sum %>% # sum up beetle counts per veg season, on yearly basis
   left_join(df_clim_veg, by = c("globalid", "year")) %>% # , "month" 
   left_join(df_conif , by = c("globalid")) %>% 
-  left_join(df_xy, by = c("globalid", 'x', 'y')) #%>% # df_xy3035
-  #mutate(year = as.factor(as.character(year)))
+  left_join(df_xy, by = c("globalid", 'x', 'y')) %>% # df_xy3035
+  left_join(df_topo, by = c("globalid"))#mutate(year = as.factor(as.character(year)))
 
 write.csv(ips2, 'C:/Users/ge45lep/Documents/2022_BarkBeetles_Bavaria/outTable/ips_sum.csv')
+
 # Do drivers importance change over time? --------------
 # ChatGPT: 
 # To test if the importance of drivers explaining variability changed over time: 
@@ -528,11 +523,13 @@ mean(ips2$sum_beetle)
 
 ggplot(ips2, aes(x = sum_beetle)) + 
   geom_histogram(colour = 4, fill = "white", 
-                 bins = 5000)
+                 bins = 2000)
 
 # check for 0
 ips2 %>% 
-  filter(sum_beetle == 0) # 0 yes!! but only around 20, vey little
+  filter(sum_beetle == 0) %>% # 0 yes!! but only around 20, vey little
+  distinct(globalid)
+
 
 fitdistr(ips2$sum_beetle, 'Poisson')
 
@@ -540,7 +537,7 @@ fitdistr(ips2$sum_beetle, 'Poisson')
 # poisson: mean and variance are equal
 # negative-binmial - allows for overdispersion (variance excees the mean) - not my case
 
-glm1 <- glm(sum_beetle ~ temp + prec + temp:as.numeric(year) + m_spei3,
+glm1 <- glm(sum_beetle ~ temp + prec + elev + temp:as.numeric(year) + m_spei12,
    data = ips2,
    family = "poisson",
    na.action = "na.fail")
@@ -661,105 +658,8 @@ printCoefmat(data.frame(resI[oid,],
                         row.names=afcon$name[oid]),
              check.names=FALSE)
 
-# 
-# # Dummy example: Extrapolate values over days SKIP!!!:----------------------------------------------
-# # How to interpolate values between dates?
-# # Skip the variation within a year!!!
-# dd <- data.frame(count = c(100, 200, 300,
-#                            10, 15, 480,
-#                            300, 50, 40),
-#                  doy = c(90, 150, 230,
-#                          87, 135, 235,
-#                          85, 120, 240),
-#                  car = rep(c('a', 'b', 'd'), each = 3))
-# 
-# doy_vec = c(70:270)
-# 
-# dd <- data.frame(cumsum = c(4, 12, 14.5,
-#                             8, 15, 20,
-#                             10, 20, 40),
-#                  doy = c(4, 10, 15,
-#                          5, 11, 14,
-#                          5, 10, 15),
-#                  gp = rep(c('a', 'b', 'd'), each = 3))
-# 
-# doy_df = data.frame(doy = rep(c(2:20), 3),
-#                     gp = rep(c('a', 'b', 'd'), each = 19))
-# 
-# # complete the df by wished doy
-# dd %>% 
-#   right_join(doy_df) %>% 
-#   arrange(gp, doy)
-# 
-# # Solution: 
-# dd$flag <- 0
-# 
-# res1 <- by(dd, dd$gp, \(x) {
-#   a <- cbind(merge(x[-3], 
-#                    data.frame(doy=do.call(seq.int, 
-#                                           as.list(range(x$doy)))), 
-#                    all=TRUE), 
-#              gp=el(x$gp))
-#   na <- is.na(a$cumsum)
-#   int <- with(a, spline(doy, 
-#                         cumsum, 
-#                         n=nrow(a)))$y
-#   transform(a, 
-#             cumsum=replace(cumsum, na, int[na]), 
-#             flag=replace(flag, is.na(flag), 1))
-# }) |> do.call(what=rbind)
-# res1
-# 
-# 
-# 
-# 
-# # from answer: ------------------------------------------
-# res1 <- by(dd, dd$gp, \(x) {
-#   a <-
-#     cbind(merge(x[-3], data.frame(doy = do.call(
-#       seq.int, as.list(range(x$doy))
-#     )), all = TRUE), gp = el(x$gp))
-#   na <- is.na(a$cumsum)
-#   int <- with(a, spline(doy, cumsum, n = nrow(a)))$y
-#   # transform(a, cumsum=replace(cumsum, na, int[na]), flag=replace(flag, is.na(flag), 1))
-#   df <-
-#     transform(a,
-#               cumsum = replace(cumsum, na, int[na]),
-#               flag = replace(flag, is.na(flag), 1))
-#   merge(df, data.frame(doy = 2:20, gp = el(a$gp)), all = TRUE) |> {
-#     \(.) .[order(.$doy),]
-#   }()
-# }) |> do.call(what = rbind)
-# res1
-# 
 
 
-
-
-
-
-windows()
-plot(cumsum ~ doy, res1, type='n')
-by(res1, res1$gp, \(x) with(x, points(doy, cumsum, type='b', pch=20, col=flag + 1)))
-
-df <- transform(a, 
-                cumsum=replace(cumsum, na, int[na]), 
-                flag=replace(flag, is.na(flag), 1))    
-merge(df, 
-      data.frame(doy=2:20, 
-                 gp=el(a$gp)), 
-      all=TRUE) |> {\(.) .[order(.$doy), ]}()
-
-
-
-
-
-
-# model raw counts??? !!! -----------------------------------
-ips2 <- ips %>% 
-  left_join(df_clim, by = c("globalid", "year", "month")) %>% 
-  left_join(df_conif , by = c("globalid")) %>% 
-  left_join(df_xy, by = c("globalid")) # df_xy3035
 
 
 
@@ -841,14 +741,15 @@ summary(m5)
 
 
 # get together montly ips counts and spei: ------------------------------------------
-ips_sum <- ips %>%
-  filter(representativ == 'Ja') %>% 
+ips_sum_month <- dat.ips.clean %>%
+ # filter(representativ == 'Ja') %>% 
   group_by(globalid, year, month, monsto_name ) %>% 
   summarise(ips_sum = sum(fangmenge, na.rm = T))
 
 
 #  Add SPEI, temp, precip, spruce share data --------------------------------------------
-ips_sum2 <- ips_sum %>% 
+# need to check for proper log()!!
+ips_sum2 <- ips_sum_month %>% 
   left_join(df_clim,   by = c("globalid", "year", "month")) %>% 
   left_join(df_conif , by = c("globalid")) %>% 
   left_join(df_spruce, by = c("globalid")) %>% 
@@ -889,9 +790,6 @@ ips_sum2 %>%
   tally()
 
 
-# about 400 records with 0 values, across 180 locations
-# has important impact!!
-# check for NA p none
 
 # What distribution? ---------------------------------------------
   # https://towardsdatascience.com/insurance-risk-pricing-tweedie-approach-1d71207268fc
@@ -1676,29 +1574,4 @@ AIC(m1, m2, m3)
 
 
 
-
-
-# ----------------------------------------------------------------
-# LInk beetle counts data to XY coordinates
-# ----------------------------------------------------------------
-
-head(dat)
-head(xy_clim)
-
-# convert data from long to wide to have variables in columns
-xy_clim2 <- xy_clim %>%
-  dplyr::select(ID, var, value, year, month)# %>% 
-
-
-
-
-# seems challenging, as the climate data are by months?
-unique(xy_clim$time)  # recorded once a month, from April to October (7 months), years: 2015 - 2021 (7 years) ~ 49 records in 
-# need to sum beetle data: sums by months and year! then link them together
-
-ips.sum <- ips %>%
-  group_by(year, month, objectid) %>% 
-  summarise(ips_month_sum = sum(fangmenge)) %>% 
-  filter(year %in% 2015:2021) %>% 
-  filter(month %in% 4:10)
 
