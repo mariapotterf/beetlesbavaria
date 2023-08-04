@@ -121,15 +121,7 @@ dat %>%
   facet_grid(.~art)
 
 
-# Split data between years: , until 2018, > 2018 - drought years, 
-# need to standardize data between years: get mean yearly counts?
-# maybe also standarziye by number of plots??? does number od plot vary over years?
-dat <- dat %>% 
-  mutate(drought_period = case_when(
-    year < 2018 ~  'before',
-    year >= 2018 ~ 'after')) %>% 
-  mutate(drought_period = factor(drought_period,
-                                 levels=c('before', 'after')))
+
 
 
 
@@ -143,7 +135,8 @@ dat %>%
   distinct(globalid) %>% 
   count()
 
-# First, replace all spaces by '_', get trap_pair number 
+# REname globalid trap to merge with sf data ------------------------------------------ 
+# replace all spaces by '_', get trap_pair number 
 dat <- dat %>% 
   mutate(falsto_name2 = gsub(' ', '_', falsto_name)) %>% 
   mutate(trap_pair = as.numeric(str_extract(falsto_name, "[0-9]+"))) # get the trap pair number
@@ -187,7 +180,7 @@ dat %>%
 # Standardize beetle counts/trap/year --------------------------------------------------------------------
 
 
-# how to get the average number of beetles per trap per year?
+# Get average count of beetles per trap: 
 
 # Calculate sum of beetles/year
 # sum of traps/year
@@ -204,9 +197,8 @@ dat %>%
 # 4 Kupferstecher  2016      14506         23
 
 
-# Calculate the mean number of beetles per trap over the season ----------------
-dat_avg <- dat %>% 
-  group_by(art, year, globalid,drought_period ) %>% 
+ips.year.avg <- dat %>% 
+  group_by(art, year, globalid) %>% 
   summarize(sum_beetles = sum(fangmenge, na.rm = T),
             sum_trap    = length(unique(globalid)),
             freq_visit  = length(unique(kont_dat)),
@@ -214,7 +206,7 @@ dat_avg <- dat %>%
 
 
 # check revisit times:
-dat_avg %>% 
+ips.year.avg %>% 
   ungroup() %>% 
   distinct(freq_visit) %>% 
   pull() %>% 
@@ -252,7 +244,7 @@ dat_avg %>%
 
   
 # 12 locations of zero beetles for IPS: -----------------------------------------
-# dat_avg %>% 
+# ips.year.avg %>% 
 #   filter(globalid == "9A355BAA-43CC-4004-BFF8-8A3BEF2C1263") %>% 
 #   filter(art == 'Buchdrucker')
 # 
@@ -273,7 +265,7 @@ dat_avg %>%
 # 
 # 
 # # check distribution and zeros:
-# dat_avg %>% 
+# ips.year.avg %>% 
 #   ggplot(aes(x = avg_beetles_trap)) +
 #   geom_histogram(bins = 1000)
 # 
@@ -295,14 +287,14 @@ dat_avg %>%
 
 # zero count for whole year, with single recording times... seems fishy
 # seems that traps with zeros are consistent...
-zero_catch_id <- dat_avg %>% 
+zero_catch_id <- ips.year.avg %>% 
   filter(sum_beetles == 0 & art == 'Buchdrucker') %>% 
   ungroup(.) %>% 
   dplyr::distinct(globalid) %>% 
   pull()
 
 # low revisit time
-low_visit_id <- dat_avg %>% 
+low_visit_id <- ips.year.avg %>% 
   filter(freq_visit < 10 & art == 'Buchdrucker') %>% 
   ungroup(.) %>% 
   dplyr::distinct(globalid) %>% 
@@ -314,7 +306,7 @@ low_visit_id <- dat_avg %>%
 # between years?
 dev.off()
 
-dat_avg %>%
+ips.year.avg %>%
   ggplot(aes(x = factor(year),
              y = avg_beetles_trap,
              fill = art)) +
@@ -716,7 +708,8 @@ max.diff.doy %>%
 # Save selected dfs in R object: ------------------------------------------------------------
 save(
      df.daily,                   # avg daily beetle counts (adjusted by revisit times), over DOY 
-     dat_avg,                    # avg number per beetles/trap per vegetation season (), over whole year
+     ips.year.avg,                   # sum & avg number per beetles/trap per vegetation season (), over whole year
+     ips.year.sum,
      dat.ips.clean,              # filtered raw IPS counts
      max.diff.doy,               # max increase in beetle counts per DOY
      max.diff.doy.sf,            # sf: max increase in beetle counts per DOY
