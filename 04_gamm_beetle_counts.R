@@ -32,7 +32,6 @@ library('here')
 library('mgcv')
 library('gratia')
 library('gamair')
-library('ggplot2')
 library('purrr')
 library('mvnfast')
 library("tibble")
@@ -397,87 +396,6 @@ dat.ips.clean$globalid <- factor(dat.ips.clean$globalid)
 length(unique(dat.ips.clean$globalid))
 
 
-# Get sums of IPS beetle per year/trap: April 31 to October 30
-ips_sum <- dat.ips.clean %>% 
-  ungroup(.) %>% 
-  group_by(year,falsto_name, globalid) %>% 
-  summarize(sum_beetle = sum(fangmenge, na.rm = T)) %>% 
-  left_join(df_xy, by = c("globalid")) # df_xy3035
-
-
-nrow(ips_sum)
-
-ips_sum_15 <-ips_sum %>% 
-  filter(year == 2015)
-
-
-ips_sum_20 <-ips_sum %>% 
-  filter(year == 2020)
-
-# LISA -----------------------------------------------------------------
-# Local variation analysis (LISA):
-# can be done per year
-library(spdep)
-
-# Get LISA: 
-
-# Create a spatial points data frame
-coordinates(ips_sum_15) <- ~ x + y
-coordinates(ips_sum_20) <- ~ x + y
-
-# Create queen contiguity neighbors object
-nb_15 <- knn2nb(knearneigh(coordinates(ips_sum_15),
-                        k = 1),  # nearest neighbor
-             sym = TRUE)
-nb_20 <- knn2nb(knearneigh(coordinates(ips_sum_20),
-                           k = 1),  # nearest neighbor
-                sym = TRUE)
-
-
-
-lisa_res_15<-localmoran(ips_sum_15$sum_beetle, nb2listw(nb_15))
-lisa_res_20<-localmoran(ips_sum_20$sum_beetle, nb2listw(nb_20))
-
-
-# add Lisa to points:
-ips_sum_15$Morans_I <-lisa_res_15[,1] # get the first column: Ii - local moran  stats
-ips_sum_20$Morans_I <-lisa_res_20[,1] # get the first column: Ii - local moran  stats
-
-summary(lisa_res_15)
-
-# convert to sf object:
-ips_sum_15_sf <- st_as_sf(ips_sum_15)
-ips_sum_20_sf <- st_as_sf(ips_sum_20)
-
-ggplot() +
-  geom_sf(data = ips_sum_15_sf, 
-             aes(#x = x, 
-                 #y = y, 
-                 color = Morans_I)) +
-  scale_color_gradient(low = "white", 
-                       high = "red", 
-                       name = "Moran's I") +
-  theme_void() +
-  ggtitle('LISA: Moran I')
-
-
-
-# Global Moran =================================================================
-
-# get more distant neighbors:
-nb_g_15 <- knn2nb(knearneigh(coordinates(ips_sum_15),
-                           k = 20),  # nearest neighbor
-                sym = TRUE)
-nb_g_20 <- knn2nb(knearneigh(coordinates(ips_sum_20),
-                           k = 20),  # nearest neighbor
-                sym = TRUE)
-
-
-# Calculate the global Moran's I
-global_moran_15 <- moran.test(ips_sum_15$sum_beetle, nb2listw(nb_g_15) )
-global_moran_20 <- moran.test(ips_sum_20$sum_beetle, nb2listw(nb_g_20) )
-
-# !!!
 
 
 
@@ -499,24 +417,28 @@ df_clim_veg <- df_clim %>%
 
 
 # DOY of max increase  --------------------------------------------------------------
-df_predictors <- max.diff.doy %>% 
+v_predictors <- c('year', # if analyse predictors, 'year' needs to be removed! 
+  'temp', 'prec', 
+                  'm_spei1', 
+                  'm_spei3', 'm_spei6', 'm_spei12', 
+                  'elev', 'slope', 'aspect', 'tpi', 'tri', 'roughness')
+
+df_predictors_doy <-
+  max.diff.doy %>% 
   left_join(df_clim_veg, by = c("globalid", "year")) %>% # , "month" 
   left_join(df_conif , by = c("globalid")) %>% 
   #left_join(df_xy, by = c("globalid", 'x', 'y')) %>% # df_xy3035
   left_join(df_topo, by = c("globalid")) %>% #mutate(year = as.factor(as.character(year)))
   ungroup(.) %>% 
   dplyr::select_if(is.numeric) %>% 
-  # dplyr::select(-c(objectid, OBJECTID, trap_pair, 
-  #               period,avg_day_count, 
-  #               species, species_n, OBJECTID ,freq,
-  #               year, month, day)                )
   # keep only predictors for multicollinearity analysis:
-  dplyr::select(c(temp, prec, 
-                  m_spei1, 
-                  m_spei3, m_spei6, m_spei12, 
-                  elev, slope, aspect, tpi, tri, roughness))    
+  dplyr::select(c('doy', 
+                'diff',
+                'cumsum',
+                v_predictors))    
 
-# get correlation coefficient across all predictors:
+# get correlation coefficient across all predictors:------------------------------
+# (to run this, need to remove the y-vars from above: doy, diff, cumsum!)
 # http://www.sthda.com/english/wiki/correlation-matrix-a-quick-start-guide-to-analyze-format-and-visualize-a-correlation-matrix-using-r-software
 preds.res <- cor(df_predictors, use = "complete.obs")
 round(preds.res, 2)  # simplify visualization
@@ -546,11 +468,12 @@ my_data <- mtcars[, c(1,3,4,5,6,7)]
 chart.Correlation(df_predictors, histogram=TRUE, pch=19)
 
 
-ggplot(max.diff.doy2, aes(x = doy,
-                          y = tmp,
+
+# check random scatter plts: what can be my y variable? -----------
+ggplot(df_predictors_doy, aes(x = diff,
+                          y = prec,
                           color = year)) +
-  geom_point() +
-  facet_grid(year~.)
+  geom_point() 
 
 
 
@@ -591,7 +514,7 @@ fitdistr(ips2$sum_beetle, 'Poisson')
 
 
 # poisson: mean and variance are equal
-# negative-binmial - allows for overdispersion (variance excees the mean) - not my case
+# negative-binomial - allows for overdispersion (variance excees the mean) - not my case
 
 glm1 <- glm(sum_beetle ~ temp + prec + elev + temp:as.numeric(year) + m_spei12,
    data = ips2,
