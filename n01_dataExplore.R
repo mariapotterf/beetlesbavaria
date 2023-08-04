@@ -226,6 +226,15 @@ dat_avg %>%
 
 # about 93 records have 0 sum beetles per year (11 ips, 83 pityogenes), ad checked only once per year! 
 # check: ---------------------------------------------------
+
+# Bayerisch Eisenstein C_1 - in 2017
+# dat %>% 
+#   filter(globalid == "3B99DB06-1520-49E0-9707-7C1916CFFFC3" & art == "Buchdrucker") %>% 
+#   View()
+
+
+
+
 # Buchdrucker 2015 {4826784B-6D9B-4CB6-B431-14132184BCB7}
 # dat %>% 
 #   filter(globalid == "4826784B-6D9B-4CB6-B431-14132184BCB7")
@@ -343,6 +352,7 @@ dat %>%
 # - years: 2015-2021
 # - frequent recording: 10 revisit times at least
 # - remove the '3rd' trap
+# - keep only records that have all years and all traps??
 dat.ips.clean <- dat %>% 
   filter(doy %in% veg.period) %>% 
   filter(year > 2014) %>% 
@@ -350,8 +360,8 @@ dat.ips.clean <- dat %>%
   ungroup(.) %>% 
   dplyr::filter(!globalid %in% low_visit_id) %>%  # remove traps with low visit time (nee to check this for year?)
   dplyr::filter(!globalid %in% zero_catch_id) %>% # exclude if zero beetles caught per whole year
-  dplyr::filter(trap_pair  %in% c(1,2))  %>%      # exclude if not trap pair (1-2)
-  filter(representativ == 'Ja') 
+  dplyr::filter(trap_pair  %in% c(1,2))  #%>%      # exclude if not trap pair (1-2)
+  #filter(representativ == 'Ja') 
   
   
 # Get daily counts per trap (averaged by the revisit time)
