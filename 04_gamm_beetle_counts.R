@@ -53,11 +53,12 @@ load("outData/ips.Rdata")
 load("outData/spatial.Rdata")
 
 # Get beetle counts - corrected, instead of previous 'dat'
-dat.ips.clean      # dat <- fread(paste(myPath, outFolder, "dat.csv", sep = "/"))
-max.diff.doy       # get DOY of max increase
+# - dat.ips.clean      # dat <- fread(paste(myPath, outFolder, "dat.csv", sep = "/"))
+# - max.diff.doy       # get DOY of max increase
+# - ips.year           # sum beetles/year, avg/betles/year per trap
  
 # Spatial data: 
-xy_sf  # XY as sf data
+# - xy_sf  # XY as sf data
 
 
 
@@ -109,18 +110,12 @@ df_xy3035 <- data.frame(x = geom(xy)[,'x'],
 # Do neighboring traps correlate in beetle numbers? --------------------------
 head(dat.ips.clean)
 
-dat2 <- 
-  dat.ips.clean %>% 
-  separate( falsto_name, c('loc', 'trap_n'), sep = ' ')
-  #separate(falsto_name, c("loc", 'trap_n'))
-
 
 unique(dat.ips.clean$trap_n)
 # 1 2 3 
 
 # check for traps: 1, 2,3, - if there is NA, maybe replaed by other trap?
 dat.ips.clean %>% 
- # select(monsto_name, year, art, fangmenge) %>% 
   filter(monsto_name == 'Berg' & year == 2015 & month == 4 & art == 'Buchdrucker' )
 #2015     4 Berg               28    NA    - no, simply missing count of beetles
 
@@ -144,7 +139,7 @@ dd_ips <- dd %>%
   filter(art == 'Buchdrucker')# %>% 
 
 # aggeraget by months instead of teh DOY:
-dd_ips_sum <- 
+ips_sum_months <- 
   dd_ips %>% 
   group_by(year, month, monsto_name) %>% 
   summarise(trap1 = sum(fangmenge.x),
@@ -156,14 +151,14 @@ dd_ips_sum <-
 # tau autokoralacia - korelacia v case
 
 
-ggplot(dd_ips_sum, aes(x = trap1, 
+ggplot(ips_sum_months, aes(x = trap1, 
                        y = trap2)) +
   geom_point()+
   geom_smooth(method = 'gam')
   
 
 m_gam <- gam(trap2~s(trap1), 
-          data = dd_ips_sum, 
+          data = ips_sum_months, 
           family = poisson, 
           na.action = na.omit)
 
@@ -172,7 +167,7 @@ plot(m_gam)
 
 
 m2 <- lm(trap1~I(trap2^2), 
-          data = dd_ips_sum, 
+          data = ips_sum_months, 
          # family = poisson, 
           na.action = na.omit)
 
@@ -181,12 +176,13 @@ plot(m2)
 
 
 
-cor(dd_ips_sum$trap1,dd_ips_sum$trap2) # COR: 0.76
+cor(ips_sum_months$trap1,ips_sum_months$trap2) # COR: 0.755
 #aov(m1)
 
 plot(m2, all = T)  # shows the residuals
 
-plot(x = dd_ips_sum$trap1, y= dd_ips_sum$trap2, 
+
+plot(x = ips_sum_months$trap1, y= ips_sum_months$trap2, 
      main = "Main title", 
      xlab = "X axis title", ylab = "Y axis title",
      pch = 19, frame = FALSE)
@@ -234,7 +230,7 @@ df_spei <- df_spei %>%
          year = as.numeric(year)) %>%
   filter(year > 2013)
 
-# check scales
+# check scales -----------------------------------------------------------------
 unique(df_spei$scale)
 spei_scale = 12  # visually tested all '1,3,6,12', and the most contrasting is spei12:
 # very low 2016, and 2014-2015m 2017-2018
@@ -267,7 +263,7 @@ df_spei_avg_sf <- xy_sf %>%
 
 
 # map: SPEI:lower number = dryer conditions 
-ggplot(bav_sf) +
+p_spei12_bav <- ggplot(bav_sf) +
   geom_sf(color = 'black', 
           fill  = 'grey93') + 
   geom_sf(data = df_spei_avg_sf,
@@ -323,7 +319,7 @@ df_spei <- df_spei %>%
 
 
 # convert spei long to wide format, to keep scale values as columns 
-df_spei2 <- df_spei %>% 
+df_spei_all <- df_spei %>% 
   pivot_wider(!spei_cat, 
               names_from =  scale, 
               values_from = Series.1, 
@@ -336,6 +332,7 @@ df_spei2 <- df_spei %>%
 library(RColorBrewer)
 display.brewer.pal(7, "BrBG")
 
+# This SPEI has all 12 months!!!
 df_spei %>% 
   group_by(year, spei_cat) %>% 
   tally() %>% 
@@ -354,7 +351,7 @@ df_spei %>%
 # join PREC, TEMP, SPEI data --------------------------------------------------
 df_clim <- df_prec %>% 
   full_join(df_temp,  by = c("globalid", "month", "year")) %>% 
-  full_join(df_spei2, by = c("globalid", "month", "year")) #%>% 
+  full_join(df_spei_all, by = c("globalid", "month", "year")) #%>% 
 
 
 
@@ -417,9 +414,7 @@ ips_sum_15 <-ips_sum %>%
 ips_sum_20 <-ips_sum %>% 
   filter(year == 2020)
 
-# -----------------------------------------------------------------
-
-
+# LISA -----------------------------------------------------------------
 # Local variation analysis (LISA):
 # can be done per year
 library(spdep)
@@ -448,13 +443,14 @@ lisa_res_20<-localmoran(ips_sum_20$sum_beetle, nb2listw(nb_20))
 ips_sum_15$Morans_I <-lisa_res_15[,1] # get the first column: Ii - local moran  stats
 ips_sum_20$Morans_I <-lisa_res_20[,1] # get the first column: Ii - local moran  stats
 
+summary(lisa_res_15)
 
 # convert to sf object:
 ips_sum_15_sf <- st_as_sf(ips_sum_15)
 ips_sum_20_sf <- st_as_sf(ips_sum_20)
 
 ggplot() +
-  geom_sf(data = ips_sum_20_sf, 
+  geom_sf(data = ips_sum_15_sf, 
              aes(#x = x, 
                  #y = y, 
                  color = Morans_I)) +
@@ -462,11 +458,11 @@ ggplot() +
                        high = "red", 
                        name = "Moran's I") +
   theme_void() +
-  ggtitle('Moran I 2020')
+  ggtitle('LISA: Moran I')
 
 
 
-# Global Moran
+# Global Moran =================================================================
 
 # get more distant neighbors:
 nb_g_15 <- knn2nb(knearneigh(coordinates(ips_sum_15),
@@ -484,8 +480,9 @@ global_moran_20 <- moran.test(ips_sum_20$sum_beetle, nb2listw(nb_g_20) )
 # !!!
 
 
-# Simpler lm: with counts:
-# get countsper year
+
+# Summarize climate per year ----------------------------------------------
+
 # avg temp, spei, PRCP :april 31 - oct 30 
 df_clim_veg <- df_clim %>% 
   filter(year > 2014 & year < 2022  ) %>% 
@@ -498,6 +495,64 @@ df_clim_veg <- df_clim %>%
             m_spei6 = mean(spei6, na.rm = T),
             m_spei12 = mean(spei12, na.rm = T)
             )
+
+
+
+# DOY of max increase  --------------------------------------------------------------
+df_predictors <- max.diff.doy %>% 
+  left_join(df_clim_veg, by = c("globalid", "year")) %>% # , "month" 
+  left_join(df_conif , by = c("globalid")) %>% 
+  #left_join(df_xy, by = c("globalid", 'x', 'y')) %>% # df_xy3035
+  left_join(df_topo, by = c("globalid")) %>% #mutate(year = as.factor(as.character(year)))
+  ungroup(.) %>% 
+  dplyr::select_if(is.numeric) %>% 
+  # dplyr::select(-c(objectid, OBJECTID, trap_pair, 
+  #               period,avg_day_count, 
+  #               species, species_n, OBJECTID ,freq,
+  #               year, month, day)                )
+  # keep only predictors for multicollinearity analysis:
+  dplyr::select(c(temp, prec, 
+                  m_spei1, 
+                  m_spei3, m_spei6, m_spei12, 
+                  elev, slope, aspect, tpi, tri, roughness))    
+
+# get correlation coefficient across all predictors:
+# http://www.sthda.com/english/wiki/correlation-matrix-a-quick-start-guide-to-analyze-format-and-visualize-a-correlation-matrix-using-r-software
+preds.res <- cor(df_predictors, use = "complete.obs")
+round(preds.res, 2)  # simplify visualization
+
+# p-values are missing: get them from different package:
+library("Hmisc")
+res2 <- Hmisc::rcorr(as.matrix(df_predictors))
+res2
+
+
+library(corrplot)
+
+# Insignificant correlation are crossed
+corrplot(res2$r, type="upper", order="hclust", 
+         p.mat = res2$P, sig.level = 0.01, insig = "blank")
+# Insignificant correlations are leaved blank
+corrplot(res2$r, type="upper", order="hclust", 
+         p.mat = res2$P, sig.level = 0.01, insig = "blank")
+
+
+
+# Check for scatter plots between precistors:
+install.packages("PerformanceAnalytics")
+
+library("PerformanceAnalytics")
+my_data <- mtcars[, c(1,3,4,5,6,7)]
+chart.Correlation(df_predictors, histogram=TRUE, pch=19)
+
+
+ggplot(max.diff.doy2, aes(x = doy,
+                          y = tmp,
+                          color = year)) +
+  geom_point() +
+  facet_grid(year~.)
+
+
 
 
 # model raw counts??? !!! -----------------------------------
@@ -513,7 +568,8 @@ write.csv(ips2, 'C:/Users/ge45lep/Documents/2022_BarkBeetles_Bavaria/outTable/ip
 # ChatGPT: 
 # To test if the importance of drivers explaining variability changed over time: 
 # perform temporal interaction analysis - 
-# allows to assess whether the relationships between the drivers and the response variable differ across different time periods. 
+# allows to assess whether the relationships between the drivers 
+# and the response variable differ across different time periods. 
 
 # check hist of conts
 hist(ips2$sum_beetle)
