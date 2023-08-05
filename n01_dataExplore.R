@@ -159,6 +159,21 @@ dat %>%
   View()
 
 # how to handle if one trap  has several globalids? - just select the first in the row to calculate the LISA
+# check several globalids
+dat %>% 
+  filter(art == "Buchdrucker") %>% 
+  group_by(art, falsto_name) %>% 
+  distinct(globalid) %>%
+  summarize(globalid_count = n()) %>% 
+  arrange(-globalid_count) %>% 
+  View()
+
+# 132 traps from 302 have changed location 2-4 times over 2015-2021
+dat %>% 
+  filter(falsto_name == "Falkenstein_1") %>% #   'Aldersbach_1') %>% Falkenstein_1 has trap 4x changed
+  filter(art == "Buchdrucker") %>% 
+  group_by(art, falsto_name, year) %>% 
+  distinct(globalid) #%>%
   
 # trap_pair == 3 I an exclude, there is only one trap added per year
 
@@ -206,9 +221,10 @@ dat %>%
 
 
 ips.year.avg <- dat %>% 
-  group_by(art, year, globalid) %>% 
+  filter(year > 2014) %>% 
+  group_by(art, year, falsto_name   ) %>% 
   summarize(sum_beetles = sum(fangmenge, na.rm = T),
-            sum_trap    = length(unique(globalid)),
+            sum_trap    = length(unique(falsto_name   )),
             freq_visit  = length(unique(kont_dat)),
             avg_beetles_trap = sum_beetles/freq_visit) #%>%
 
@@ -216,40 +232,25 @@ ips.year.avg <- dat %>%
 # check revisit times:
 ips.year.avg %>% 
   ungroup() %>% 
-  distinct(freq_visit) %>% 
+  distinct(freq_visit) %>%
+  View()
   pull() %>% 
   hist()
 
 # 6 recrding months: need at least 12 recordings!! or 10..
 # 
 
+  # Check for 0 beetles:
+  
+  #  # need to check! "Brunnthal_1"   "Weißenstadt_1" "Weißenstadt_2" "Holzgünz_2"  
+  ips.year.avg %>% 
+    filter(falsto_name == "Holzgünz_2") %>% 
+    View()
 
-# about 93 records have 0 sum beetles per year (11 ips, 83 pityogenes), ad checked only once per year! 
-# check: ---------------------------------------------------
-
-# Bayerisch Eisenstein C_1 - in 2017
-# dat %>% 
-#   filter(globalid == "3B99DB06-1520-49E0-9707-7C1916CFFFC3" & art == "Buchdrucker") %>% 
-#   View()
-
-
-
-
-# Buchdrucker 2015 {4826784B-6D9B-4CB6-B431-14132184BCB7}
-# dat %>% 
-#   filter(globalid == "4826784B-6D9B-4CB6-B431-14132184BCB7")
-# 
-# # or have 0 sum beetles, but checked 22 times!! per season! (Pityogenes)
-# #Kupferstecher 2016 {9FD90E97-9C4E-478F-9A89-724C74C95FDC}
-# dat %>% 
-#   filter(globalid == "9FD90E97-9C4E-478F-9A89-724C74C95FDC" & year == 2016 
-#          #& art == "Kupferstecher"
-#          ) %>% 
-#   arrange(kont_dat)
-# 
-
-# get unique site numbers: one globalid can have two traps: one for Ips, one for Pityogenes;
-
+  dat %>% 
+    filter(falsto_name == "Brunnthal_1") %>% 
+    filter(year == 2016:2017) %>% 
+    View()
   
 # 12 locations of zero beetles for IPS: -----------------------------------------
 # ips.year.avg %>% 
@@ -295,17 +296,21 @@ ips.year.avg %>%
 
 # zero count for whole year, with single recording times... seems fishy
 # seems that traps with zeros are consistent...
+  # 08/05/2023 -> exclude zeros, but adrees this later
 zero_catch_id <- ips.year.avg %>% 
   filter(sum_beetles == 0 & art == 'Buchdrucker') %>% 
   ungroup(.) %>% 
-  dplyr::distinct(globalid) %>% 
+  dplyr::distinct(falsto_name) %>% 
   pull()
+  
+ 
 
 # low revisit time
-low_visit_id <- ips.year.avg %>% 
-  filter(freq_visit < 10 & art == 'Buchdrucker') %>% 
+low_visit_id <- 
+  ips.year.avg %>% 
+  filter(freq_visit < 5 & art == 'Buchdrucker') %>% 
   ungroup(.) %>% 
-  dplyr::distinct(globalid) %>% 
+  dplyr::distinct(falsto_name) %>% 
   pull()
 
 
@@ -354,17 +359,19 @@ dat %>%
 # - remove the '3rd' trap
 # - keep only records that have all years and all traps??
 
-
-
-
 dat.ips.clean <- dat %>% 
   filter(doy %in% veg.period) %>% 
   filter(year > 2014) %>% 
   filter(art == 'Buchdrucker') %>%
   ungroup(.) %>% 
-  dplyr::filter(!globalid %in% low_visit_id) %>%  # remove traps with low visit time (nee to check this for year?)
-  dplyr::filter(!globalid %in% zero_catch_id) %>% # exclude if zero beetles caught per whole year
-  dplyr::filter(trap_pair  %in% c(1,2))  #%>%      # exclude if not trap pair (1-2)
+  dplyr::filter(!falsto_name %in% low_visit_id) %>%  # remove traps with low visit time (nee to check this for year?)
+  dplyr::filter(!falsto_name %in% zero_catch_id) #%>% # exclude if zero beetles caught per whole year
+ 
+# filter only for traps that have both 1&2: https://stackoverflow.com/questions/61060750/r-better-way-to-filter-by-group-and-vector-of-values
+dat.ips.clean <- dat.ips.clean %>% 
+  group_by(monsto_name) %>%      # filter by region
+  slice(which(all(c(1,2) %in% trap_pair) & trap_pair %in% c(1,2)))
+  #dplyr::filter(trap_pair  %in% c(1,2))  %>%      # every trap needs to have both 1&2 traps 
   #filter(representativ == 'Ja') 
 
 
@@ -379,7 +386,7 @@ dat2 %>%
   distinct(falsto_name) %>% 
   count() #%>% 
 
-# if keeping only traps that are cpontinously monitored over time = only 67*2 traps
+# if keeping only traps that are cpontinously monitored over time = only 78*2 traps
 
 
   
