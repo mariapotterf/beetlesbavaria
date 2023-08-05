@@ -106,6 +106,7 @@ get_lisa <- function(i, ...) {
   #
   # add LISA to points:
   ips_sum_sub$Morans_I <-lisa_res[,1] # get the first column: Ii - local moran  stats
+  ips_sum_sub$clust <-attributes(lisa_res)$quadr$mean  # get classified data
   #
   # convert to sf for plotting
   ips_sum_sub_sf <- st_as_sf(ips_sum_sub)
@@ -119,17 +120,19 @@ lisa_out <- lapply(years, get_lisa )
 # Merge all in one sf
 lisa_merged <- dplyr::bind_rows(lisa_out)
 
+
+#st_crs(lisa_merged) <- crs(bav_sf)
+#lisa_merged_proj <- st_crs(crs(bav_sf))
+#  st_transform(lisa_merged, projection(bav_sf))
 # Create map fr each one of them and save as saparate object
 
 
 ggplot() +
-  geom_sf(data = lisa_merged, 
-          aes(#x = x, 
-            #y = y, 
-            color = Morans_I)) +
-  scale_color_gradient(low = "white", 
-                       high = "red", 
-                       name = "Moran's I") +
+  geom_sf(data = filter(lisa_merged, 
+                        clust %in% c("Low-Low", "High-High")),
+          aes(color = clust)) +
+  scale_color_manual(breaks = c("Low-Low", "High-Low", "Low-High", "High-High"),
+                     values=c("blue", "grey90", "grey90", 'red')) +
   facet_wrap(year~.) +
   theme_void() +
   ggtitle('LISA: Moran I')
@@ -189,16 +192,32 @@ ips_sum_20_sf <- st_as_sf(ips_sum_20)
 
 
 
+# get classifiued values
+ips_sum_15$cl_mean <-attributes(lisa_res_15)$quadr$mean
+ips_sum_15_sf <- st_as_sf(ips_sum_15)
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 ggplot() +
   geom_sf(data = ips_sum_15_sf, 
           aes(#x = x, 
             #y = y, 
-            color = Morans_I)) +
-  scale_color_gradient(low = "white", 
-                       high = "red", 
-                       name = "Moran's I") +
+            color = cl_mean)) +
+ # scale_color_gradient(low = "white", 
+#                       high = "red", 
+#                       name = "Moran's I") +
   theme_void() +
   ggtitle('LISA: Moran I')
 
