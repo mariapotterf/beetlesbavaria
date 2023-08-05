@@ -138,9 +138,23 @@ ggplot() +
   ggtitle('LISA: Moran I')
 
 
+# convert to df 
+lisa_merged_df <- as.data.frame(lisa_merged)
 
 
+#lisa_merged_df_all <- 
+  lisa_merged_df %>%
+  group_by(clust, year) %>% 
+    summarize(freq = n()) %>%
+    ggplot(aes(x = year,
+               y = freq,
+               fill = clust)) +
+    geom_col()
+    
 
+
+# 
+  
 
 
 
