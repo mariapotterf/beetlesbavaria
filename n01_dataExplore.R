@@ -1,10 +1,19 @@
 
-# here are my git changes in Home dir
-
 
 # -----------------------------------
 # Explore bark beetle data
 # -----------------------------------
+
+# Notes from data exploratory:
+
+# Individual trap = indicated by falsto_name = region_name + trap 2
+# - some traps have A,. B, and C! - do tehy have pairs?
+# - globalid - trap position, one trap can have several globalids if moved
+# trap_n = 3 exlude! 
+
+
+
+
 rm(list=ls()) 
 
 
@@ -32,6 +41,7 @@ out_path = 'C:/Users/ge45lep/Documents/2022_BarkBeetles_Bavaria'
 
 # Load RData table
 load(paste(path, 'BoMo_2015_2021_Rohdaten.RData', sep = "/"))
+
 
 
 # Vars
@@ -81,12 +91,12 @@ dat <- Daten_B01
 # what year?
 unique(dat$kont_dat)
 
-str(dat)  # datum is in POSIXct format, ut does not contain time: can convert just to date
+#str(dat)  # datum is in POSIXct format, ut does not contain time: can convert just to date
 
 # convert to date
 dat$kont_dat <- as.Date(dat$kont_dat)
 
-str(dat)
+#str(dat)
 
 # Species:
 # -----------------------------------
@@ -107,51 +117,49 @@ dat <- dat %>%
 nrow(dat) # >73.000 rows
 
 
-# Some basic plotting
-dat %>% 
-  group_by(art, year) %>% 
-  summarise(my_mean = mean(fangmenge, na.rm = T)) %>% 
-  ggplot(aes(x = year,
-             y = my_mean,
-             fill = art,
-             group = year)) +
-  geom_point() +
-  geom_line() +
- # ylim(0, 250000) +
-  facet_grid(.~art)
+# # Some basic plotting
+# dat %>% 
+#   group_by(art, year) %>% 
+#   summarise(my_mean = mean(fangmenge, na.rm = T)) %>% 
+#   ggplot(aes(x = year,
+#              y = my_mean,
+#              fill = art,
+#              group = year)) +
+#   geom_point() +
+#   geom_line() +
+#  # ylim(0, 250000) +
+#   facet_grid(.~art)
 
 
-
-
-
-
-
-# How may traps in total?  
-length(unique(dat$globalid)) # 490 traps
+# How may traps in total? falsto_name = unique trap name  
+length(unique(dat$falsto_name)) # 302 traps
 
 # how many traps per year?
 dat %>% 
-  group_by(art, year) %>% 
-  distinct(globalid) %>% 
+  filter(art == 'Buchdrucker') %>% 
+  group_by(trap_n, year) %>% 
+  distinct(falsto_name) %>% 
   count()
 
-# REname globalid trap to merge with sf data ------------------------------------------ 
+# REname falsto_name trap to merge with sf data ------------------------------------------ 
 # replace all spaces by '_', get trap_pair number 
 dat <- dat %>% 
   mutate(falsto_name2 = gsub(' ', '_', falsto_name)) %>% 
   mutate(trap_pair = as.numeric(str_extract(falsto_name, "[0-9]+"))) # get the trap pair number
 
-# remove the parantheses
+# remove the parantheses from globalid to merge with coordinates
 dat <- dat %>% 
   mutate(globalid =  gsub("\\{|\\}", "", globalid))  
 
 # how many traps per year, per pair trap?
 dat %>% 
   group_by(art, year, trap_pair) %>% 
-  distinct(globalid) %>% 
-  count() #%>% 
-  #View()
+  distinct(falsto_name, globalid) %>% 
+  count() %>% 
+  View()
 
+# how to handle if one trap  has several globalids? - just select the first in the row to calculate the LISA
+  
 # trap_pair == 3 I an exclude, there is only one trap added per year
 
 
@@ -345,6 +353,10 @@ dat %>%
 # - frequent recording: 10 revisit times at least
 # - remove the '3rd' trap
 # - keep only records that have all years and all traps??
+
+
+
+
 dat.ips.clean <- dat %>% 
   filter(doy %in% veg.period) %>% 
   filter(year > 2014) %>% 
@@ -354,7 +366,22 @@ dat.ips.clean <- dat %>%
   dplyr::filter(!globalid %in% zero_catch_id) %>% # exclude if zero beetles caught per whole year
   dplyr::filter(trap_pair  %in% c(1,2))  #%>%      # exclude if not trap pair (1-2)
   #filter(representativ == 'Ja') 
-  
+
+
+# filter only traps that have records over all years
+dat2 <- dat.ips.clean %>% 
+  # group_by(years, loc) %>% 
+  group_by(falsto_name) %>%
+  dplyr::filter(n_distinct(year) == n_distinct(dat.ips.clean$year))
+
+dat2 %>% 
+  group_by(year, trap_pair) %>% 
+  distinct(falsto_name) %>% 
+  count() #%>% 
+
+# if keeping only traps that are cpontinously monitored over time = only 67*2 traps
+
+
   
 # Get daily counts per trap (averaged by the revisit time)
 df.daily <-  
