@@ -370,18 +370,15 @@ dat.ips.clean <- dat %>%
 # filter only for traps that have both 1&2: https://stackoverflow.com/questions/61060750/r-better-way-to-filter-by-group-and-vector-of-values
 dat.ips.clean <- dat.ips.clean %>% 
   group_by(monsto_name) %>%      # filter by region
-  slice(which(all(c(1,2) %in% trap_pair) & trap_pair %in% c(1,2)))
-  #dplyr::filter(trap_pair  %in% c(1,2))  %>%      # every trap needs to have both 1&2 traps 
-  #filter(representativ == 'Ja') 
+  slice(which(all(c(1,2) %in% trap_pair) & trap_pair %in% c(1,2)))   # every trap needs to have both 1&2 traps 
 
 
 # filter only traps that have records over all years
-dat2 <- dat.ips.clean %>% 
-  # group_by(years, loc) %>% 
+dat.ips.clean <- dat.ips.clean %>% 
   group_by(falsto_name) %>%
   dplyr::filter(n_distinct(year) == n_distinct(dat.ips.clean$year))
 
-dat2 %>% 
+dat.ips.clean %>% 
   group_by(year, trap_pair) %>% 
   distinct(falsto_name) %>% 
   count() #%>% 
@@ -428,13 +425,13 @@ p_count_diff <- df.daily %>%
 
 
 
+# get vector of trap names:
+trap_names <- unique(dat.ips.clean$falsto_name)
+
 windows()
 hist(df.daily$avg_day_count)
 
 # convert data for counts on 1 and counts on 2: ---------------------
-# are 1 and 3 consistently indicating different groups? or is it 2-3, or 1-3?
-# 3 is removed (since 08/01/2023)
-# quick overview: subset only data that have coorrect 1/2:
 df1 <-dat.ips.clean %>% 
   filter(trap_pair == 1 ) %>% 
   dplyr::select(monsto_name, year, month, doy, fangmenge, art)
@@ -479,23 +476,33 @@ plot(m_gam, 1)
 
 # Make a use of gpkg in R: https://inbo.github.io/tutorials/tutorials/spatial_standards_vector/
 # Write the output XY files in 3035 coordinate
-xy_sf %>% 
+
+# filter XY for unique falso_name  - one falsto_name per globalid, keep just one row
+xy_sf_filt <- xy_sf %>% 
+  filter(falsto_name %in% trap_names) %>% 
+  group_by(falsto_name) %>% 
+  slice(1)   # keep only 1 globalid per group
+
+xy_sf %>%  
  st_write(paste(out_path, "outSpatial/xy_3035.gpkg", sep = '/'), append=FALSE)
 
+xy_sf_filt %>%  
+  st_write(paste(out_path, "outSpatial/xy_filt_3035.gpkg", sep = '/'), append=FALSE)
+
 # export RAW data
-data.table::fwrite(dat, paste(out_path, 'outSpatial/dat.csv', sep = "/"))
+# data.table::fwrite(dat, paste(out_path, 'outSpatial/dat.csv', sep = "/"))
 
 
 
 # get the summary IPS data to merge with XY coordinates!  
 ips.year.sum <-   dat.ips.clean %>%     
-  group_by(year, art, globalid) %>% 
+  group_by(year, art, falsto_name) %>% 
   mutate(bav_sum = sum(fangmenge, na.rm =T)) %>%  
-  dplyr::select(bav_sum, globalid, year) #%>% 
+  dplyr::select(bav_sum, globalid, year, falsto_name) #%>% 
 
 
 # Merge spatial data with sum data by globalid
-ips.year.sum_sf <- xy_sf %>% 
+ips.year.sum_sf <- xy_sf_filt %>% 
   right_join(ips.year.sum, 'globalid')
 
 
@@ -537,7 +544,7 @@ max.diff.doy <- df.daily %>%
   group_by(globalid, year, falsto_name2) %>% 
   slice(which.max(diff))
 
-max.diff.doy.sf <- xy_sf %>%   # to keep the sf structure, need to add df to sf
+max.diff.doy.sf <- xy_sf_filt %>%   # to keep the sf structure, need to add df to sf
   right_join(max.diff.doy, 'globalid')
 
 
@@ -545,11 +552,11 @@ max.diff.doy.sf <- xy_sf %>%   # to keep the sf structure, need to add df to sf
 max.diff.doy %>% 
   as.data.frame() %>% 
   group_by(year) %>% 
-  summarise(min = min(doy),
-            max = max(doy),
-            mean = mean(doy),
-            sd = sd(doy),
-            cv = sd/mean,
+  summarise(min    = min(doy),
+            max    = max(doy),
+            mean   = mean(doy),
+            sd     = sd(doy),
+            cv     = sd/mean,
             median = median(doy))
 
 
@@ -703,7 +710,7 @@ grid()
 # CV for daily counts data ---------------------------------------------------------------
 # for whole data, not just the max increase
 df.daily %>%
-  group_by(year, globalid, art) %>% 
+  group_by(year, falsto_name, art) %>% 
   summarize(mean = mean(avg_day_count),
             sd  = sd(avg_day_count),
             cv  = sd/mean) %>%  # can be turned to % by '*100'
@@ -755,7 +762,7 @@ save(
 
 
 # Spatial data for maps:
-save(xy_sf,                      # trap location (one Globalid is ised for both IPS & Chalcographus!)
+save(xy_sf_filt,                      # trap location (one Globalid is ised for both IPS & Chalcographus!)
      de_sf,                      # germany shp
      bav_sf,                     # bavaria shp
      file="outData/spatial.Rdata") 
