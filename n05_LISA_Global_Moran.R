@@ -61,24 +61,39 @@ load("outData/spatial.Rdata")
 # Get beetle counts - corrected, instead of previous 'dat'
 # - dat.ips.clean      # dat <- fread(paste(myPath, outFolder, "dat.csv", sep = "/"))
 # - max.diff.doy       # get DOY of max increase
-# - ips.year           # sum beetles/year, avg/betles/year per trap
+# - ips.year.sum       # sum beetles/year per trap
 
 # Spatial data: 
-# - xy_sf  # XY as sf data
-xy_terra <- vect(xy_sf)
+
+
+# som trap names are missisng: check 'sf_all': 
+sort(unique(xy_sf_all$falsto_name))
+
+
+# - xy_sf_fin  # XY as sf data
+#xy_terra <- vect(xy_sf_fin)
+
+# get coordinates from sf object
+x <- sf::st_coordinates(xy_sf_fin)[,"X"]
+z <- sf::st_coordinates(xy_sf_fin)[,"Y"]
+
+
+xy_df <- data.frame(x = sf::st_coordinates(xy_sf_fin)[,"X"],
+                    y = sf::st_coordinates(xy_sf_fin)[,"Y"],
+                    falsto_name = xy_sf_fin$falsto_name)
 
 # rename the coordinates into xy
-xy_df <- data.frame(x = geom(xy_terra)[,'x'],
-                        y = geom(xy_terra)[,'y'],
-                        globalid = xy_terra$globalid)
-
+#xy_df <- data.frame(x = geom(xy_terra)[,'x'],
+#                    y = geom(xy_terra)[,'y'],
+#                    falsto_name = xy_terra$falsto_name)
 
 # Get sums of IPS beetle per year/trap: April 31 to October 30
+# !!!! OProblem with unique falsto_name!!! incorrect character reading!
 ips_sum <- 
   dat.ips.clean %>% 
-  group_by(year,falsto_name, globalid) %>% 
+  group_by(year,falsto_name) %>% 
   dplyr::summarize(sum_beetle = sum(fangmenge, na.rm = T)) %>% 
-  left_join(xy_df, by = c("globalid")) # df_xy3035
+  left_join(xy_df, by = c("falsto_name")) # df_xy3035
 
 
 nrow(ips_sum)
@@ -145,7 +160,7 @@ lisa_merged_df <- as.data.frame(lisa_merged)
 #lisa_merged_df_all <- 
   lisa_merged_df %>%
   group_by(clust, year) %>% 
-    summarize(freq = n()) %>%
+    dplyr::summarize(freq = n()) %>%
     ggplot(aes(x = year,
                y = freq,
                fill = clust)) +
