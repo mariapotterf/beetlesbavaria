@@ -68,6 +68,7 @@ xy_sf <- st_as_sf(xy, coords = c('x_coord', 'y_coord' ),
                   crs = 32632 )  # What is a coordinate system??? for forestry in bavaria?
 
 plot(xy_sf["OBJECTID"])
+#st_distance(xy_sf, by_element = TRUE)
 
 # Change projection to common european one: 3035
 xy_sf <- st_transform(xy_sf, crs = 3035)
@@ -75,9 +76,10 @@ xy_sf <- st_transform(xy_sf, crs = 3035)
 # Get the letters to upper cases - to merge with beetle counts
 xy_sf <-
   xy_sf %>% 
-  mutate(globalid = toupper(globalid))
+  mutate(globalid = toupper(globalid),
+         falsto_name = gsub(' ', '_', falsto_name)) 
 
-
+unique(xy_sf$falsto_name)
 
 # Get beetle count data -------------------------------------------------------------- 
 
@@ -85,11 +87,10 @@ xy_sf <-
 # for dat
 dat <- Daten_B01
 
+length(unique(dat$falsto_name)) # 302 regions
 
 # "Buchdrucker"   "Kupferstecher"
 
-# what year?
-unique(dat$kont_dat)
 
 #str(dat)  # datum is in POSIXct format, ut does not contain time: can convert just to date
 
@@ -134,46 +135,36 @@ nrow(dat) # >73.000 rows
 # How may traps in total? falsto_name = unique trap name  
 length(unique(dat$falsto_name)) # 302 traps
 
-# how many traps per year?
-dat %>% 
-  filter(art == 'Buchdrucker') %>% 
-  group_by(trap_n, year) %>% 
-  distinct(falsto_name) %>% 
-  count()
 
 # REname falsto_name trap to merge with sf data ------------------------------------------ 
 # replace all spaces by '_', get trap_pair number 
 dat <- dat %>% 
-  mutate(falsto_name2 = gsub(' ', '_', falsto_name)) %>% 
+  mutate(falsto_name = gsub(' ', '_', falsto_name)) %>% 
   mutate(trap_pair = as.numeric(str_extract(falsto_name, "[0-9]+"))) # get the trap pair number
 
 # remove the parantheses from globalid to merge with coordinates
 dat <- dat %>% 
   mutate(globalid =  gsub("\\{|\\}", "", globalid))  
 
-# how many traps per year, per pair trap?
-dat %>% 
-  group_by(art, year, trap_pair) %>% 
-  distinct(falsto_name, globalid) %>% 
-  count() %>% 
-  View()
 
 # how to handle if one trap  has several globalids? - just select the first in the row to calculate the LISA
 # check several globalids
+# !!!!
 dat %>% 
   filter(art == "Buchdrucker") %>% 
-  group_by(art, falsto_name) %>% 
+  group_by(falsto_name) %>% 
   distinct(globalid) %>%
-  summarize(globalid_count = n()) %>% 
-  arrange(-globalid_count) %>% 
-  View()
+  dplyr::summarize(globalid_count = n()) %>%
+  filter(globalid_count> 1)
+  #arrange(-globalid_count) 
 
-# 132 traps from 302 have changed location 2-4 times over 2015-2021
+# 136 traps from 302 have changed location 2-4 times over 2015-2021
 dat %>% 
   filter(falsto_name == "Falkenstein_1") %>% #   'Aldersbach_1') %>% Falkenstein_1 has trap 4x changed
   filter(art == "Buchdrucker") %>% 
   group_by(art, falsto_name, year) %>% 
-  distinct(globalid) #%>%
+  distinct(globalid) %>%
+  arrange(year)
   
 # trap_pair == 3 I an exclude, there is only one trap added per year
 
@@ -220,20 +211,20 @@ dat %>%
 # 4 Kupferstecher  2016      14506         23
 
 
-ips.year.avg <- dat %>% 
+ips.year.avg <- 
+  dat %>% 
   filter(year > 2014) %>% 
-  group_by(art, year, falsto_name   ) %>% 
-  summarize(sum_beetles = sum(fangmenge, na.rm = T),
-            sum_trap    = length(unique(falsto_name   )),
+  group_by(art, year, falsto_name ) %>% 
+  dplyr::summarize(sum_beetles = sum(fangmenge, na.rm = T),
             freq_visit  = length(unique(kont_dat)),
             avg_beetles_trap = sum_beetles/freq_visit) #%>%
+
 
 
 # check revisit times:
 ips.year.avg %>% 
   ungroup() %>% 
   distinct(freq_visit) %>%
-  View()
   pull() %>% 
   hist()
 
@@ -244,13 +235,11 @@ ips.year.avg %>%
   
   #  # need to check! "Brunnthal_1"   "Weißenstadt_1" "Weißenstadt_2" "Holzgünz_2"  
   ips.year.avg %>% 
-    filter(falsto_name == "Holzgünz_2") %>% 
-    View()
+    filter(falsto_name == "Holzgünz_2") 
 
   dat %>% 
     filter(falsto_name == "Brunnthal_1") %>% 
-    filter(year == 2016:2017) %>% 
-    View()
+    filter(year == 2016:2017) 
   
 # 12 locations of zero beetles for IPS: -----------------------------------------
 # ips.year.avg %>% 
@@ -302,6 +291,8 @@ zero_catch_id <- ips.year.avg %>%
   ungroup(.) %>% 
   dplyr::distinct(falsto_name) %>% 
   pull()
+
+  # 4 locations: [1] "Brunnthal_1"   "Weißenstadt_1" "Weißenstadt_2" "Holzgünz_2" 
   
  
 
@@ -330,34 +321,13 @@ ips.year.avg %>%
 
 
 
-
-
-  
-# My data: time series data: -----------------------------------------------------
-  
-# Plot only time series of IT if there can be seems some seasonality: ----------------
-  
-dat %>% 
-  group_by(kont_dat, art)  %>%
-    summarize(bav_sum = sum(fangmenge, na.rm = T))   %>%
-    ggplot(aes(x = kont_dat,
-               y = bav_sum/100000)) +
-    #geom_line() +
-    geom_point(alpha = 0.5) +
-    facet_wrap(art~., scales = 'free')
-  
-  
-  
-  
-
-
 # Clean data: IPS ---------------------------------------------------------
 # - keep only IPS
 # - vegetation period: doy
 # - years: 2015-2021
 # - frequent recording: 10 revisit times at least
 # - remove the '3rd' trap
-# - keep only records that have all years and all traps??
+# - keep only records that have all years and all traps
 
 dat.ips.clean <- dat %>% 
   filter(doy %in% veg.period) %>% 
@@ -383,14 +353,15 @@ dat.ips.clean %>%
   distinct(falsto_name) %>% 
   count() #%>% 
 
-# if keeping only traps that are cpontinously monitored over time = only 78*2 traps
+# if keeping only traps that are cpontinously monitored over time 
+# ->  79*2 traps/year
 
 
   
 # Get daily counts per trap (averaged by the revisit time)
 df.daily <-  
   dat.ips.clean %>% 
-    group_by(globalid,art, year) %>% 
+    group_by(falsto_name,art, year) %>% 
     arrange(kont_dat) %>% # order the data
     mutate(
       period = diff(c(doy.start, doy))+1,  # get difference between two consecutive numbers
@@ -425,69 +396,84 @@ p_count_diff <- df.daily %>%
 
 
 
-# get vector of trap names:
-trap_names <- unique(dat.ips.clean$falsto_name)
-
-windows()
+#windows()
 hist(df.daily$avg_day_count)
 
 # convert data for counts on 1 and counts on 2: ---------------------
-df1 <-dat.ips.clean %>% 
-  filter(trap_pair == 1 ) %>% 
-  dplyr::select(monsto_name, year, month, doy, fangmenge, art)
-
-df2 <-dat.ips.clean %>% 
-  filter(trap_pair == 2 ) %>% 
-  dplyr::select(monsto_name, year, month, doy, fangmenge, art)
-
-# merge df1 & df2
-dd <- df1 %>% 
-  left_join(df2, by = c("monsto_name", "year", "month", "doy", "art"))
-
-
-# aggeraget by months instead of teh DOY:
-dd_sum <- 
-  dd %>% 
-  group_by(year, month, monsto_name) %>% 
-  summarise(trap1 = sum(fangmenge.x),
-            trap2 = sum(fangmenge.y)) %>%
-  ungroup() %>%
-  filter(complete.cases(.))
-
-
-## visualize trap1 vs trap2 ----------------------------------------
-ggplot(dd_sum, aes(x = trap1, 
-                       y = trap2)) +
-  geom_point()+
-  geom_smooth(method = 'lm')
-
-
-m_lm <- lm(trap1~trap2, dd_sum)
-summary(m_lm)
-
-
-m_glm <- glm(trap1~trap2, dd_sum, family = poisson)
-summary(m_glm)
-plot(m_gam, 1)
-
+# df1 <-dat.ips.clean %>% 
+#   filter(trap_pair == 1 ) %>% 
+#   dplyr::select(monsto_name, year, month, doy, fangmenge, art)
+# 
+# df2 <-dat.ips.clean %>% 
+#   filter(trap_pair == 2 ) %>% 
+#   dplyr::select(monsto_name, year, month, doy, fangmenge, art)
+# 
+# # merge df1 & df2
+# dd <- df1 %>% 
+#   left_join(df2, by = c("monsto_name", "year", "month", "doy", "art"))
+# 
+# 
+# # aggeraget by months instead of teh DOY:
+# dd_sum <- 
+#   dd %>% 
+#   group_by(year, month, monsto_name) %>% 
+#   summarise(trap1 = sum(fangmenge.x),
+#             trap2 = sum(fangmenge.y)) %>%
+#   ungroup() %>%
+#   filter(complete.cases(.))
+# 
+# 
+# ## visualize trap1 vs trap2 ----------------------------------------
+# ggplot(dd_sum, aes(x = trap1, 
+#                        y = trap2)) +
+#   geom_point()+
+#   geom_smooth(method = 'lm')
+# 
+# 
+# m_lm <- lm(trap1~trap2, dd_sum)
+# summary(m_lm)
+# 
+# 
+# m_glm <- glm(trap1~trap2, dd_sum, family = poisson)
+# summary(m_glm)
+# plot(m_gam, 1)
+# 
 
 # Export XY and DAT table -------------------------------------------------
 
+# only for the selected traps - 78*2 per year
+# and only one globalid per trap
+trap_names <- unique(dat.ips.clean$falsto_name)
+trap_names_sf <- unique(xy_sf$falsto_name)
+
+
+# compare two vectors
+a <- c("a", "b", 'c')
+b <- c("a", "b", 'd')
+
+intersect(trap_names,trap_names_sf)
 
 # Make a use of gpkg in R: https://inbo.github.io/tutorials/tutorials/spatial_standards_vector/
 # Write the output XY files in 3035 coordinate
 
 # filter XY for unique falso_name  - one falsto_name per globalid, keep just one row
-xy_sf_filt <- xy_sf %>% 
+xy_sf_fin <- xy_sf %>% 
   filter(falsto_name %in% trap_names) %>% 
   group_by(falsto_name) %>% 
   slice(1)   # keep only 1 globalid per group
 
-xy_sf %>%  
- st_write(paste(out_path, "outSpatial/xy_3035.gpkg", sep = '/'), append=FALSE)
+unique(xy_sf_fin$falsto_name)
 
-xy_sf_filt %>%  
-  st_write(paste(out_path, "outSpatial/xy_filt_3035.gpkg", sep = '/'), append=FALSE)
+# save as a new object
+xy_sf_all <- xy_sf
+
+rm(xy_sf)  # remove the old one
+
+xy_sf_all %>%  
+ st_write(paste(out_path, "outSpatial/xy_all_3035.gpkg", sep = '/'), append=FALSE)
+
+xy_sf_fin %>%  
+  st_write(paste(out_path, "outSpatial/xy_fin_3035.gpkg", sep = '/'), append=FALSE)
 
 # export RAW data
 # data.table::fwrite(dat, paste(out_path, 'outSpatial/dat.csv', sep = "/"))
@@ -496,16 +482,16 @@ xy_sf_filt %>%
 
 # get the summary IPS data to merge with XY coordinates!  
 ips.year.sum <-   dat.ips.clean %>%     
-  group_by(year, art, falsto_name) %>% 
-  mutate(bav_sum = sum(fangmenge, na.rm =T)) %>%  
-  dplyr::select(bav_sum, globalid, year, falsto_name) #%>% 
+  group_by(year,falsto_name) %>% 
+  dplyr::summarize(sum_ips = sum(fangmenge, na.rm =T)) %>%  
+  dplyr::select(sum_ips, year, falsto_name) #%>% 
 
 
-# Merge spatial data with sum data by globalid
-ips.year.sum_sf <- xy_sf_filt %>% 
-  right_join(ips.year.sum, 'globalid')
+# Merge spatial data with sum data by trap name (falsto_name)
+ips.year.sum_sf <- xy_sf_fin %>% 
+  right_join(ips.year.sum,  'falsto_name')
 
-
+unique(ips.year.sum_sf$falsto_name)
 
 
 # Get spatial data libs -----------------------------------------------------------------
@@ -521,15 +507,15 @@ bav_sf <- de_sf %>%
   dplyr::filter(name_en == "Bavaria")
 
 buch_df_f <- ips.year.sum_sf %>% 
-  filter(bav_sum > 3000)
+  filter(sum_ips > 3000)
 
 # for visibility, only beetles sums > 3000/year/trap are shown!
 ggplot(bav_sf) +
   geom_sf(color = 'black', 
           fill  = 'grey93') + 
   geom_sf(data = buch_df_f,
-          aes(color = bav_sum,
-              size = bav_sum)) + # , size = Age, size = 0.8size by factor itself!
+          aes(color = sum_ips,
+              size = sum_ips)) + # , size = Age, size = 0.8size by factor itself!
   scale_color_viridis(name = 'Beetle sum/year/trap', 
                       alpha = 0.8,
                       option = 'magma',
@@ -541,18 +527,20 @@ ggplot(bav_sf) +
 # Max increase in counts per year & trap ----------------------------------------------------
 # find min DOY of the max diff per year and location: plot on map ----------------
 max.diff.doy <- df.daily %>% 
-  group_by(globalid, year, falsto_name2) %>% 
+  group_by(year, falsto_name) %>% 
   slice(which.max(diff))
 
-max.diff.doy.sf <- xy_sf_filt %>%   # to keep the sf structure, need to add df to sf
-  right_join(max.diff.doy, 'globalid')
+max.diff.doy.sf <- xy_sf_fin %>%   # to keep the sf structure, need to add df to sf
+  right_join(max.diff.doy, 'falsto_name')
 
+
+unique(max.diff.doy.sf$falsto_name)
 
 # check range DOY:
 max.diff.doy %>% 
   as.data.frame() %>% 
   group_by(year) %>% 
-  summarise(min    = min(doy),
+  dplyr::summarise(min    = min(doy),
             max    = max(doy),
             mean   = mean(doy),
             sd     = sd(doy),
@@ -564,7 +552,7 @@ max.diff.doy %>%
 max.diff.doy %>% 
   as.data.frame() %>% 
   group_by(year) %>% 
-  summarise(min = min(diff),
+  dplyr::summarise(min = min(diff),
             max = max(diff),
             mean = mean(diff),
             sd = sd(diff),
@@ -576,7 +564,7 @@ max.diff.doy %>%
 # the main diference in counts happends earlier in the season
 avg.doy <- mean(df.daily$doy)
 
-windows()
+#windows()
 df.daily %>% 
   ggplot(aes(y = doy,
              x = factor(year))) +
@@ -613,7 +601,7 @@ p_doy_max_increase <- ggplot(bav_sf) +   # base map
 
 
 ## filter  DOY 150 = May 30 ----------------------------------------------------
-windows()
+#windows()
 p_doy_max_increase150 <- ggplot(bav_sf) +   # base map
   geom_sf(color = 'black', 
           fill  = 'grey85') + 
@@ -638,7 +626,7 @@ p_doy_max_increase150 <- ggplot(bav_sf) +   # base map
 
 
 # does earlier DOY occurs with the higher size?
-windows()
+#windows()
 p_diff_doy <- max.diff.doy %>% 
   #filter(doy < 151) %>% 
   ggplot(aes(x = doy,
@@ -690,30 +678,15 @@ ggplot(bav_sf) +   # base map
 
 
 
-# Coefficient of variation -------------------------------------------------------
-# EXAMPLE : Sample beetle count data (mean counts per year)
-years <- c(2017, 2018, 2019, 2020, 2021)
-mean_counts <- c(50, 60, 55, 75, 70)
+# Coefficient of variation:  -------------------------------------------------------
 
-# Sample standard deviation data for each year
-std_dev <- c(10, 8, 12, 15, 10)
-
-# Calculate coefficient of variation (CV) for each year
-cv_values <- (std_dev / mean_counts) * 100
-
-# Create a plot to illustrate temporal variability using CV
-windows()
-plot(years, cv_values, type='o', col='blue', pch=16, lty=1, xlab='Year', ylab='Coefficient of Variation (CV %)',
-     main='Temporal Variability of Beetle Counts per Year')
-grid()
-
-# CV for daily counts data ---------------------------------------------------------------
 # for whole data, not just the max increase
 df.daily %>%
-  group_by(year, falsto_name, art) %>% 
-  summarize(mean = mean(avg_day_count),
+  group_by(year, falsto_name) %>% 
+  dplyr::summarize(mean = mean(avg_day_count),
             sd  = sd(avg_day_count),
             cv  = sd/mean) %>%  # can be turned to % by '*100'
+ # as.data.frame() %>% 
   ggplot(aes(x = factor(year),
              y = cv)) +
   geom_violin() +
@@ -725,7 +698,7 @@ df.daily %>%
 max.diff.doy %>%
 #  ungroup(.) %>% 
   group_by(year) %>% 
-  summarize(mean = mean(doy),
+  dplyr::summarize(mean = mean(doy),
             sd   = sd(doy, na.rm=TRUE) ,
             cv   = sd/mean) %>%  # can be turned to % by '*100'
   ggplot(aes(x = year,
@@ -747,10 +720,11 @@ max.diff.doy %>%
 
 
 # Save selected dfs in R object: ------------------------------------------------------------
-save(
+save(trap_names,                 # vec of final trap names (79*2)
      df.daily,                   # avg daily beetle counts (adjusted by revisit times), over DOY 
-     ips.year.avg,                   # sum & avg number per beetles/trap per vegetation season (), over whole year
-     ips.year.sum,
+    # ips.year.avg,               # sum & avg number per beetles/trap per vegetation season (), over whole year
+     ips.year.sum,               # simple beetle sum per trap
+     ips.year.sum_sf,            # simple beetl sum per trap sf
      dat.ips.clean,              # filtered raw IPS counts
      max.diff.doy,               # max increase in beetle counts per DOY
      max.diff.doy.sf,            # sf: max increase in beetle counts per DOY
@@ -762,7 +736,8 @@ save(
 
 
 # Spatial data for maps:
-save(xy_sf_filt,                      # trap location (one Globalid is ised for both IPS & Chalcographus!)
+save(xy_sf_all,                  # all locations (one trap has several locations!!)
+     xy_sf_fin,                  # filtered trap location (one Globalid is ised for both IPS & Chalcographus!)
      de_sf,                      # germany shp
      bav_sf,                     # bavaria shp
      file="outData/spatial.Rdata") 
