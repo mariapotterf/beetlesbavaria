@@ -57,9 +57,9 @@ load("outData/spatial.Rdata")
 # - ips.year           # sum beetles/year, avg/betles/year per trap
  
 # Spatial data: 
-# - xy_sf  # XY as sf data
+# - xy_sf_fin  # XY as sf data, filtered to have only one globalid per trap
 
-
+#!!! need to filter data for my 158 fin traps!!!!!!!!
 
 # Get SPEI and clim data: they are for whole year! check only veg season?
 df_spei   <- fread(paste(myPath, outTable, 'xy_spei.csv', sep = '/'))
@@ -87,123 +87,29 @@ df_topo <- df_topo %>%
 # xy_clim <- fread(paste(myPath, outTable, 'xy_clim.csv', sep = "/"))
 #
 # get trap coordinates
-xy        <- vect(paste(myPath, outFolder, "xy_3035.gpkg", sep = "/"), 
-                  layer = 'xy_3035') # read trap location
+# xy        <- vect(paste(myPath, outFolder, "xy_fin_3035.gpkg", sep = "/"), 
+#                   layer = 'xy_fin_3035') # read trap location
+# 
+# 
+# class(geom(xy))
+# 
+# xy_4326 <- terra::project(xy, "epsg:4326")
+# df_xy <- data.frame(x = geom(xy_4326)[,'x'],
+#                     y = geom(xy_4326)[,'y'],
+#                     globalid = xy_4326$globalid)
+# 
+xy_df <- data.frame(x = sf::st_coordinates(xy_sf_fin)[,"X"],
+                    y = sf::st_coordinates(xy_sf_fin)[,"Y"],
+                    falsto_name = xy_sf_fin$falsto_name,
+                    globalid =    xy_sf_fin$globalid)
 
-
-class(geom(xy))
-
-xy_4326 <- terra::project(xy, "epsg:4326")
-df_xy <- data.frame(x = geom(xy_4326)[,'x'],
-                    y = geom(xy_4326)[,'y'],
-                    globalid = xy_4326$globalid)
-
-df_xy3035 <- data.frame(x = geom(xy)[,'x'],
-                        y = geom(xy)[,'y'],
-                        globalid = xy$globalid)
-
-
+# get the final subset of globalids
+trap_globid <- unique(xy_df$globalid)
 
 
 
 # Do neighboring traps correlate in beetle numbers? --------------------------
 head(dat.ips.clean)
-
-
-unique(dat.ips.clean$trap_n)
-# 1 2 3 
-
-# check for traps: 1, 2,3, - if there is NA, maybe replaed by other trap?
-dat.ips.clean %>% 
-  filter(monsto_name == 'Berg' & year == 2015 & month == 4 & art == 'Buchdrucker' )
-#2015     4 Berg               28    NA    - no, simply missing count of beetles
-
-# are 1 and 3 consistently indicating different groups? or is it 2-3, or 1-3?
-# quick overview: subset only data that have coorrect 1/2:
-df1 <-dat.ips.clean %>% 
-  filter(trap_pair == 1 ) %>% 
-  dplyr::select(monsto_name, year, month, doy, fangmenge, art)
-
-df2 <-dat.ips.clean %>% 
-  filter(trap_pair == 2 ) %>% 
-  dplyr::select(monsto_name, year, month, doy, fangmenge, art)
-
-# merge df1 & df2
-dd <- df1 %>% 
-  left_join(df2, by = c("monsto_name", "year", "month", "doy", "art"))
-
-
-# check correlation for individual secies?
-dd_ips <- dd %>% 
-  filter(art == 'Buchdrucker')# %>% 
-
-# aggeraget by months instead of teh DOY:
-ips_sum_months <- 
-  dd_ips %>% 
-  group_by(year, month, monsto_name) %>% 
-  summarise(trap1 = sum(fangmenge.x),
-            trap2 = sum(fangmenge.y)) %>%
-  ungroup() %>%
-  filter(complete.cases(.))
-
-
-# tau autokoralacia - korelacia v case
-
-
-ggplot(ips_sum_months, aes(x = trap1, 
-                       y = trap2)) +
-  geom_point()+
-  geom_smooth(method = 'gam')
-  
-
-m_gam <- gam(trap2~s(trap1), 
-          data = ips_sum_months, 
-          family = poisson, 
-          na.action = na.omit)
-
-summary(m_gam)
-plot(m_gam)
-
-
-m2 <- lm(trap1~I(trap2^2), 
-          data = ips_sum_months, 
-         # family = poisson, 
-          na.action = na.omit)
-
-summary(m2)
-plot(m2)
-
-
-
-cor(ips_sum_months$trap1,ips_sum_months$trap2) # COR: 0.755
-#aov(m1)
-
-plot(m2, all = T)  # shows the residuals
-
-
-plot(x = ips_sum_months$trap1, y= ips_sum_months$trap2, 
-     main = "Main title", 
-     xlab = "X axis title", ylab = "Y axis title",
-     pch = 19, frame = FALSE)
-abline(m2, col = "blue")
-
-plot(dd_ips$fangmenge.x, dd_ips$fangmenge.y )
-cor(dd_ips$fangmenge.x, dd_ips$fangmenge.y )
-
-ggplot(dd_ips, aes(x = fangmenge.x,
-               y = fangmenge.y)) +
-  geom_point(alpha = 0.5) +
-  geom_smooth('lm')
-
-
-glm_traps <- glm(fangmenge.y  ~ fangmenge.x, family = "negbin", 
-            dat = dd_ips)
-
-summary(glm_traps)
-
-windows()
-simulationOutput <- simulateResiduals(fittedModel = glm_traps, 
-                                      plot = T)
 
 
 # Analyze data ------------------------------------
@@ -329,7 +235,7 @@ df_spei_all <- df_spei %>%
 # Get frequency of extremely dry locations: -----------------------------------------
 # 
 library(RColorBrewer)
-display.brewer.pal(7, "BrBG")
+#display.brewer.pal(7, "BrBG")
 
 # This SPEI has all 12 months!!!
 df_spei %>% 
@@ -399,7 +305,7 @@ length(unique(dat.ips.clean$globalid))
 
 
 
-# Summarize climate per year ----------------------------------------------
+# Summarize climate per veg season ----------------------------------------------
 
 # avg temp, spei, PRCP :april 31 - oct 30 
 df_clim_veg <- df_clim %>% 
@@ -408,19 +314,19 @@ df_clim_veg <- df_clim %>%
   group_by(globalid, year) %>% 
   summarise(prec = mean(PRCP),
             temp = mean(TMED),
-            m_spei1 = mean(spei1, na.rm = T),
-            m_spei3 = mean(spei3, na.rm = T),
-            m_spei6 = mean(spei6, na.rm = T),
-            m_spei12 = mean(spei12, na.rm = T)
-            )
-
+            spei1 = mean(spei1, na.rm = T),
+            spei3 = mean(spei3, na.rm = T),
+            spei6 = mean(spei6, na.rm = T),
+            spei12 = mean(spei12, na.rm = T)
+            ) %>% 
+  filter(globalid %in% trap_globid) # filter only the the one globalid per trap 
 
 
 # DOY of max increase  --------------------------------------------------------------
 v_predictors <- c('year', # if analyse predictors, 'year' needs to be removed! 
   'temp', 'prec', 
-                  'm_spei1', 
-                  'm_spei3', 'm_spei6', 'm_spei12', 
+                  'spei1', 
+                  'spei3', 'spei6', 'spei12', 
                   'elev', 'slope', 'aspect', 'tpi', 'tri', 'roughness')
 
 df_predictors_doy <-
@@ -435,7 +341,7 @@ df_predictors_doy <-
   dplyr::select(c('doy', 
                 'diff',
                 'cumsum',
-                v_predictors))    
+                all_of(v_predictors)))    
 
 # get correlation coefficient across all predictors:------------------------------
 # (to run this, need to remove the y-vars from above: doy, diff, cumsum!)
@@ -475,14 +381,11 @@ ggplot(df_predictors_doy, aes(x = diff,
                           color = year)) +
   geom_point() 
 
-
-
-
-# model raw counts??? !!! -----------------------------------
-ips2 <- ips_sum %>% # sum up beetle counts per veg season, on yearly basis
+# add globalid to merge with clim data
+ips2 <- ips.year.sum %>% 
+  left_join(xy_df, 'falsto_name') %>% 
   left_join(df_clim_veg, by = c("globalid", "year")) %>% # , "month" 
   left_join(df_conif , by = c("globalid")) %>% 
-  left_join(df_xy, by = c("globalid", 'x', 'y')) %>% # df_xy3035
   left_join(df_topo, by = c("globalid"))#mutate(year = as.factor(as.character(year)))
 
 write.csv(ips2, 'C:/Users/ge45lep/Documents/2022_BarkBeetles_Bavaria/outTable/ips_sum.csv')
@@ -495,28 +398,29 @@ write.csv(ips2, 'C:/Users/ge45lep/Documents/2022_BarkBeetles_Bavaria/outTable/ip
 # and the response variable differ across different time periods. 
 
 # check hist of conts
-hist(ips2$sum_beetle)
-median(ips2$sum_beetle)
-mean(ips2$sum_beetle)
+windows()
+hist(ips2$sum_ips)
+median(ips2$sum_ips)
+mean(ips2$sum_ips)
 
 
-ggplot(ips2, aes(x = sum_beetle)) + 
+ggplot(ips2, aes(x = sum_ips)) + 
   geom_histogram(colour = 4, fill = "white", 
                  bins = 2000)
 
 # check for 0
 ips2 %>% 
-  filter(sum_beetle == 0) %>% # 0 yes!! but only around 20, vey little
+  filter(sum_ips == 0) %>% # 0 yes!! but only around 20, vey little
   distinct(globalid)
+# no 0
 
-
-fitdistr(ips2$sum_beetle, 'Poisson')
+fitdistr(ips2$sum_ips, 'Poisson')
 
 
 # poisson: mean and variance are equal
 # negative-binomial - allows for overdispersion (variance excees the mean) - not my case
 
-glm1 <- glm(sum_beetle ~ temp + prec + elev + temp:as.numeric(year) + m_spei12,
+glm1 <- glm(sum_ips ~ temp + prec + elev + temp:as.numeric(year) + spei12,
    data = ips2,
    family = "poisson",
    na.action = "na.fail")
@@ -547,7 +451,7 @@ library("countreg")
 #https://stackoverflow.com/questions/43075911/examining-residuals-and-visualizing-zero-inflated-poission-r
 
 # Fit a zero-inflated negative binomial model
-m_zero <- zeroinfl(sum_beetle ~ temp*year + m_spei3, 
+m_zero <- zeroinfl(sum_ips ~ temp*year + m_spei3, 
                    dist = "negbin", data = ips2)
 
 # View the model summary
@@ -588,13 +492,13 @@ vif_values
 
 
 ggplot(ips2, aes(x = year, 
-                 y = sum_beetle)) + 
+                 y = sum_ips)) + 
   geom_point() +
   stat_smooth(method = "glm")
 
 
 # Fit a linear regression model for each time period
-model <- lm(sum_beetle ~ temp + prec + year + 
+model <- lm(sum_ips ~ temp + prec + year + 
               temp:year + prec:year, 
             data = ips2)
 
@@ -610,7 +514,7 @@ plot(model, 1)
 
 
 # try again gam:
-gam1 <- gam(sum_beetle ~ s(temp, by = year) +
+gam1 <- gam(sum_ips ~ s(temp, by = year) +
                s(prec, by = year), 
             data = ips2)
 summary(gam1)
