@@ -64,31 +64,17 @@ load("outData/spatial.Rdata")
 # - ips.year.sum       # sum beetles/year per trap
 
 # Spatial data: 
+# should have 158 regions (trap pairs)
+sort(unique(xy_sf_fin$falsto_name))
 
-
-# som trap names are missisng: check 'sf_all': 
-sort(unique(xy_sf_all$falsto_name))
-
-
-# - xy_sf_fin  # XY as sf data
-#xy_terra <- vect(xy_sf_fin)
 
 # get coordinates from sf object
-x <- sf::st_coordinates(xy_sf_fin)[,"X"]
-z <- sf::st_coordinates(xy_sf_fin)[,"Y"]
-
-
 xy_df <- data.frame(x = sf::st_coordinates(xy_sf_fin)[,"X"],
                     y = sf::st_coordinates(xy_sf_fin)[,"Y"],
                     falsto_name = xy_sf_fin$falsto_name)
 
-# rename the coordinates into xy
-#xy_df <- data.frame(x = geom(xy_terra)[,'x'],
-#                    y = geom(xy_terra)[,'y'],
-#                    falsto_name = xy_terra$falsto_name)
 
 # Get sums of IPS beetle per year/trap: April 31 to October 30
-# !!!! OProblem with unique falsto_name!!! incorrect character reading!
 ips_sum <- 
   dat.ips.clean %>% 
   group_by(year,falsto_name) %>% 
@@ -142,12 +128,24 @@ lisa_merged <- dplyr::bind_rows(lisa_out)
 # Create map fr each one of them and save as saparate object
 
 
-ggplot() +
+p_lisa_sub <- ggplot() +
   geom_sf(data = filter(lisa_merged, 
                         clust %in% c("Low-Low", "High-High")),
           aes(color = clust)) +
   scale_color_manual(breaks = c("Low-Low", "High-Low", "Low-High", "High-High"),
                      values=c("blue", "grey90", "grey90", 'red')) +
+  facet_wrap(year~.) +
+  theme_void() +
+  ggtitle('LISA: Moran I')
+
+
+
+p_lisa_all <- ggplot() +
+  geom_sf(data = lisa_merged, #filter(lisa_merged, 
+                        #clust %in% c("Low-Low", "High-High")),
+          aes(color = clust)) +
+  scale_color_manual(breaks = c("Low-Low", "High-Low", "Low-High", "High-High"),
+                     values=c("blue", "grey90", "grey95", 'red')) +
   facet_wrap(year~.) +
   theme_void() +
   ggtitle('LISA: Moran I')
@@ -176,6 +174,7 @@ lisa_merged_df <- as.data.frame(lisa_merged)
 
 
 
+  # Example for single years
 
 ips_sum_15 <-ips_sum %>% 
   filter(year == 2015)
