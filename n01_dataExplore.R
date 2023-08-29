@@ -337,7 +337,8 @@ dat.ips.clean <- dat %>%
   dplyr::filter(!falsto_name %in% low_visit_id) %>%  # remove traps with low visit time (nee to check this for year?)
   dplyr::filter(!falsto_name %in% zero_catch_id) #%>% # exclude if zero beetles caught per whole year
  
-# filter only for traps that have both 1&2: https://stackoverflow.com/questions/61060750/r-better-way-to-filter-by-group-and-vector-of-values
+# filter only for traps that have both 1&2:
+# https://stackoverflow.com/questions/61060750/r-better-way-to-filter-by-group-and-vector-of-values
 dat.ips.clean <- dat.ips.clean %>% 
   group_by(monsto_name) %>%      # filter by region
   slice(which(all(c(1,2) %in% trap_pair) & trap_pair %in% c(1,2)))   # every trap needs to have both 1&2 traps 
@@ -353,7 +354,7 @@ dat.ips.clean %>%
   distinct(falsto_name) %>% 
   count() #%>% 
 
-# if keeping only traps that are cpontinously monitored over time 
+# if keeping only traps that are continously monitored over time 
 # ->  79*2 traps/year
 
 
@@ -361,23 +362,70 @@ dat.ips.clean %>%
 # Get daily counts per trap (averaged by the revisit time)
 df.daily <-  
   dat.ips.clean %>% 
-    group_by(falsto_name,art, year) %>% 
+    group_by(falsto_name, year) %>% 
     arrange(kont_dat) %>% # order the data
     mutate(
       period = diff(c(doy.start, doy))+1,  # get difference between two consecutive numbers
       avg_day_count  = fangmenge/period,           # average beetle counts per day
       sum = avg_day_count*period,                  # to check counts
       cumsum = cumsum(sum),
-      diff   = avg_day_count - lag(avg_day_count) ) #%>%   # difference between average avg_day_count values
-   # filter(globalid == '0010C7C3-C8BC-44D3-8F6E-4445CB8B1DC9' & art == 'Buchdrucker') %>%
+      diff   = avg_day_count - lag(avg_day_count) ) %>%   # difference between average avg_day_count values
+  dplyr::select(-c("objectid",
+                   "aelf",  
+                   "art",
+                    "einheit",
+                   "koederwechsel",
+                   "monsto_name",
+                   "representativ")) 
+  # filter(globalid == '0010C7C3-C8BC-44D3-8F6E-4445CB8B1DC9' & art == 'Buchdrucker') %>%
    # select(kont_dat, fangmenge, falsto_name, cumsum,avg_day_count,
   #         diff,
    #        doy) %>%
   #  arrange(year) %>%
   #  View()
 
+
+
+# Calculate DOY at which the beetle counts overpassed the threshold?
+# need to expand the table to have all DOYs to find this info
+# example: https://stackoverflow.com/questions/76999386/r-dplyr-expand-refill-data-frame-by-values-within-group/76999522#76999522
+
+day.range = 2:12
+df <- data.frame(day = c(4, 6, 10),
+                 daily_count = c(10, 20, 30))
+
+
+df %>% 
+  complete(day = day.range)  %>% 
+  fill(daily_count, .direction = "up")
+
+
+# Seems ok, ()small difference from the cumsum: for rought estimation, thr normal cumsum should be 
+# enought; no need to fill in value for every DOY
+# df.daily %>% 
+#   dplyr::select(year, doy, falsto_name, fangmenge, avg_day_count, cumsum) %>%
+#   group_by(year, falsto_name) %>% 
+#   complete(doy = veg.period)  %>% 
+#   fill(avg_day_count, .direction = "up") %>% 
+#   filter(falsto_name == 'Anzinger_Forst_1' & year == '2015') %>% 
+#   mutate(cumsum_doy = cumsum(avg_day_count)) %>% 
+#   View()
+
+# find DOY when the cumsum overpasses values: 2000, 5000 beetles per season
+ips_cumul <- df.daily %>% 
+  group_by(year, falsto_name) %>% 
+  arrange(doy) %>% 
+  filter(cumsum > 1000) %>%
+  filter(row_number()==1)     # filter first record per group > 2000
   
+ips_cumul %>% 
+  ggplot(aes(y=doy,
+             x = year,
+             group = year)) +
+  geom_boxplot()
   
+
+
 
  
 # check plot of differences: ---------------------------------------
@@ -443,7 +491,7 @@ hist(df.daily$avg_day_count)
 
 # only for the selected traps - 78*2 per year
 # and only one globalid per trap
-trap_names <- unique(dat.ips.clean$falsto_name)
+trap_names    <- unique(dat.ips.clean$falsto_name)
 trap_names_sf <- unique(xy_sf$falsto_name)
 
 
