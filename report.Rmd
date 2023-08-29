@@ -51,53 +51,57 @@ load(file = "outData/ips.Rdata")
 load(file = "outData/spatial.Rdata")
 ```
 
-# To explore
+# Research questions
 
-Variation of beetle population dynamics over time and space: how does the beetle counts change over time and space?
+Variation of beetle population dynamics over time and space: 
 
-- Ips typographus, maybe Pityogenes chalcographus (?)
-- earlier/steeper beetle counts per year?
-
-What are the drivers?
-
-- spruce%
-- SPEI (drougt) index
-- elevation
-- temp
-- precipitation
+- how does the beetle counts change over time and space?
+- does beetle population increase earlier in the year? 
+- is the increase steeper over years? 
 
 Regional vs global variation?
 
 - are the traps near by more similar than the traps further away?
 
 
-# Input
+# Input data
 
 ## Beetle trap dataset overview
 
-- collected whole year, roughtly in two weeks interval (range 7 - 30 days)
-- individual trap ID - same 'globalid' for Ips and Pityogenes
+- trap datasets in trap pairs, covering area of Bavaria over 2015-2021
+- consistent monitoring: 79*2 traps per whole research period
+- traps emptied over whole year, roughtly in two weeks interval (range 7 - 30 days)
+- individual trap name = 'falsto_name' - one trap can have several globalid, if moved over years. Keep only one globalid per trap. Only one 'globalid' for Ips and Pityogenes traps locations.
 
-[tbd]
+## Dependent variables
 
-## Counts processing
+- ips_sum - sum of beetles per trap/year over vegetation period
+- counts per day =  corrected by the frequency of trap emptying to have average beetles counts per day
+- DOY of the max population increase
+- Max population increase per year/trap
+- output of LISA?
 
-- count per year = sum of beetles per trap/year over vegetation period
-- counts per day =  corrected by the frequency of trap emptying to have average beetles counts per day.
+## Predictors?
 
+- temp
+- precipitation
+- SPEI (drought) index
+- soil water content (swvl)
+- elevation
+- spruce%
+- spruce vs. deciduous%
 
 ### Curate the data: 
 
 - vegetation period: April 1st to Oct 30
 - remove:
 
- + if revisit times is less then 10 per season
- + zero beetles cought per whole season 
+ + if revisit times is less then 5 per season
+ + zero beetles cough per whole season 
  + trap number 3 (not a pair: 1 or 2)
- + only 'representative' == "Ja"
- 
 
-# Descriptive stats
+
+## Descriptive stats
 
 ```{r}
 hist(df.daily$avg_day_count)
@@ -114,23 +118,65 @@ DOY
 - 211 July 30
 - 250 SEpt 7
 
-# Temporal variation of beetles counts/traps/day
+# Results 
+
+## Temporal variation of beetles counts within a year
 
 RQ: Does the increase in population happens earlier in year?
 
-- what is the DOY of the max increase of beetles daily counts between two consecutive days?
-- BY how many beetles?
+Calculate the differences in beetle counts between two consecutive dates. Fin the max increase per trap & year. Identify the DOY when this max increase happend.
 
 
-```{r map_p_doy_max_increase, fig.width = 6, fig.height = 6, echo = F, fig.cap="Density distribution of RA1 (Dominant type) for two types of management (Dead and Clear-cut)."}
+```{r p_count_diff, fig.width = 5, fig.height = 5, echo = F, fig.cap="Average differences in consecutive beetle counts per year (DOY - day of the year) over the study period (2015:2021)"}
+
+p_count_diff  
+
+```
+
+Scatter plot: DOY vs max increase in beetle numbers per year per trap. One point = one trap
+
+```{r p_diff_doy, fig.width = 4, fig.height = 5, echo = F, fig.cap="Scatter plot of the max increase of beetle count and respective doy over study period."}
+
+p_diff_doy  
+
+```
+
+### Map: Max increase in beetle population per DOY
+
+```{r map_p_doy_max_increase, fig.width = 6, fig.height = 6, echo = F, fig.cap="DOY of max increase of betle counts between two consecutive days and size of beetles numbers increase"}
 
 p_doy_max_increase  
 
 ```
 
-
-```{r map_p_doy_max_increase160, fig.width = 6, fig.height = 6, echo = F, fig.cap="Density distribution of RA1 (Dominant type) for two types of management (Dead and Clear-cut)."}
+### Map: Max increase in beetle population per DOY (DOY April 1st to May 30, DOY 92-150)
+```{r map_p_doy_max_increase160, fig.width = 6, fig.height = 6, echo = F, fig.cap="DOY of max increase of betle counts between two consecutive days and size of beetles numbers increase: filtered for DOY < 150 (May 30)"}
 
 p_doy_max_increase150  
 
 ```
+
+
+
+
+
+## Beetle sum counts over years (2015:2021)
+
+### Clim predictors
+
+- temp
+- precipitation
+- SPEI (drought) index
+- soil water content (swvl)
+- elevation
+- spruce%
+- spruce vs. deciduous%
+
+## LISA: measure of similarity between trap and its surrounding
+
+## Global Moran's I - overall measure of spatial autocorrelation over Bavaria
+
+## Semivariance
+
+
+
