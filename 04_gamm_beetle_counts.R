@@ -65,6 +65,7 @@ load("outData/spatial.Rdata")
 df_spei   <- fread(paste(myPath, outTable, 'xy_spei.csv', sep = '/'))
 df_prec   <- fread(paste(myPath, outTable, 'xy_precip.csv', sep = '/'))
 df_temp   <- fread(paste(myPath, outTable, 'xy_temp.csv', sep = '/'))
+df_swvl   <- fread(paste(myPath, outTable, 'xy_clim.csv', sep = '/')) # need to filter soils volume content index!
 
 
 # Get coniferous cover data: coniferous == 2! 
@@ -83,21 +84,6 @@ df_topo <- df_topo %>%
 
 
 # Get climate data for traps: --------------------------------------------------
-# this climate data are for soil drought!! not SPEI
-# xy_clim <- fread(paste(myPath, outTable, 'xy_clim.csv', sep = "/"))
-#
-# get trap coordinates
-# xy        <- vect(paste(myPath, outFolder, "xy_fin_3035.gpkg", sep = "/"), 
-#                   layer = 'xy_fin_3035') # read trap location
-# 
-# 
-# class(geom(xy))
-# 
-# xy_4326 <- terra::project(xy, "epsg:4326")
-# df_xy <- data.frame(x = geom(xy_4326)[,'x'],
-#                     y = geom(xy_4326)[,'y'],
-#                     globalid = xy_4326$globalid)
-# 
 xy_df <- data.frame(x = sf::st_coordinates(xy_sf_fin)[,"X"],
                     y = sf::st_coordinates(xy_sf_fin)[,"Y"],
                     falsto_name = xy_sf_fin$falsto_name,
@@ -105,6 +91,10 @@ xy_df <- data.frame(x = sf::st_coordinates(xy_sf_fin)[,"X"],
 
 # get the final subset of globalids
 trap_globid <- unique(xy_df$globalid)
+
+
+# Filter soil drought : soil water content
+df_swvl
 
 
 
@@ -481,7 +471,7 @@ print(cor_matrix)
 library(car)
 
 # Compute the VIF values
-vif_values <- vif(lm(temp ~ m_spei12 + prec + m_spei1, 
+vif_values <- vif(lm(temp ~ elev + spei12 + prec + spei1 + factor(), 
                      data = ips2))
 
 vif_values
