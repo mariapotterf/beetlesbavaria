@@ -49,19 +49,40 @@ knitr::opts_knit$set(root.dir = rprojroot::find_rstudio_root_file('C:/Users/ge45
 
 load(file = "outData/ips.Rdata")
 load(file = "outData/spatial.Rdata")
+load(file = "outData/predict.Rdata")
+load(file = "outData/lisa.Rdata")
+
+
+library(dplyr)
+library(ggpubr)
+
 ```
 
 # Research questions
 
-Variation of beetle population dynamics over time and space: 
+Q1: Variation of beetle population dynamics over time and space: 
 
-- how does the beetle counts change over time and space?
-- does beetle population increase earlier in the year? 
-- is the increase steeper over years? 
+ - how do beetle counts change over time and space?
+ - does beetle population increase earlier in the year? = swarming
+ - do beetles aggregate faster? eg. earlier in a year reach some threshold? (1000 beetles)
 
-Regional vs global variation?
+Q2: Regional vs global variation?
 
 - are the traps near by more similar than the traps further away?
+- LISA - local indicators of spatial assotiationa
+- Global Moran's I
+
+Drivers?
+
+- temperature
+- precipitation
+- SPEI (drought) index - lower value, more drought
+- soil water content (swvl) - ration volume water/volume soil: higher the number, more water, less drought
+- elevation
+- spruce%
+- spruce vs. deciduous%
+
+
 
 
 # Input data
@@ -73,75 +94,119 @@ Regional vs global variation?
 - traps emptied over whole year, roughtly in two weeks interval (range 7 - 30 days)
 - individual trap name = 'falsto_name' - one trap can have several globalid, if moved over years. Keep only one globalid per trap. Only one 'globalid' for Ips and Pityogenes traps locations.
 
+
+To test if the importance of drivers explaining variability changed over time: 
+perform temporal interaction analysis - 
+allows to assess whether the relationships between the drivers 
+and the response variable differ across different time periods. 
+
+
+# Methods
+
+- Calculate total sum of beetles per trap/year.
+- Calculate beetles emergence: the max different number of beetles between consecutive dates 
+- Calculate beetle aggregation : DOY of the beetles reaching 1000 beetles/trap.
+
 ## Dependent variables
 
 - ips_sum - sum of beetles per trap/year over vegetation period
 - counts per day =  corrected by the frequency of trap emptying to have average beetles counts per day
 - DOY of the max population increase
 - Max population increase per year/trap
+- DOY of 1000 beetles aggregated per  trap
 - output of LISA?
 
-## Predictors?
 
-- temp
-- precipitation
-- SPEI (drought) index
-- soil water content (swvl)
-- elevation
-- spruce%
-- spruce vs. deciduous%
+##### DOY overview
+
+   DOY    Date
+
+ - 100 - April 10
+ - 150 - May 30
+ - 200 - July 19
+ - 211 - July 30
+ - 250 - Sept 7
+
+
+
+
+
+```{r}
+
+summary(ips2)
+
+```
+
+
+```{r}
+ggarrange(p_temp, p_prec)
+```
+
 
 ### Curate the data: 
 
-- vegetation period: April 1st to Oct 30
-- remove:
+- vegetation period: April 1st to Oct 30 (DOY start `r doy.start` - DOY end `r doy.end`)
+- removed:
 
- + if revisit times is less then 5 per season
- + zero beetles cough per whole season 
- + trap number 3 (not a pair: 1 or 2)
+  + if revisit times is less then 5 per season
+  + zero beetles cough per whole season 
+  + trap number 3 (not a pair: 1 or 2)
+  + only kept consistent traps, they were surveyed per whole period 2015-2021 -> 79*2 traps in total (158)
 
+
+
+### Identify multicollinearity
+
+VIF - variance inflation factor
+values for each predictor variable in the model to determine if multicollinearity
+
+<1 - relatively independent
+1-5 - very little dependent
+>5 - likely concerning
+### Predictors maps
+
+SPEI
+
+# Results 
 
 ## Descriptive stats
 
-```{r}
+```{r p_hist_daily_counts, fig.width = 3, fig.height = 2.5, echo = F, fig.cap="Histogram of average daily traps"}
 hist(df.daily$avg_day_count)
 ```
 
 
-DOY overview
+## Beetle dynamics spatio-temporal variation
 
-DOY
+### Beetle counts, emergence and aggregation DOY
 
-- 100 April 10
-- 150 May 30
-- 200 July 19
-- 211 July 30
-- 250 SEpt 7
+```{r p_bars, fig.width = 6, fig.height = 6, echo = F, fig.cap="Beetle population dynamics. (a) total sum per year. (b) DOY of beetle aggregation per trap. (c) DOY of max increase between dates, (d) Max increase in beetle numbers. Shown are medians and IQR. "}
 
-# Results 
+ggarrange(p_ips.year.sum, 
+          p_ips.agg,
+          p_ips.max.diff.doy, 
+          p_ips.max.diff, labels = 'auto',
+          ncol = 2, nrow = 2 )
 
-## Temporal variation of beetles counts within a year
+```
+
+
+### Temporal variation of beetles counts within a year
 
 RQ: Does the increase in population happens earlier in year?
 
-Calculate the differences in beetle counts between two consecutive dates. Fin the max increase per trap & year. Identify the DOY when this max increase happend.
+Calculate the differences in beetle counts between two consecutive dates. Find the max increase per trap & year. Identify the DOY when this max increase happend.
 
 
 ```{r p_count_diff, fig.width = 5, fig.height = 5, echo = F, fig.cap="Average differences in consecutive beetle counts per year (DOY - day of the year) over the study period (2015:2021)"}
 
-p_count_diff  
+#p_count_diff  
 
 ```
 
-Scatter plot: DOY vs max increase in beetle numbers per year per trap. One point = one trap
+#### Map: Timing of the beetle swarming  
 
-```{r p_diff_doy, fig.width = 4, fig.height = 5, echo = F, fig.cap="Scatter plot of the max increase of beetle count and respective doy over study period."}
-
-p_diff_doy  
-
-```
-
-### Map: Max increase in beetle population per DOY
+Max increase in beetle population per DOY (all)
 
 ```{r map_p_doy_max_increase, fig.width = 6, fig.height = 6, echo = F, fig.cap="DOY of max increase of betle counts between two consecutive days and size of beetles numbers increase"}
 
@@ -149,7 +214,9 @@ p_doy_max_increase
 
 ```
 
-### Map: Max increase in beetle population per DOY (DOY April 1st to May 30, DOY 92-150)
+#### Map: Map: Timing of the beetle swarming (filtered, <150)
+
+Max increase in beetle population per DOY (filtered, <150)
 ```{r map_p_doy_max_increase160, fig.width = 6, fig.height = 6, echo = F, fig.cap="DOY of max increase of betle counts between two consecutive days and size of beetles numbers increase: filtered for DOY < 150 (May 30)"}
 
 p_doy_max_increase150  
@@ -159,24 +226,88 @@ p_doy_max_increase150
 
 
 
+#### Summary table: Max increase in beetle population per DOY & max difference
+```{r}
+max.diff.doy %>% 
+  as.data.frame() %>% 
+  group_by(year) %>% 
+  dplyr::summarise(min    = min(doy),
+            max    = max(doy),
+            mean   = mean(doy),
+            sd     = sd(doy),
+            #cv     = sd/mean,
+            median = median(doy)) %>% 
+  round() %>% 
+  knitr::kable("markdown", caption = 'DOY of the max increase in beetle numbers.')
 
-## Beetle sum counts over years (2015:2021)
 
-### Clim predictors
+# Check Max increase population
+max.diff.doy %>% 
+  as.data.frame() %>% 
+  group_by(year) %>% 
+  dplyr::summarise(min = min(diff),
+            max = max(diff),
+            mean = mean(diff),
+            sd = sd(diff),
+           # cv = sd/mean,
+            median = median(diff)
+            )  %>% 
+  knitr::kable("markdown", caption = 'Max increase of beetle numbers ')
 
-- temp
-- precipitation
-- SPEI (drought) index
-- soil water content (swvl)
-- elevation
-- spruce%
-- spruce vs. deciduous%
+```
 
-## LISA: measure of similarity between trap and its surrounding
 
-## Global Moran's I - overall measure of spatial autocorrelation over Bavaria
+#### Scatter plot: DOY vs max increase in beetle numbers per year per trap. One point = one trap
 
-## Semivariance
+```{r p_diff_doy, fig.width = 4, fig.height = 5, echo = F, fig.cap="Scatter plot of the max increase of beetle count and respective doy over study period."}
+
+p_diff_doy  
+
+```
+
+
+#### Map: Beetle aggregation per DOY (DOY < 130)
+
+```{r map_p_aggreg, fig.width = 6, fig.height = 6, echo = F, fig.cap="DOY (<130) of aggregated beetles per trap"}
+
+p_aggreg  
+
+```
+
+
+
+```{r}
+ips.aggreg %>% 
+  as.data.frame() %>% 
+  group_by(year) %>% 
+  dplyr::summarise(min    = min(doy),
+                   max    = max(doy),
+                   mean   = mean(doy),
+                   sd     = sd(doy),
+                  # cv     = sd/mean,
+                   median = median(doy))  %>% 
+  knitr::kable("markdown", caption = 'DOY of Beetle aggregation (1000)') 
+  
+```
+
+
+
+
+
+## Local vs regional variation
+
+### LISA: measure of similarity between trap and its surrounding
+
+
+```{r p_lisa_sub, fig.width = 6, fig.height = 6, echo = F, fig.cap="Local Indicators of Spatial Assotiation. No signoficat values are not shown."}
+
+p_lisa_sub  
+
+```
+
+### Global Moran's I - overall measure of spatial autocorrelation over Bavaria
+
+### Semivariance
 
 
 
