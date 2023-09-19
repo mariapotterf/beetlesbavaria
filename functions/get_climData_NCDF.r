@@ -29,8 +29,8 @@ library(terra)
 
 
 # Get spatial data for each trap
-xy        <- vect(paste(myPath, outFolder, "xy_3035.gpkg", sep = "/"), 
-                layer = 'xy_3035') # read trap location
+xy        <- vect(paste(myPath, outFolder, "xy_fin_3035.gpkg", sep = "/"), 
+                layer = 'xy_fin_3035') # read trap location
 xy_latlng <- terra::project(xy, 
                           "+proj=longlat +datum=WGS84 +ellps=WGS84 +towgs84=0,0,0")
 
@@ -53,6 +53,12 @@ dat_ras <- terra::rast(paste(myPath, inFolder,  "ERA_Bav.nc", sep = "/"))
 # extract all values to the xy coordinates:
 dat_ext_df <- terra::extract(dat_ras, xy_latlng)
 
+# get which ID equals which falsto_name
+xy_latlng$ID = 1:nrow(xy_latlng)
+
+xy_names <- data.frame(ID = xy_latlng$ID, 
+                       falsto_name = xy_latlng$falsto_name)
+
 
 # Check the variables of interest:
 var_names <- varnames(dat_ras)    # 9 variables
@@ -61,8 +67,10 @@ n_layer   <- nlyr(dat_ras)        # 441
 
 
 # terra works well, but require correct naming of variables:
-# has ID = OBJECTID from teh vect
 
+sort(unique(xy_latlng$OBJECTID)) == sort(unique(dat_ext_df$ID))
+
+length(unique(xy_latlng$falsto_name))
 # naming: need to be make manually:
 # years:  2015-2021: 7
 # months: april-October: 7
@@ -95,8 +103,7 @@ df_vars <- df %>%
   filter(!(var %in% soil_vars))
   
 
-# For soil water content: need to get sums (?) as Cornelius, or means?
-# I will use means
+# For soil water content: need to get sums as Cornelius?
 df_soil <- df %>% 
   filter(var %in% soil_vars ) %>%
   group_by(ID, year, month, day) %>% 
@@ -132,7 +139,8 @@ data.table::fwrite(df_out,
 
 
 
-
+data.table::fwrite(xy_names, 
+                   paste(myPath, outTable, 'xy_clim_IDs.csv', sep = "/"))
 
 
 
