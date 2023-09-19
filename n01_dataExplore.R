@@ -1,8 +1,8 @@
 
 
-# -----------------------------------
+
 # Explore bark beetle data
-# -----------------------------------
+
 
 # Notes from data exploratory:
 
@@ -12,14 +12,14 @@
 # trap_n = 3 exlude! 
 
 
-
+# Input ------------------------------------
 
 rm(list=ls()) 
 
 
 source('myPaths.R')
 
-# Libs -----------------------------------------------------------
+### Libs -----------------------------------------------------------
 library(lubridate)
 library(dplyr)
 library(sf)
@@ -35,7 +35,7 @@ library(scales)
 library(viridis)
 
 
-# get data
+### get data -----------------------------------
 path = 'C:/Users/ge45lep/Documents/2022_BarkBeetles_Bavaria/rawData/Fwd__Borkenkäferforschung__Datentransfer'
 out_path = 'C:/Users/ge45lep/Documents/2022_BarkBeetles_Bavaria'
 
@@ -49,7 +49,7 @@ doy.start  =  91 # April 1st
 doy.end    = 304 # Oct 30
 veg.period = doy.start:doy.end
 
-# Read XY coordinates -----------------------------------------------------------
+## Read XY coordinates -----------------------------------------------------------
 # need to save the csv fil as a new file, otherwise it did not work
 # or use teh  version 3: now it worked with the original one! 
 xy <- read.table(paste(path, "BoMo_Fallenstandorte_Lage_Laufzeit.csv", sep = '/'), 
@@ -81,7 +81,7 @@ xy_sf <-
 
 unique(xy_sf$falsto_name)
 
-# Get beetle count data -------------------------------------------------------------- 
+# Beetle data processing -------------------------------------------------------------- 
 
 # Change name of the table
 # for dat
@@ -99,8 +99,7 @@ dat$kont_dat <- as.Date(dat$kont_dat)
 
 #str(dat)
 
-# Species:
-# -----------------------------------
+# Species: 
 # Buchdrucker  : Ips typographus 
 # Kupferstecher: Pityogenes chalcographus   
 
@@ -136,7 +135,7 @@ nrow(dat) # >73.000 rows
 length(unique(dat$falsto_name)) # 302 traps
 
 
-# REname falsto_name trap to merge with sf data ------------------------------------------ 
+# REname falsto_name trap to merge with sf data 
 # replace all spaces by '_', get trap_pair number 
 dat <- dat %>% 
   mutate(falsto_name = gsub(' ', '_', falsto_name)) %>% 
@@ -191,7 +190,7 @@ dat %>%
 
 
 
-# Standardize beetle counts/trap/year --------------------------------------------------------------------
+## Standardize beetle counts/trap/year --------------------------------------------------------------------
 
 
 # Get average count of beetles per trap: 
@@ -241,7 +240,8 @@ ips.year.avg %>%
     filter(falsto_name == "Brunnthal_1") %>% 
     filter(year == 2016:2017) 
   
-# 12 locations of zero beetles for IPS: -----------------------------------------
+# Filter beetle data 
+  # 12 locations of zero beetles for IPS: 
 # ips.year.avg %>% 
 #   filter(globalid == "9A355BAA-43CC-4004-BFF8-8A3BEF2C1263") %>% 
 #   filter(art == 'Buchdrucker')
@@ -270,7 +270,7 @@ ips.year.avg %>%
 
 
 
-# Inspect data ------------------------------------------------------------
+## Inspect data ------------------------------------------------------------
 
 # check for zeros presence - present! 
 # how many zeros I have for sum beetles per trap?? - if 0 beetles over whole year, it is suspicious..
@@ -279,7 +279,7 @@ ips.year.avg %>%
 #  - set dates: April 1st (DOY 91, DOY 92 lap year) to Oct 31  (304) - from Phenips
 #  - check revisit times: exclude if traps not collecte reularly! (eg. 10 times over the season: April 1st to Oct 30)
 
-# Filter traps: -------------------------------------------------------------- 
+# Filter traps:
 # 1) by 0 sum beetles per year
 # 2) by low revisit frequency - once per year
 
@@ -321,7 +321,7 @@ ips.year.avg %>%
 
 
 
-# Clean data: IPS ---------------------------------------------------------
+## Clean data: IPS ---------------------------------------------------------
 # - keep only IPS
 # - vegetation period: doy
 # - years: 2015-2021
@@ -411,14 +411,20 @@ df %>%
 #   mutate(cumsum_doy = cumsum(avg_day_count)) %>% 
 #   View()
 
-# find DOY when the cumsum overpasses values: 2000, 5000 beetles per season
-ips_cumul <- df.daily %>% 
+# find DOY when the cumsum overpasses values: XX beetles per season
+# Warning levels from fovgis: 
+# per week: 1000 beetles - warning: expected spread
+#           3000 beetles - danger: high risk of standing infestation
+#           5000 beetles
+beetle_threshold = 5000
+
+ips.aggreg <- df.daily %>% 
   group_by(year, falsto_name) %>% 
   arrange(doy) %>% 
-  filter(cumsum > 1000) %>%
+  filter(cumsum > beetle_threshold) %>%
   filter(row_number()==1)     # filter first record per group > 2000
   
-ips_cumul %>% 
+ips.aggreg %>% 
   ggplot(aes(y=doy,
              x = year,
              group = year)) +
@@ -427,8 +433,11 @@ ips_cumul %>%
 
 
 
+
+# Plots -------------------------------------------------------------------
+
  
-# check plot of differences: ---------------------------------------
+## Daily increases: ---------------------------------------
 # compare counts by groups:
 p_count_diff <- df.daily %>% 
   ggplot(aes(y = diff,
@@ -447,45 +456,7 @@ p_count_diff <- df.daily %>%
 #windows()
 hist(df.daily$avg_day_count)
 
-# convert data for counts on 1 and counts on 2: ---------------------
-# df1 <-dat.ips.clean %>% 
-#   filter(trap_pair == 1 ) %>% 
-#   dplyr::select(monsto_name, year, month, doy, fangmenge, art)
-# 
-# df2 <-dat.ips.clean %>% 
-#   filter(trap_pair == 2 ) %>% 
-#   dplyr::select(monsto_name, year, month, doy, fangmenge, art)
-# 
-# # merge df1 & df2
-# dd <- df1 %>% 
-#   left_join(df2, by = c("monsto_name", "year", "month", "doy", "art"))
-# 
-# 
-# # aggeraget by months instead of teh DOY:
-# dd_sum <- 
-#   dd %>% 
-#   group_by(year, month, monsto_name) %>% 
-#   summarise(trap1 = sum(fangmenge.x),
-#             trap2 = sum(fangmenge.y)) %>%
-#   ungroup() %>%
-#   filter(complete.cases(.))
-# 
-# 
-# ## visualize trap1 vs trap2 ----------------------------------------
-# ggplot(dd_sum, aes(x = trap1, 
-#                        y = trap2)) +
-#   geom_point()+
-#   geom_smooth(method = 'lm')
-# 
-# 
-# m_lm <- lm(trap1~trap2, dd_sum)
-# summary(m_lm)
-# 
-# 
-# m_glm <- glm(trap1~trap2, dd_sum, family = poisson)
-# summary(m_glm)
-# plot(m_gam, 1)
-# 
+
 
 # Export XY and DAT table -------------------------------------------------
 
@@ -493,11 +464,6 @@ hist(df.daily$avg_day_count)
 # and only one globalid per trap
 trap_names    <- unique(dat.ips.clean$falsto_name)
 trap_names_sf <- unique(xy_sf$falsto_name)
-
-
-# compare two vectors
-a <- c("a", "b", 'c')
-b <- c("a", "b", 'd')
 
 intersect(trap_names,trap_names_sf)
 
@@ -526,6 +492,9 @@ xy_sf_fin %>%
 # export RAW data
 # data.table::fwrite(dat, paste(out_path, 'outSpatial/dat.csv', sep = "/"))
 
+
+
+# Prepare for map -------------------------------------------------------
 
 
 # get the summary IPS data to merge with XY coordinates!  
@@ -573,7 +542,7 @@ ggplot(bav_sf) +
   theme_void()
 
 # Max increase in counts per year & trap ----------------------------------------------------
-# find min DOY of the max diff per year and location: plot on map ----------------
+# find min DOY of the max diff per year and location: plot on map 
 max.diff.doy <- df.daily %>% 
   group_by(year, falsto_name) %>% 
   slice(which.max(diff))
@@ -582,9 +551,15 @@ max.diff.doy.sf <- xy_sf_fin %>%   # to keep the sf structure, need to add df to
   right_join(max.diff.doy, 'falsto_name')
 
 
-unique(max.diff.doy.sf$falsto_name)
+# Get spatial data: cumulative DOY -----------------------------
+ips.aggreg.sf <- xy_sf_fin %>%   # to keep the sf structure, need to add df to sf
+  right_join(ips.aggreg, 'falsto_name')
 
-# check range DOY:
+
+
+
+
+### Table: Max increase check range DOY: -------------------------------------
 max.diff.doy %>% 
   as.data.frame() %>% 
   group_by(year) %>% 
@@ -623,7 +598,18 @@ df.daily %>%
 
 
 
-# facet map plots -------------------------------------------------------------------
+ips.aggreg %>% 
+  as.data.frame() %>% 
+  group_by(year) %>% 
+  dplyr::summarise(min    = min(doy),
+                   max    = max(doy),
+                   mean   = mean(doy),
+                   sd     = sd(doy),
+                   cv     = sd/mean,
+                   median = median(doy))
+
+
+# Maps facet  -------------------------------------------------------------------
 ## overall: DOY f max increase
 p_doy_max_increase <- ggplot(bav_sf) +   # base map
   geom_sf(color = 'black', 
@@ -681,19 +667,44 @@ p_diff_doy <- max.diff.doy %>%
              y = diff,
              color = factor(year)))+
   geom_point() +
-  facet_grid(year~.) +
+  facet_wrap(year~.) +
   ylab('Max increase of beetle counts\n[diff]') +
   theme_bw()
   
 
 
 #DOY
+# 91-92 April 1st (92 in lap year, etc)
 # 100 April 10
 # 150 May 30
 # 200 July 19
 # 211 July 30
 # 250 SEpt 7
 
+# 1. beetle sume per year
+ips.year.sum
+
+
+p_ips.year.sum <- ggplot(data = ips.year.sum,
+                             aes(x = year, 
+                                 y = sum_ips  )) + 
+  # Add bars as medians
+  stat_summary(fun = "median", 
+               geom = "bar", 
+               alpha = .7) +
+  stat_summary(
+    data = ips.year.sum,
+    mapping = aes(x = year, 
+                  y = sum_ips  ),
+    fun.min = function(z) { quantile(z,0.25) },
+    fun.max = function(z) { quantile(z,0.75) },
+    fun = median,
+    geom  = 'errorbar',
+    width = .2) +
+  ggtitle("Beetle sum/year") + 
+  theme_bw()
+
+p_ips.year.sum
 
 # 2.population increase -------------------------------------------------------------
 ggplot(bav_sf) +   # base map
@@ -717,14 +728,67 @@ ggplot(bav_sf) +   # base map
        size = "Ips increase [day/trap]")
 
 
-# two aspects: the max increase in season
-#              the size of population
+# three aspects: the max increase in season
+#                the size of population
+#                beetle aggregations: DOY of getting beetle_threshold beetles per trap
 # driver: previous year population??
 
 
 
 
+## 3. Aggeragte beetle numbers (beetle_threshold per trap) IPS -------------------------------
+lab_doy_cumulative = paste('DOY of cumulative ', beetle_threshold)
 
+p_aggreg <- 
+  ggplot(bav_sf) +   # base map
+  geom_sf(color = 'black', 
+          fill  = 'grey80') + 
+  geom_sf(data = filter(ips.aggreg.sf, doy < 150),
+          aes(color = doy,
+              size  = doy
+          )
+  ) + 
+  scale_color_viridis(name = lab_doy_cumulative, #paste('DOY of cumulative ', beetle_threshold),
+                      alpha = 0.8,
+                      option = 'magma',
+                      direction = 1,
+                      na.value = 'transparent') +
+  scale_size(trans = 'reverse') +
+  theme_void() +
+  facet_wrap(~year) +
+  xlab("Longitude") + 
+  ylab("Latitude") +
+  labs(title = paste('Beetle aggregation ', beetle_threshold),
+       subtitle = 'doy <150',
+       color  = "DOY",
+       size = "DOY")
+
+(p_aggreg)
+
+
+ips.aggreg
+
+
+# barplot with medians + IQR
+p_ips.agg <- ggplot(data = ips.aggreg,
+       aes(x = year, 
+           y = doy)) + 
+  # Add bars as medians
+  stat_summary(fun = "median", 
+               geom = "bar", 
+               alpha = .7) +
+  stat_summary(
+    data = ips.aggreg,
+    mapping = aes(x = year, 
+                  y = doy),
+    fun.min = function(z) { quantile(z,0.25) },
+    fun.max = function(z) { quantile(z,0.75) },
+    fun = median,
+    geom  = 'errorbar',
+    width = .2) +
+  ggtitle(paste("DOY of reaching", beetle_threshold,  "beetles")) + 
+  theme_bw()
+  #coord_cartesian(ylim=c(60, 67)) # ylim=c(59,66)
 
 # Coefficient of variation:  -------------------------------------------------------
 
@@ -765,21 +829,82 @@ max.diff.doy %>%
 
 
 
+# DOY max increase: barplot + medians
+
+p_ips.max.diff.doy <- ggplot(data = max.diff.doy,
+                    aes(x = year, 
+                        y = doy)) + 
+  # Add bars as medians
+  stat_summary(fun = "median", 
+               geom = "bar", 
+               alpha = .7) +
+  stat_summary(
+    data = max.diff.doy,
+    mapping = aes(x = year, 
+                  y = doy),
+    fun.min = function(z) { quantile(z,0.25) },
+    fun.max = function(z) { quantile(z,0.75) },
+    fun = median,
+    geom  = 'errorbar',
+    width = .2) +
+  ggtitle("DOY of max increase") + 
+  theme_bw()
 
 
-# Save selected dfs in R object: ------------------------------------------------------------
-save(trap_names,                 # vec of final trap names (79*2)
+
+# DOY max increase: amount of beetles
+p_ips.max.diff <- ggplot(data = max.diff.doy,
+                             aes(x = year, 
+                                 y = diff)) + 
+  # Add bars as medians
+  stat_summary(fun = "median", 
+               geom = "bar", 
+               alpha = .7) +
+  stat_summary(
+    data = max.diff.doy,
+    mapping = aes(x = year, 
+                  y = diff),
+    fun.min = function(z) { quantile(z,0.25) },
+    fun.max = function(z) { quantile(z,0.75) },
+    fun = median,
+    geom  = 'errorbar',
+    width = .2) +
+  ggtitle("Max increase (diff in #beetles)") + 
+  theme_bw()
+
+
+
+
+# Save  ------------------------------------------------------------
+save(trap_names,                 # vector of final trap names (79*2)
      df.daily,                   # avg daily beetle counts (adjusted by revisit times), over DOY 
     # ips.year.avg,               # sum & avg number per beetles/trap per vegetation season (), over whole year
      ips.year.sum,               # simple beetle sum per trap
      ips.year.sum_sf,            # simple beetl sum per trap sf
-     dat.ips.clean,              # filtered raw IPS counts
+     dat.ips.clean,              # cleaned IPS counts (only consisten trap selected, checked for revisit time,...)
      max.diff.doy,               # max increase in beetle counts per DOY
      max.diff.doy.sf,            # sf: max increase in beetle counts per DOY
-     p_count_diff,               # plot: difference in beetle daily counts  
-     p_doy_max_increase,         # map: all locations
+     
+    p_ips.max.diff.doy,          # barplot + med, max diff by doy
+    p_ips.max.diff,              # # barplot + med, max diff
+    
+    p_count_diff,               # plot: difference in beetle daily counts  
+    
+    ips.aggreg,                  # beetle agregation per trap: DOY of overpassing XX beetles 
+    ips.aggreg.sf,               # sf
+    
+    # Vars
+    doy.start, #  =  91 # April 1st
+    doy.end, #    = 304 # Oct 30
+    veg.period,#   = doy.start:doy.end
+    
+    p_ips.agg,                  # plot: DOY of XX beetles
+    
+    p_doy_max_increase,         # map: all locations
      p_doy_max_increase150,      # map: filter early locations
      p_diff_doy,                 # scatter plot per year
+     p_aggreg,                   # map: locations of beetle aggreg values by DOY
+    p_ips.year.sum,              # plot: sum beetles barplot per year
      file="outData/ips.Rdata")
 
 
