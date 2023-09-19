@@ -63,6 +63,9 @@ load("outData/spatial.Rdata")
 # - max.diff.doy       # get DOY of max increase
 # - ips.year.sum       # sum beetles/year per trap
 
+# Vars
+n_neighbors = 10      # number of nearest neighbors
+
 # Spatial data: 
 # should have 158 regions (trap pairs)
 sort(unique(xy_sf_fin$falsto_name))
@@ -99,7 +102,7 @@ get_lisa <- function(i, ...) {
   #
   #  # Create queen contiguity neighbors object
   nb <- knn2nb(knearneigh(coordinates(ips_sum_sub),
-                          k = 1),  # nearest neighbor
+                          k = n_neighbors),  # nearest neighbor
                sym = TRUE)
   
   #  # Calculate LISA
@@ -155,7 +158,7 @@ p_lisa_all <- ggplot() +
 lisa_merged_df <- as.data.frame(lisa_merged)
 
 
-#lisa_merged_df_all <- 
+p_lisa_freq <- 
   lisa_merged_df %>%
   group_by(clust, year) %>% 
     dplyr::summarize(freq = n()) %>%
@@ -166,15 +169,15 @@ lisa_merged_df <- as.data.frame(lisa_merged)
     
 
 
-# 
+
+
+
+
   
-
-
-
-
-
-
-  # Example for single years
+# LISA single year -----------------------------------------------------------------
+# Local variation analysis (LISA):
+  # can be done per year
+  
 
 ips_sum_15 <-ips_sum %>% 
   filter(year == 2015)
@@ -183,12 +186,6 @@ ips_sum_15 <-ips_sum %>%
 ips_sum_20 <-ips_sum %>% 
   filter(year == 2020)
 
-# LISA -----------------------------------------------------------------
-# Local variation analysis (LISA):
-# can be done per year
-
-
-# Get LISA: 
 
 # Create a spatial points data frame
 coordinates(ips_sum_15) <- ~ x + y
@@ -196,10 +193,10 @@ coordinates(ips_sum_20) <- ~ x + y
 
 # Create queen contiguity neighbors object
 nb_15 <- knn2nb(knearneigh(coordinates(ips_sum_15),
-                           k = 1),  # nearest neighbor
+                           k = n_neighbors),  # nearest neighbor
                 sym = TRUE)
 nb_20 <- knn2nb(knearneigh(coordinates(ips_sum_20),
-                           k = 1),  # nearest neighbor
+                           k = n_neighbors),  # nearest neighbor
                 sym = TRUE)
 
 
@@ -237,28 +234,14 @@ ips_sum_15_sf <- st_as_sf(ips_sum_15)
 
 
 
-
-ggplot() +
-  geom_sf(data = ips_sum_15_sf, 
-          aes(#x = x, 
-            #y = y, 
-            color = cl_mean)) +
- # scale_color_gradient(low = "white", 
-#                       high = "red", 
-#                       name = "Moran's I") +
-  theme_void() +
-  ggtitle('LISA: Moran I')
-
-
-
 # Global Moran =================================================================
 
 # get more distant neighbors:
 nb_g_15 <- knn2nb(knearneigh(coordinates(ips_sum_15),
-                             k = 20),  # nearest neighbor
+                             k = n_neighbors),  # nearest neighbor
                   sym = TRUE)
 nb_g_20 <- knn2nb(knearneigh(coordinates(ips_sum_20),
-                             k = 20),  # nearest neighbor
+                             k = n_neighbors),  # nearest neighbor
                   sym = TRUE)
 
 
@@ -267,3 +250,249 @@ global_moran_15 <- moran.test(ips_sum_15$sum_beetle, nb2listw(nb_g_15) )
 global_moran_20 <- moran.test(ips_sum_20$sum_beetle, nb2listw(nb_g_20) )
 
 # !!!
+# for all years:
+
+
+get_global_moran <- function(i, ...) {
+  
+  #  # Slice specific year
+  ips_sum_sub <-ips_sum %>%
+    filter(year == i)
+  #
+  #  # Global Moran's per year:
+  #  # Create a spatial points data frame
+  coordinates(ips_sum_sub) <- ~ x + y
+  #
+  #  # Create queen contiguity neighbors object
+  nb <- knn2nb(knearneigh(coordinates(ips_sum_sub),
+                          k = n_neighbors),  # nearest neighbor
+               sym = TRUE)
+  
+  #  # Calculate Global Moran's I
+  global_moran_res <- moran.test(ips_sum_sub$sum_beetle, nb2listw(nb) )
+  #
+  # export as df
+  df <- data.frame(year = i,
+                   stat = global_moran_res$statistic,
+                   p_val = global_moran_res$p.value )
+  
+  # export table with results
+  return(df)
+}
+
+# Run Global mora on all years separately
+global_moran_out <- lapply(years, get_global_moran )
+
+# Merge all in one sf
+glob_merged <- dplyr::bind_rows(global_moran_out)
+
+
+
+
+# Get variograms: -----------------------------------------------------------------
+
+library(gstat)
+
+
+# how to make a function, with output raw data and model?? for each year??
+# get only raw date, the models need to be done visually: adjust sill, nugget and range
+get_variogram <- function(i, ...) {
+  
+  #  # Slice specific year
+  ips_sum_sub <-ips_sum %>%
+    filter(year == i)
+  #
+  #  # Global Moran's per year:
+  #  # Create a spatial points data frame
+  coordinates(ips_sum_sub) <- ~ x + y
+ 
+  # export as df
+  variogram_raw <- variogram(log10(sum_beetle)  ~ 1, 
+                             cutoff=cutoff,
+                             data = ips_sum_sub)  # all directions are assumed equal
+  # add year
+  variogram_raw$year = i
+  
+   # export table with results
+  return(variogram_raw)
+}
+
+
+# Run on all years separately
+variogram_out <- lapply(years, get_variogram )
+
+# Merge all in one sf
+var_merged <- dplyr::bind_rows(variogram_out)
+
+
+# plot
+ggplot(var_merged,aes(x = dist/1000,
+                      y = gamma,
+                      color = year)) +
+  geom_point() #+
+ # geom_line() 
+
+
+
+
+
+
+
+# Load dataset sliced by year 
+
+# 2015
+ips_sum_15 <-ips_sum %>% 
+  filter(year == 2015)
+
+
+# Create a spatial points data frame
+coordinates(ips_sum_15) <- ~ x + y
+
+
+#data(ips_sum_15)
+
+# Create a "SpatialPointsDataFrame" object
+#coordinates(your_data) <- c("X", "Y")
+
+# Define the variogram model
+windows()
+
+cutoff = 300000
+
+variogram_raw_directions <- variogram(log10(sum_beetle)  ~ 1, 
+                             data = ips_sum_15,  
+                             alpha = c(0, 45, + 90, 135)) # check different directions (angles)
+
+variogram_raw <- variogram(log10(sum_beetle)  ~ 1, 
+                             cutoff=cutoff,
+                             data = ips_sum_15)  # all directions are assumed equal
+
+
+# Plot the semivariogram
+plot(variogram_raw)
+
+# plot variogram cloud:
+variogram_cloud <- variogram(log10(sum_beetle)~1, data=ips_sum_15, 
+                             cutoff=cutoff,width = 5000, cloud=TRUE)
+
+plot(variogram_cloud)
+
+# Fit a variogram model (spherical model in this example)
+# show different functions: 
+show.vgms(par.strip.text=list(cex=0.75))
+
+m1 <-  fit.variogram(variogram_raw, vgm(1, 'Sph', 1), fit.kappa = TRUE)
+
+m2 <-  fit.variogram(variogram_raw, 
+                     vgm(psill = 0.2, model="Cir", range = 200000, nugget = 0.11))
+
+
+# Plot the fitted semivariogram
+plot(variogram_raw, # raw data 
+     m2,            # fitted model 
+     main = "Fitted Semivariogram", cutoff = cutoff)
+
+# Print the model parameters
+print(m2)
+
+# 2020 
+
+ips_sum_20 <-ips_sum %>% 
+  filter(year == 2020)
+
+
+# Create a spatial points data frame
+coordinates(ips_sum_20) <- ~ x + y
+
+
+#data(ips_sum_15)
+
+# Create a "SpatialPointsDataFrame" object
+#coordinates(your_data) <- c("X", "Y")
+
+# Define the variogram model
+windows()
+
+cutoff = 300000
+
+variogram_raw_directions <- variogram(log10(sum_beetle)  ~ 1, 
+                                      data = ips_sum_20,  
+                                      alpha = c(0, 45, + 90, 135)) # check different directions (angles)
+
+variogram_raw <- variogram(log10(sum_beetle)  ~ 1, 
+                           cutoff=cutoff,
+                           data = ips_sum_20) # check different directions (angles)
+
+
+# Plot the semivariogram
+plot(variogram_raw)
+
+# plot variogram cloud:
+variogram_cloud <- variogram(log10(sum_beetle)~1, data=ips_sum_15, 
+                             cutoff=cutoff,width = 5000, cloud=TRUE)
+
+plot(variogram_cloud)
+
+# Fit a variogram model (spherical model in this example)
+# show different functions: 
+
+m2 <-  fit.variogram(variogram_raw, 
+                     vgm(psill = 0.2, model="Lin", range = 200000, nugget = 0.11))
+
+
+# Plot the fitted semivariogram
+windows()
+plot(variogram_raw, m2, main = "Fitted Semivariogram", cutoff = cutoff)
+
+
+# Humblt: fitting variograms: https://gsp.humboldt.edu/olm/R/04_01_Variograms.html
+
+
+# Example ----------------------
+# eye-ball modell fitting
+
+
+
+library(geoR)
+library(sf)
+
+library(sp)        # for meuse dataset
+
+library("gstat")   # geostatistics
+library("mapview") # map plot
+library("sf")      # spatial vector data
+library("stars")   # spatial-temporal data
+library("terra")   # raster data handling 
+library("ggplot2") # plotting
+mapviewOptions(fgb = FALSE)
+
+meuse <- ips_sum_15 #read_sf('data/meuse.gpkg')
+v.eye <- eyefit(variog(as.geodata(meuse["sum_beetle"]), max.dist = 10000))
+ve.fit <- as.vgm.variomodel(v.eye[[1]])
+
+
+# from WSL
+
+library(gstat)
+# https://gsp.humboldt.edu/olm/R/04_01_Variograms.html
+
+library(sp)
+data(meuse)
+# no trend:
+coordinates(meuse) = ~x+y
+plot(variogram(log(zinc)~1, meuse))
+
+
+
+# Save outputs ------------------------------------------------------------
+
+
+
+save(p_lisa_sub, 
+     p_lisa_all,
+     glob_merged,
+     file = "outData/lisa.Rdata")
+
+
+
+
