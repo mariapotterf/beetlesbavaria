@@ -54,6 +54,7 @@ load("outData/spatial.Rdata")
 # Get beetle counts - corrected, instead of previous 'dat'
 # - dat.ips.clean      # dat <- fread(paste(myPath, outFolder, "dat.csv", sep = "/"))
 # - max.diff.doy       # get DOY of max increase
+# - ips.aggreg         # get DOY of max increase
 # - ips.year           # sum beetles/year, avg/betles/year per trap
  
 # Spatial data: 
@@ -62,10 +63,12 @@ load("outData/spatial.Rdata")
 #!!! need to filter data for my 158 fin traps!!!!!!!!
 
 # Get SPEI and clim data: they are for whole year! check only veg season?
-df_spei   <- fread(paste(myPath, outTable, 'xy_spei.csv', sep = '/'))
-df_prec   <- fread(paste(myPath, outTable, 'xy_precip.csv', sep = '/'))
-df_temp   <- fread(paste(myPath, outTable, 'xy_temp.csv', sep = '/'))
-df_swvl   <- fread(paste(myPath, outTable, 'xy_clim.csv', sep = '/')) # need to filter soils volume content index!
+df_spei       <- fread(paste(myPath, outTable, 'xy_spei.csv', sep = '/'))
+df_prec       <- fread(paste(myPath, outTable, 'xy_precip.csv', sep = '/'))
+df_temp       <- fread(paste(myPath, outTable, 'xy_temp.csv', sep = '/'))
+df_clim_ERA   <- fread(paste(myPath, outTable, 'xy_clim.csv', sep = '/')) # need to filter soils volume content index!
+df_clim_ERA_ID<- fread(paste(myPath, outTable, 'xy_clim_IDs.csv', sep = '/')) # get the ID to join falsto_name
+
 
 
 # Get coniferous cover data: coniferous == 2! 
@@ -76,11 +79,6 @@ df_spruce <- fread(paste(myPath, outTable, 'xy_spruce.csv', sep = '/'))
 # Get geo data: elevation, slope, roughness...
 xy_topo      <- vect(paste(myPath, outFolder, "xy_3035_topo.gpkg", sep = "/"), 
                   layer = 'xy_3035_topo') # read trap location
-# convert to DF
-df_topo <- as.data.frame(xy_topo)
-df_topo <- df_topo %>% 
-  dplyr::select(c('globalid', 'elev','slope', 'aspect', 'tpi', 'tri', 'roughness'))
-  #dplyr::select(globalid:roughness)
 
 
 # Get climate data for traps: --------------------------------------------------
@@ -90,13 +88,31 @@ xy_df <- data.frame(x = sf::st_coordinates(xy_sf_fin)[,"X"],
                     globalid =    xy_sf_fin$globalid)
 
 # get the final subset of globalids
-trap_globid <- unique(xy_df$globalid)
+trap_globid <- unique(xy_df$globalid)  # 158, selected
+
+
+# convert to DF
+df_topo <- as.data.frame(xy_topo)
+df_topo <- df_topo %>% 
+  filter(globalid %in% trap_globid) %>% 
+  dplyr::select(c('globalid', 'elev','slope', 'aspect', 'tpi', 'tri', 'roughness')) %>% 
+  full_join(xy_df %>% dplyr::select(falsto_name, globalid))
+#dplyr::select(globalid:roughness)
+
+
+# create ID to match the extracted soil data (NCDF)
+#xy_sf_fin$ID = 1:nrow(xy_sf_fin)
+
 
 
 # Filter soil drought : soil water content
-df_swvl
+df_swvl <- df_clim_ERA %>% 
+  filter(var == "swv") %>% 
+  full_join(df_clim_ERA_ID, by = 'ID')
 
+#View(df_swvl)
 
+length(unique(xy_df$globalid))
 
 # Do neighboring traps correlate in beetle numbers? --------------------------
 head(dat.ips.clean)
@@ -114,8 +130,15 @@ df_temp <- df_temp %>%
 
 # select only coniferous: == 2, 0 is no forest (eg. covers the whole 500 m buffer)
 df_conif <- df_tree %>% 
-  filter(species == 2)
+  filter(species == 2 ) %>% 
+  filter(globalid %in% trap_globid) %>% 
+  full_join(xy_df %>% dplyr::select(falsto_name, globalid))
 
+# species = 2 = conif
+# species_n = how many cells are coniferous
+# freq = what is share of spruce
+
+length(unique(df_conif$globalid))
 
 # plot TEMP and SPEI --------------------------------------------------------
 df_spei <- df_spei %>%
@@ -123,14 +146,14 @@ df_spei <- df_spei %>%
   separate(date, c('month', 'year')) %>%
   mutate(month = as.numeric(month),
          year = as.numeric(year)) %>%
-  filter(year > 2013)
+  filter(year > 2014)
 
 # check scales -----------------------------------------------------------------
 unique(df_spei$scale)
 spei_scale = 12  # visually tested all '1,3,6,12', and the most contrasting is spei12:
 # very low 2016, and 2014-2015m 2017-2018
 
-df_spei %>% 
+p_spei12<- df_spei %>% 
   filter(scale == spei_scale) %>% 
   ggplot(aes(x = factor(year),
              y = Series.1)) +
@@ -147,13 +170,12 @@ df_spei %>%
 # SPEI plot on map: ----------------------------------------------
 df_spei_avg <- df_spei %>% 
   filter(scale == spei_scale) %>%
-  #filter(year > 2014) %>% 
   group_by(globalid, year ) %>% 
   summarize(spei_med = median(Series.1))
            
 
 # merge SPEI data
-df_spei_avg_sf <- xy_sf %>% 
+df_spei_avg_sf <- xy_sf_fin %>% 
   right_join(df_spei_avg, 'globalid') 
 
 
@@ -172,8 +194,9 @@ p_spei12_bav <- ggplot(bav_sf) +
                         palette = "RdBu", 
                         direction = 1, 
                         "SPEI") + 
-  facet_wrap(.~year, ncol = 4) + 
-  theme_void()
+  facet_wrap(.~year) +  # , ncol = 4 
+  theme_void() +
+  labs(subtitle = '')
 
 
 
@@ -244,53 +267,86 @@ df_spei %>%
 
 
 # join PREC, TEMP, SPEI data --------------------------------------------------
+df_swvl_sub <- df_swvl %>% 
+  dplyr::select(value, falsto_name, month, year) %>% 
+  rename(swvl = value)
+
+# add SWVL - now only from 2015, not from 2000 as the others
 df_clim <- df_prec %>% 
   full_join(df_temp,  by = c("globalid", "month", "year")) %>% 
-  full_join(df_spei_all, by = c("globalid", "month", "year")) #%>% 
+  full_join(df_spei_all, by = c("globalid", "month", "year")) %>%
+  full_join(xy_df, by = c("globalid")) %>% 
+  full_join(df_swvl_sub, by = c("falsto_name", "month", "year")) %>%
+  dplyr::filter(globalid %in% trap_globid)
 
-
-
+length(unique(df_clim$globalid))
 
 # Boxplots: TEMP and PRCP -------------------------------------------------
+# calculate mean summer season values over year
+temp_mean = 
+  df_temp %>%
+  filter(month %in% 4:10) %>%
+  as.data.frame() %>% 
+  dplyr::summarize(avg = mean(TMED)) %>%
+  pull()
+
+prec_mean = 
+  df_prec %>%
+  filter(month %in% 4:10) %>%
+  as.data.frame() %>% 
+  dplyr::summarize(avg = mean(PRCP)) %>%
+  pull()
 
 
+# make plots per year
 p_temp <- df_temp %>% 
-  filter(year> 2013) %>% 
+  filter(month %in% 4:10 & year %in% 2015:2021) %>% 
   ggplot(aes(x = factor(year),
              y = TMED)) +
   geom_boxplot(outlier.shape = 1, 
                fill = 'lightgrey'  ) +
-  geom_hline(yintercept = mean(df_temp$TMED), col="red") +
+  geom_hline(yintercept = temp_mean, col="red") +
   #geom_hline(yintercept = -1, lty = 'dashed') +
   theme_bw() + 
   theme(axis.text.x = element_text(angle = 90))
 
 p_prec <- df_prec %>% 
-  filter(year> 2013) %>% 
+  filter(month %in% 4:10 & year %in% 2015:2021) %>% 
   ggplot(aes(x = factor(year),
              y = PRCP)) +
-  geom_boxplot(outlier.shape = 1, fill = 'lightgrey', size = 0.5 ) +
-  geom_hline(yintercept = mean(df_prec$PRCP), col="red") +
+  geom_boxplot(outlier.shape = 1, 
+               fill = 'lightgrey', 
+               size = 0.5 ) +
+  geom_hline(yintercept = prec_mean, col="red") +
   #geom_hline(yintercept = -1, lty = 'dashed') +
   theme_bw() + 
   theme(axis.text.x = element_text(angle = 90))
 
 
-ggarrange(p_temp, p_prec)
+ggarrange(p_temp, p_prec, p_spei12, ncol = 3)
 
 
+# DOY aggregation  --------------------------------------------------------
+
+df_swvl_year <- df_swvl %>% 
+  ungroup(.) %>% 
+  group_by(year, falsto_name) %>% 
+  dplyr::summarize(swvl = max(value, na.rm = T)) # , .groups = falsto_name
+
+
+# merge soils drought with beetle counts
+df_swvl_year %>% 
+  full_join(dplyr::select(ips.aggreg, 
+                          c(doy, year, falsto_name))) %>% 
+  ggplot(aes(x = swvl,
+             y= doy)) +
+  geom_point(alpha = 0.5) +
+  facet_wrap(year~.)
+  
 
 
 # Check if there is any trends in beetles numbers? -----------------------------------------
 # effect: location, effect within year, between years, between locations:
-
-head(dat.ips.clean)
-str(dat.ips.clean)
-
-dat.ips.clean$globalid <- factor(dat.ips.clean$globalid)
-
-length(unique(dat.ips.clean$globalid))
-
 
 
 
@@ -301,30 +357,30 @@ length(unique(dat.ips.clean$globalid))
 df_clim_veg <- df_clim %>% 
   filter(year > 2014 & year < 2022  ) %>% 
   filter(month %in% 4:10) %>% # vegetation period: April 1 - Oct 31
-  group_by(globalid, year) %>% 
+  group_by(falsto_name, year) %>% 
   summarise(prec = mean(PRCP),
             temp = mean(TMED),
+            swvl = mean(swvl),
             spei1 = mean(spei1, na.rm = T),
             spei3 = mean(spei3, na.rm = T),
             spei6 = mean(spei6, na.rm = T),
             spei12 = mean(spei12, na.rm = T)
-            ) %>% 
-  filter(globalid %in% trap_globid) # filter only the the one globalid per trap 
+            )
 
-
+length(unique(df_clim_veg$falsto_name))
 # DOY of max increase  --------------------------------------------------------------
 v_predictors <- c('year', # if analyse predictors, 'year' needs to be removed! 
-  'temp', 'prec', 
+  'temp', 'prec', 'swvl',
                   'spei1', 
                   'spei3', 'spei6', 'spei12', 
                   'elev', 'slope', 'aspect', 'tpi', 'tri', 'roughness')
 
 df_predictors_doy <-
   max.diff.doy %>% 
-  left_join(df_clim_veg, by = c("globalid", "year")) %>% # , "month" 
-  left_join(df_conif , by = c("globalid")) %>% 
-  #left_join(df_xy, by = c("globalid", 'x', 'y')) %>% # df_xy3035
-  left_join(df_topo, by = c("globalid")) %>% #mutate(year = as.factor(as.character(year)))
+  left_join(df_clim_veg, by = c("falsto_name", "year")) %>% # , "month" 
+  left_join(df_conif , by = c("falsto_name")) %>% 
+  #left_join(df_xy, by = c("falsto_name", 'x', 'y')) %>% # df_xy3035
+  left_join(df_topo, by = c("falsto_name")) %>% #mutate(year = as.factor(as.character(year)))
   ungroup(.) %>% 
   dplyr::select_if(is.numeric) %>% 
   # keep only predictors for multicollinearity analysis:
@@ -333,15 +389,23 @@ df_predictors_doy <-
                 'cumsum',
                 all_of(v_predictors)))    
 
+
+# Get overal plots of all predictors by site:
+# density plot + points()
+
+summary(df_predictors_doy)
+
+
+
 # get correlation coefficient across all predictors:------------------------------
 # (to run this, need to remove the y-vars from above: doy, diff, cumsum!)
 # http://www.sthda.com/english/wiki/correlation-matrix-a-quick-start-guide-to-analyze-format-and-visualize-a-correlation-matrix-using-r-software
-preds.res <- cor(df_predictors, use = "complete.obs")
+preds.res <- cor(df_predictors_doy, use = "complete.obs")
 round(preds.res, 2)  # simplify visualization
 
 # p-values are missing: get them from different package:
 library("Hmisc")
-res2 <- Hmisc::rcorr(as.matrix(df_predictors))
+res2 <- Hmisc::rcorr(as.matrix(df_predictors_doy))
 res2
 
 
@@ -361,7 +425,7 @@ install.packages("PerformanceAnalytics")
 
 library("PerformanceAnalytics")
 my_data <- mtcars[, c(1,3,4,5,6,7)]
-chart.Correlation(df_predictors, histogram=TRUE, pch=19)
+chart.Correlation(df_predictors_doy, histogram=TRUE, pch=19)
 
 
 
@@ -372,13 +436,30 @@ ggplot(df_predictors_doy, aes(x = diff,
   geom_point() 
 
 # add globalid to merge with clim data
-ips2 <- ips.year.sum %>% 
-  left_join(xy_df, 'falsto_name') %>% 
-  left_join(df_clim_veg, by = c("globalid", "year")) %>% # , "month" 
-  left_join(df_conif , by = c("globalid")) %>% 
-  left_join(df_topo, by = c("globalid"))#mutate(year = as.factor(as.character(year)))
+ips2 <- 
+  ips.year.sum %>% 
+  left_join(xy_df, by = c('falsto_name')) %>% 
+  left_join(df_clim_veg, by = c("falsto_name", "year")) %>% # , "month" 
+  left_join(df_conif , by = c("falsto_name", 'globalid')) %>% 
+  left_join(df_topo, by = c("falsto_name", 'globalid')) %>% #mutate(year = as.factor(as.character(year)))
+  dplyr::select(-c('globalid', 'OBJECTID'))
 
 write.csv(ips2, 'C:/Users/ge45lep/Documents/2022_BarkBeetles_Bavaria/outTable/ips_sum.csv')
+
+
+summary(ips2)
+
+# Save data ---------------------------------------------------------------
+
+save(ips2,                  # predictors aggregated by year, sum beetle by year
+     p_temp,                  # plot temp
+     p_prec,                  # plot prec
+     file="outData/predict.Rdata") 
+
+
+
+
+
 
 # Do drivers importance change over time? --------------
 # ChatGPT: 
@@ -392,6 +473,7 @@ windows()
 hist(ips2$sum_ips)
 median(ips2$sum_ips)
 mean(ips2$sum_ips)
+sd(ips2$sum_ips)
 
 
 ggplot(ips2, aes(x = sum_ips)) + 
@@ -400,8 +482,8 @@ ggplot(ips2, aes(x = sum_ips)) +
 
 # check for 0
 ips2 %>% 
-  filter(sum_ips == 0) %>% # 0 yes!! but only around 20, vey little
-  distinct(globalid)
+  filter(sum_ips == 0) %>% # 0 no!! 
+  distinct(falsto_name)
 # no 0
 
 fitdistr(ips2$sum_ips, 'Poisson')
@@ -432,24 +514,24 @@ testDispersion(simulationOutput)
 
 
 
-# try zero inflated model:
-library(pscl)
-
-install.packages("countreg", repos = "http://R-Forge.R-project.org")
-library("countreg")
-
-#https://stackoverflow.com/questions/43075911/examining-residuals-and-visualizing-zero-inflated-poission-r
-
-# Fit a zero-inflated negative binomial model
-m_zero <- zeroinfl(sum_ips ~ temp*year + m_spei3, 
-                   dist = "negbin", data = ips2)
-
-# View the model summary
-summary(m_zero)
-
-
-# simply plot effects: 
-plot(allEffects(m_zero))
+# # try zero inflated model:
+# library(pscl)
+# 
+# install.packages("countreg", repos = "http://R-Forge.R-project.org")
+# library("countreg")
+# 
+# #https://stackoverflow.com/questions/43075911/examining-residuals-and-visualizing-zero-inflated-poission-r
+# 
+# # Fit a zero-inflated negative binomial model
+# m_zero <- zeroinfl(sum_ips ~ temp*year + m_spei3, 
+#                    dist = "negbin", data = ips2)
+# 
+# # View the model summary
+# summary(m_zero)
+# 
+# 
+# # simply plot effects: 
+# plot(allEffects(m_zero))
 
 
 # Compute the correlation matrix
@@ -457,7 +539,7 @@ cor_matrix <- cor(ips2[, c(#"year",
                            "temp", 
                            'prec',
                            #"m_spei1",
-                           "m_spei3"#,
+                           "spei12"#,
                            #"m_spei6",
                            #"m_spei12"
                            )])
@@ -467,14 +549,40 @@ print(cor_matrix)
 
 
 # variance inflation factor (VIF)
+# https://www.statology.org/variance-inflation-factor-r/
 # Load the 'car' package (if not already loaded)
 library(car)
 
-# Compute the VIF values
-vif_values <- vif(lm(temp ~ elev + spei12 + prec + spei1 + factor(), 
-                     data = ips2))
+ips2_predictors <- ips2 %>% ungroup(.) %>%  dplyr::select(-c('year', 'falsto_name', 'x', 'y', 'species'))
 
-vif_values
+# Check out which predictors are highly correlated to remove them from teh VIF
+cor(ips2_predictors)
+
+# Compute the VIF values: remove multicollinearity between predictors
+# https://www.statology.org/variance-inflation-factor-r/
+vif_model <- lm(sum_ips ~ temp + elev + prec + swvl+ 
+                  spei12 + 
+                  #spei1 + spei3 + spei6 +  
+                  # species_n + 
+                  freq+ 
+                  slope+  aspect+
+                  tpi, # + 
+                #tri +
+                #roughness, 
+                data = ips2)
+
+
+# get a vector of vif values
+vif_values <- vif(vif_model)
+
+#vif_values
+
+
+#create horizontal bar chart to display each VIF value
+barplot(vif_values, main = "VIF Values", horiz = TRUE, col = "steelblue")
+
+#add vertical line at 5
+abline(v = 5, lwd = 3, lty = 2)
 
 
 #AIC(m_zero,glm1)
@@ -488,9 +596,14 @@ ggplot(ips2, aes(x = year,
 
 
 # Fit a linear regression model for each time period
-model <- lm(sum_ips ~ temp + prec + year + 
-              temp:year + prec:year, 
-            data = ips2)
+model <- glm(sum_ips ~ temp:year + elev + prec:year + swvl:year + 
+              spei12:year + 
+                 freq+ 
+                 slope+  
+                 aspect+
+                 tpi, 
+               data = ips2,
+             "poisson")
 
 # Perform an analysis of variance (ANOVA) to assess the significance of the interaction terms
 anova(model)
@@ -499,15 +612,7 @@ anova(model)
 summary(model)
 
 windows()
-plot(model, 1)
-
-
-
-# try again gam:
-gam1 <- gam(sum_ips ~ s(temp, by = year) +
-               s(prec, by = year), 
-            data = ips2)
-summary(gam1)
+plot(model, 2)
 
 
 
@@ -516,20 +621,9 @@ summary(gam1)
 
 
 
+unique(dat.ips.clean$falsto_name)
 
 
-
-
-
-
-# example:
-
-data(afcon, package="spData")
-oid <- order(afcon$id)
-resI <- localmoran(afcon$totcon, nb2listw(paper.nb))
-printCoefmat(data.frame(resI[oid,], 
-                        row.names=afcon$name[oid]),
-             check.names=FALSE)
 
 
 
@@ -615,26 +709,28 @@ summary(m5)
 
 # get together montly ips counts and spei: ------------------------------------------
 ips_sum_month <- dat.ips.clean %>%
- # filter(representativ == 'Ja') %>% 
-  group_by(globalid, year, month, monsto_name ) %>% 
+  group_by(year, month, falsto_name ) %>% 
   summarise(ips_sum = sum(fangmenge, na.rm = T))
 
 
 #  Add SPEI, temp, precip, spruce share data --------------------------------------------
 # need to check for proper log()!!
-ips_sum2 <- ips_sum_month %>% 
-  left_join(df_clim,   by = c("globalid", "year", "month")) %>% 
-  left_join(df_conif , by = c("globalid")) %>% 
-  left_join(df_spruce, by = c("globalid")) %>% 
-  left_join(df_xy,     by = c("globalid")) %>% # 3035 
-  mutate(log_sum = log(ips_sum +1 ))  # get log of the monthly values
+ips_sum2 <- 
+  ips_sum_month %>%
+  left_join(xy_df, by = c('falsto_name')) %>% 
+  left_join(filter(df_clim, year > 2014), by = c("falsto_name", "year", 'month','globalid','x', 'y'))  %>% # , "month" 
+  left_join(df_conif , by = c("falsto_name", 'globalid')) %>% 
+  left_join(df_topo, by = c("falsto_name", 'globalid')) %>% #mutate(year = as.factor(as.character(year)))
+  dplyr::select(-c('globalid', 'OBJECTID'))
+
+  #mutate(log_sum = log(ips_sum +1 ))  # get log of the monthly values
 
 
 
 # Convert to factors to use in GAM: ---------------------------------------
 ips_sum2 <- ips_sum2 %>% 
-  mutate(globalid = factor(globalid),
-         monsto_name = factor(monsto_name)) #%>% 
+  mutate(#globalid = factor(globalid),
+         falsto_name = factor(falsto_name)) #%>% 
 
 # add temporal autocorrelation  
 ips_sum2$AR.START <-ips_sum2$year==2015
@@ -659,7 +755,7 @@ range(ips_sum2$ips_sum)
 ips_sum2 %>% 
   filter(ips_sum == 0) %>% 
   tally() %>% 
-  distinct(globalid) %>% 
+  distinct(falsto_name) %>% 
   tally()
 
 
@@ -671,12 +767,17 @@ ips_sum2 %>%
   # tweedie - can handle zeros values
   
   # Select optimal 'p' for tweetie - varies between 1 to2 ---------------------------------------
-m <- gam(ips_sum ~ 1,ips_sum2, family = tw() )  
-m <- gam(ips_sum ~ 1,ips_sum2, family = tw(link = 'log') )  # those area teh same
-m <- gam(ips_sum ~ 1,ips_sum2, family = tw(link = 'log', a=1.85,b=1.93) )  # those area teh same, low and uppre limit for p optimization
-m <- gam(ips_sum ~ 1,ips_sum2, family = tw(link = 'log', theta = 1.85, a=1.82,b=1.99) )# the best
-m <- gam(ips_sum ~ 1,ips_sum2, family = Tweedie(p = 1.9, link = power(0.1)) ) 
-appraise(m)
+m1 <- gam(ips_sum ~ 1,ips_sum2, family = tw() )  
+m2 <- gam(ips_sum ~ 1,ips_sum2, family = tw(link = 'log') )  # those area teh same
+m3 <- gam(ips_sum ~ 1,ips_sum2, family = tw(link = 'log', a=1.85,b=1.93) )  # those area teh same, low and uppre limit for p optimization
+m4 <- gam(ips_sum ~ 1,ips_sum2, family = tw(link = 'log', theta = 1.85, a=1.82,b=1.99) )# the best
+m5 <- gam(ips_sum ~ 1,ips_sum2, family = Tweedie(p = 1.9, link = power(0.1)) ) 
+
+appraise(m1)
+appraise(m2)
+appraise(m3)
+appraise(m4)
+appraise(m5) # no
 
 # Families in bam: 
 # ocat for ordered categorical data.
@@ -725,6 +826,107 @@ hist(ips_sum2$ips_sum, breaks = seq(0, 55000, 500) )
 
 # Check zero-inflated regression data:
 fm_zip
+
+
+
+# Get model with gam: ------------------------------------------------
+
+ips_sum2 <- ips_sum2 %>% 
+  mutate(monsto_name = gsub('.{2}$', '', falsto_name)) %>% # remove last two characters (indicating trap pair)
+  mutate(monsto_name = factor(monsto_name))
+# keep only the not correlated predictors:
+vif_values
+
+m <- gam(ips_sum ~ 
+           s(TMED, k = 5) +
+           s(elev, k = 5)+
+         s(PRCP, k = 5)+
+         s(spei12, k = 5),
+         data = ips_sum2,
+         family = tw()
+         )
+appraise(m)
+
+knots_month <- list(doy = c(4.2, 10.5))
+
+M <- list(c(1, 0.5), NA)
+m7 <- bam(
+  ips_sum ~ #spei_cat + s(year, by=spei_cat, k=6)  +
+    s(spei12, k = 5) +
+    s(TMED, k = 5) +  # temperature
+    s(elev, k = 5)  +         # elevation
+    s(PRCP, k = 5) +         # precipitation
+    s(swvl) +                # soil water volumetric content
+    s(freq, k = 5) +         # % coniferous
+    s(slope, k = 5) +        # slope
+    s(aspect, k = 5) +        # aspect
+    s(tpi, k = 5) +             # terrain data
+    s(month, k = 7, bs = 'cc') +  # months
+    s(year, k = 5)+  # year
+    s(falsto_name, k = 5, bs = 're') + #random effect of trap
+    s(monsto_name, k = 5, bs = 're') + #random effect of trap pairs
+    s(
+      x,
+      y,
+      k = 5,
+      bs = 'ds',
+      m = c(1, 0.5)
+    ) + # 2D smooth
+    ti(TMED, year, bs = c('cc', 'tp'), k = c(15, 6)) +
+    ti(
+      x,
+      y,
+      TMED,
+      d = c(2, 1),
+      bs = c('ds', 'tp'),
+      m = M,
+      k = c(20, 10)
+    ) +
+    ti(
+      x,
+      y,
+      year,
+      d = c(2, 1),
+      bs = c('ds', 'tp'),
+      m = M,
+      k = c(20, 5)
+    ),#  +
+  # ti(
+  #   x,
+  #   y,
+  #   spei1,
+  #   d = c(2, 1),
+  #   bs = c('ds', 'tp'),
+  #   m = M,
+  #   k = c(20, 15)
+  # )    ,
+  data = ips_sum2,
+  AR.start=AR.START, 
+  rho=0.15,
+  method = 'fREML',
+  family = tw(),
+  knots = knots_month ,
+  nthreads = 4,
+  discrete = TRUE
+)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -822,7 +1024,7 @@ m7 <- bam(
     s(month, k = 7, bs = 'cc') +  # months
      s(year, k = 5)+  # year
     s(globalid, k = 5, bs = 're') + #random effect of trap
-     s(monsto_name, k = 5, bs = 're') + #random effect of trap pairs
+    # s(monsto_name, k = 5, bs = 're') + #random effect of trap pairs
     s(
       x,
       y,
