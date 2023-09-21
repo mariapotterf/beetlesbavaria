@@ -23,10 +23,12 @@ source('myPaths.R')
 library(lubridate)
 library(dplyr)
 library(sf)
-library(tidyverse)
+#library(tidyverse)
+library(stringr)
 library(ggplot2)
 library(zoo)
 library(data.table)
+library(ggpubr)
 
 
 # Colors libs 
@@ -395,9 +397,9 @@ df <- data.frame(day = c(4, 6, 10),
                  daily_count = c(10, 20, 30))
 
 
-df %>% 
-  complete(day = day.range)  %>% 
-  fill(daily_count, .direction = "up")
+# df %>% 
+#   complete(day = day.range)  %>% 
+#   fill(daily_count, .direction = "up")
 
 
 # Seems ok, ()small difference from the cumsum: for rought estimation, thr normal cumsum should be 
@@ -883,7 +885,7 @@ lm_eqn <- function(df){
   as.character(as.expression(eq));
 }
 
-p1 <- p + geom_text(x = 25, y = 300, label = lm_eqn(df), parse = TRUE)
+# + geom_text(x = 25, y = 300, label = lm_eqn(df), parse = TRUE)
 
 
 # !!!!
@@ -891,23 +893,24 @@ df_compare_traps <- ips.year.sum %>%
   mutate(trap_n =  substr(falsto_name, nchar(falsto_name)-1+1, nchar(falsto_name)),
          loc =  substr(falsto_name, 1, nchar(falsto_name)-2))%>%
   dplyr::select(-falsto_name) %>% 
-  tidyr::spread(trap_n, sum_ips)# %>% 
-  dplyr::rename(x = '1',         y = '2') #%>% 
+  tidyr::spread(trap_n, sum_ips) %>% 
+  dplyr::rename(x = '1',         
+                y = '2') #%>% 
   
 
-library(ggpubr)   # add formulas using  stat_regline_equation(label.x=30000, label.y=40000)
+#library(ggpubr)   # add formulas using  stat_regline_equation(label.x=30000, label.y=40000)
 library(ggpmisc) # stat_poly_line() +
-# stat_poly_eq(use_label(c("eq", "adj.R2", "f", "p", "n"))) +
-ggplot(df_compare_traps, aes(x = x,
-             y = y,
-             group = year)) +
-    geom_point() +
-  geom_smooth(method = "lm") +
-  facet_wrap(year~., scales = 'free') +
-  theme_bw() +
-  stat_regline_equation(label.x=30000, label.y=40000)
- # geom_text(x = 25, y = 300, label = lm_eqn(df_compare_traps), parse = TRUE)
-  
+
+p_lm_traps <- 
+  ggplot(df_compare_traps, aes(x = x/10^3,
+                               y = y/10^3,
+                              # color = year,
+                               group = year)) +
+  stat_poly_line() +
+    stat_poly_eq(use_label(c( "R2", 'p'))) + #"eq",
+    geom_point(alpha = 0.5) +
+    facet_wrap(.~year) + #, scales = 'free'
+    theme_bw()
   
   
 
@@ -943,6 +946,8 @@ save(trap_names,                 # vector of final trap names (79*2)
      p_diff_doy,                 # scatter plot per year
      p_aggreg,                   # map: locations of beetle aggreg values by DOY
     p_ips.year.sum,              # plot: sum beetles barplot per year
+    
+    p_lm_traps,                  # plot: linear regression between trap pairs
      file="outData/ips.Rdata")
 
 
