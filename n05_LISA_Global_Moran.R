@@ -40,16 +40,17 @@ library(plyr)
 library(dplyr)
 library(data.table)
 library(tidyr)
-library(raster)
-library(rgdal)
-library(tidyverse)
-library(lubridate)
-library(patchwork)
+#library(raster)
+library(rgdal) # for sp data
+#library(tidyverse)
+#library(lubridate)
+#library(patchwork)
 library(fasterize)
-library(ggpubr)
 library(terra)
 library(ggplot2)
 library(ggpubr)
+library('cowplot') # arrange plots
+
 
 # Spatstat
 library(spdep)
@@ -341,18 +342,9 @@ variogram_out <- lapply(years, get_variogram )
 # Merge all in one df
 var_merged <- dplyr::bind_rows(variogram_out)
 
+# can't plot them in the one plot, as I can't get fitted models;
+# make one by one instead
 
-# plot
-ggplot(var_merged,aes(x = dist/1000,
-                      y = gamma,
-                      color = factor(year))) +
-  geom_point() #+
- # geom_line() 
-
-# convert all into spatial object 
-ips_sum_sf <- ips_sum
-
-coordinates(ips_sum_sf) <- ~ x + y
 
 # plot the variograms and their fitted models one by one
 cutoff = 300000
@@ -383,7 +375,6 @@ m19 <-  fit.variogram(variogram_out[[5]],
 #  # Slice specific year
 ips_sum_20 <-ips_sum %>% filter(year == 2020)
 coordinates(ips_sum_20) <- ~ x + y
-
 variogram_out[[6]] <- variogram(log10(sum_beetle)  ~ 1, 
                                 cutoff=400000,
                                 data = ips_sum_20)  # all directions are assumed equal  # ,
@@ -397,7 +388,7 @@ variogram_cloud_20 <- variogram(log10(sum_beetle)  ~ 1,
 
 # here cutoff needs to be 300000
 m20 <-  fit.variogram(variogram_out[[6]], 
-                      vgm(psill = 0.2, model="Lin", range = 300000, nugget = 0.11))
+                      vgm(psill = 0.25, model="Gau", range = 400000, nugget = 0.11))
 
 plot(variogram_out[[6]], m20, main = "2020", cutoff = cutoff)
 
@@ -407,8 +398,6 @@ m21 <-  fit.variogram(variogram_out[[7]],
 
 
 # Plot the fitted semivariogram
-windows()
-
 p15<-plot(variogram_out[[1]], m15, main = "2015", cutoff = cutoff)
 p16<-plot(variogram_out[[2]], m16, main = "2016", cutoff = cutoff)
 p17<-plot(variogram_out[[3]], m17, main = "2017", cutoff = cutoff)
@@ -417,7 +406,6 @@ p19<-plot(variogram_out[[5]], m19, main = "2019", cutoff = cutoff)
 p20<-plot(variogram_out[[6]], m20, main = "2020", cutoff = cutoff)
 p21<-plot(variogram_out[[7]], m21, main = "2021", cutoff = cutoff)
 
-library('cowplot') # arrange plots
 windows()
 semi_out <- plot_grid(p15, p16, p17, p18, p19, p20, p21, nrow = 3)# , label_size = 8
 
@@ -438,102 +426,6 @@ ips_sum_20 %>%
 # 52  2020 Heinrichsthaler_Forst_2     113920 4276581 2992330     TRUE
 # 125 2020             Sugenheim_1     106408 4354050 2942596     TRUE
 # 137 2020             Wegscheid_1      84930 4599349 2838491     TRUE
-
-# Load dataset sliced by year 
-
-# 2015
-ips_sum_15 <-ips_sum %>% 
-  filter(year == 2015)
-
-
-# Create a spatial points data frame
-coordinates(ips_sum_15) <- ~ x + y
-
-# Define the variogram 
-variogram_raw_directions <- variogram(log10(sum_beetle)  ~ 1, 
-                             data = ips_sum_15,  
-                             alpha = c(0, 45, + 90, 135)) # check different directions (angles)
-
-variogram_raw <- variogram(log10(sum_beetle)  ~ 1, 
-                             cutoff=cutoff,
-                             data = ips_sum_15)  # all directions are assumed equal
-
-
-# Plot the semivariogram
-plot(variogram_raw)
-
-# plot variogram cloud:
-variogram_cloud <- variogram(log10(sum_beetle)~1, data=ips_sum_15, 
-                             cutoff=cutoff,width = 5000, cloud=TRUE)
-
-plot(variogram_cloud)
-
-# Fit a variogram model (spherical model in this example)
-# show different functions: 
-show.vgms(par.strip.text=list(cex=0.75))
-
-#m1 <-  fit.variogram(variogram_raw, vgm(1, 'Sph', 1), fit.kappa = TRUE)
-
-m2 <-  fit.variogram(variogram_raw, 
-                     vgm(psill = 0.2, model="Cir", range = 200000, nugget = 0.11))
-
-
-# Plot the fitted semivariogram
-plot(variogram_raw, # raw data 
-     m2,            # fitted model 
-     main = "Fitted Semivariogram", cutoff = cutoff)
-
-# Print the model parameters
-print(m2)
-
-# 2020 
-
-ips_sum_20 <-ips_sum %>% 
-  filter(year == 2020)
-
-
-# Create a spatial points data frame
-coordinates(ips_sum_20) <- ~ x + y
-
-
-#data(ips_sum_15)
-
-# Create a "SpatialPointsDataFrame" object
-#coordinates(your_data) <- c("X", "Y")
-
-# Define the variogram model
-windows()
-
-cutoff = 300000
-
-variogram_raw_directions <- variogram(log10(sum_beetle)  ~ 1, 
-                                      data = ips_sum_20,  
-                                      alpha = c(0, 45, + 90, 135)) # check different directions (angles)
-
-variogram_raw <- variogram(log10(sum_beetle)  ~ 1, 
-                           cutoff=cutoff,
-                           data = ips_sum_20) # check different directions (angles)
-
-
-# Plot the semivariogram
-plot(variogram_raw)
-
-# plot variogram cloud:
-variogram_cloud <- variogram(log10(sum_beetle)~1, data=ips_sum_20, 
-                             cutoff=cutoff,width = 5000, cloud=TRUE)
-
-plot(variogram_cloud)
-
-# Fit a variogram model (spherical model in this example)
-# show different functions: 
-
-m2 <-  fit.variogram(variogram_raw, 
-                     vgm(psill = 0.2, model="Lin", range = 200000, nugget = 0.11))
-
-
-# Plot the fitted semivariogram
-windows()
-plot(variogram_raw, m2, main = "Fitted Semivariogram", cutoff = cutoff)
 
 
 # Humblt: fitting variograms: https://gsp.humboldt.edu/olm/R/04_01_Variograms.html
@@ -564,10 +456,10 @@ plot(variogram_raw, m2, main = "Fitted Semivariogram", cutoff = cutoff)
 
 # from WSL
 
-library(gstat)
+#library(gstat)
 # https://gsp.humboldt.edu/olm/R/04_01_Variograms.html
 
-library(sp)
+#library(sp)
 data(meuse)
 # no trend:
 coordinates(meuse) = ~x+y
