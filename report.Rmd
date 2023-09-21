@@ -54,7 +54,9 @@ load(file = "outData/lisa.Rdata")
 
 
 library(dplyr)
-library(ggpubr)
+library(cowplot)
+library(ggplot2)
+#library(ggpubr)
 
 ```
 
@@ -126,8 +128,8 @@ summary(ips2)
 ```
 
 
-```{r}
-ggarrange(p_temp, p_prec)
+```{r p_clim_data}
+#cowplot::plot_grid(p_temp, p_prec)
 ```
 
 ## Data processing
@@ -172,7 +174,7 @@ DOY overview
 ## Descriptive stats
 
 ```{r p_hist_daily_counts, fig.width = 3, fig.height = 2.5, echo = F, fig.cap="Histogram of average daily traps"}
-hist(df.daily$avg_day_count)
+#hist(df.daily$avg_day_count)
 ```
 
 
@@ -182,11 +184,17 @@ hist(df.daily$avg_day_count)
 
 ```{r p_bars, fig.width = 6, fig.height = 6, echo = F, fig.cap="Beetle population dynamics. (a) total sum per year. (b) DOY of beetle aggregation per trap. (c) DOY of max increase between dates, (d) Max increase in beetle numbers. Shown are medians and IQR. "}
 
-ggarrange(p_ips.year.sum, 
+
+plot_grid(p_ips.year.sum, 
           p_ips.agg,
-          p_ips.max.diff.doy, 
+          p_ips.max.diff.doy,
           p_ips.max.diff, labels = 'auto',
           ncol = 2, nrow = 2 )
+# ggarrange(p_ips.year.sum, 
+#           p_ips.agg,
+#           p_ips.max.diff.doy, 
+#           p_ips.max.diff, labels = 'auto',
+#           ncol = 2, nrow = 2 )
 
 ```
 
