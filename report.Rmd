@@ -5,7 +5,7 @@ date:  "`r Sys.Date()`"
 output: 
   bookdown::html_document2:
     toc: true
-    toc_depth: 2
+    toc_depth: 3
 knit: (function(input, ...) {
     rmarkdown::render(
       input,
@@ -62,17 +62,21 @@ library(ggpubr)
 
 Q1: Variation of beetle population dynamics over time and space: 
 
- - how do beetle counts change over time and space?
- - does beetle population increase earlier in the year? = swarming
- - do beetles aggregate faster? eg. earlier in a year reach some threshold? (1000 beetles)
-
+ - How do beetle counts change over time and space?
+   - Sum beetle counts per trap/year
+ - Does beetle population increase earlier in the year? When does the main increase in population (*swarming*) happen?
+   - Identify day of the year (DOY) of the maximal difference in beetle counts between two consecutive dates.
+ - Do beetles aggregate faster? When they reach the same threshold? (1000 beetles) *aggregation*
+   - Identify (DOY) of reaching the 1000 beetles per trap.
+   
 Q2: Regional vs global variation?
 
 - are the traps near by more similar than the traps further away?
 - LISA - local indicators of spatial assotiationa
 - Global Moran's I
+- variograms
 
-Drivers?
+Q3: Drivers? (data collected, but not analyzed yet)
 
 - temperature
 - precipitation
@@ -83,11 +87,11 @@ Drivers?
 - spruce vs. deciduous%
 
 
+# Methods
 
+## Input data
 
-# Input data
-
-## Beetle trap dataset overview
+### Beetle trap dataset overview
 
 - trap datasets in trap pairs, covering area of Bavaria over 2015-2021
 - consistent monitoring: 79*2 traps per whole research period
@@ -101,37 +105,21 @@ allows to assess whether the relationships between the drivers
 and the response variable differ across different time periods. 
 
 
-# Methods
 
-- Calculate total sum of beetles per trap/year.
-- Calculate beetles emergence: the max different number of beetles between consecutive dates 
-- Calculate beetle aggregation : DOY of the beetles reaching 1000 beetles/trap.
+
 
 ## Dependent variables
 
-- ips_sum - sum of beetles per trap/year over vegetation period
-- counts per day =  corrected by the frequency of trap emptying to have average beetles counts per day
-- DOY of the max population increase
-- Max population increase per year/trap
-- DOY of 1000 beetles aggregated per  trap
-- output of LISA?
-
-
-##### DOY overview
-
-   DOY    Date
-
- - 100 - April 10
- - 150 - May 30
- - 200 - July 19
- - 211 - July 30
- - 250 - Sept 7
+- total sum of beetles per trap/year.
+- beetle emergence: the max difference in beetle counts between consecutive dates 
+- beetle aggregation : DOY of the beetles reaching 1000 beetles/trap.
 
 
 
 
 
-```{r}
+
+```{r summary-tab, caption = 'sum table'}
 
 summary(ips2)
 
@@ -142,8 +130,9 @@ summary(ips2)
 ggarrange(p_temp, p_prec)
 ```
 
+## Data processing
 
-### Curate the data: 
+### Curate the data 
 
 - vegetation period: April 1st to Oct 30 (DOY start `r doy.start` - DOY end `r doy.end`)
 - removed:
@@ -168,6 +157,17 @@ values for each predictor variable in the model to determine if multicollinearit
 SPEI
 
 # Results 
+
+DOY overview
+
+   DOY    Date
+
+ - 100 - April 10
+ - 150 - May 30
+ - 200 - July 19
+ - 211 - July 30
+ - 250 - Sept 7
+
 
 ## Descriptive stats
 
@@ -257,13 +257,6 @@ max.diff.doy %>%
 ```
 
 
-#### Scatter plot: DOY vs max increase in beetle numbers per year per trap. One point = one trap
-
-```{r p_diff_doy, fig.width = 4, fig.height = 5, echo = F, fig.cap="Scatter plot of the max increase of beetle count and respective doy over study period."}
-
-p_diff_doy  
-
-```
 
 
 #### Map: Beetle aggregation per DOY (DOY < 130)
@@ -298,16 +291,48 @@ ips.aggreg %>%
 
 ### LISA: measure of similarity between trap and its surrounding
 
+10 nearest distance neighbors
+LISA idetifies the (di)similarity in beetles counst between neighbouring locations. 
 
-```{r p_lisa_sub, fig.width = 6, fig.height = 6, echo = F, fig.cap="Local Indicators of Spatial Assotiation. No signoficat values are not shown."}
+Categories: 
+
+- High-High - hotspot, having relatively high value, cluster
+- High-Low - dissimilar values from neighours
+- Low-High - dissimilar values from neighours 
+- Low-Low - coldspots, similar to neighbors
+
+Individual years were sliced, so he yearly hotspots vs coldspots are classified within the respective year.
+
+
+```{r p_lisa_sub, fig.width = 6, fig.height = 6, echo = F, fig.cap="Local Indicators of Spatial Assotiation. Shown are only High-High and Low-Low clusters. No significat values are not shown."}
 
 p_lisa_sub  
 
 ```
 
+What is the share of the similar vs dissimilar beetle counts over years?
+
+```{r p_lisa_freq, fig.width = 3, fig.height = 2.5, echo = F, fig.cap="Local Indicators of Spatial Assotiation. Frequency of the similarity categories: High-High, High-Low, Low-High, Low-Low"}
+
+p_lisa_freq +
+  theme_bw()
+
+```
+
 ### Global Moran's I - overall measure of spatial autocorrelation over Bavaria
 
-### Semivariance
+```{r p_glob_moran_bar, fig.width = 2.5, fig.height = 2.5, echo = F, fig.cap="Global Moran's I per each year. Higher value indicates higher autocorrelation"}
 
+p_glob_moran_bar  
+
+```
+
+### Semivariance
+```{r semi_out, fig.width = 6, fig.height = 6, echo = F, fig.cap="Variograms per year. Note the different variogram fitting (line)"}
+
+semi_out  
+
+```
+    
 
 
