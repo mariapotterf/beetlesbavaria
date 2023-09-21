@@ -249,18 +249,14 @@ nb_g_20 <- knn2nb(knearneigh(coordinates(ips_sum_20),
 global_moran_15 <- moran.test(ips_sum_15$sum_beetle, nb2listw(nb_g_15) )
 global_moran_20 <- moran.test(ips_sum_20$sum_beetle, nb2listw(nb_g_20) )
 
-# !!!
 # for all years:
-
-
 get_global_moran <- function(i, ...) {
   
   #  # Slice specific year
   ips_sum_sub <-ips_sum %>%
     filter(year == i)
-  #
-  #  # Global Moran's per year:
-  #  # Create a spatial points data frame
+  
+  #  # Global Moran's per year: Create a spatial points data frame
   coordinates(ips_sum_sub) <- ~ x + y
   #
   #  # Create queen contiguity neighbors object
@@ -286,12 +282,33 @@ global_moran_out <- lapply(years, get_global_moran )
 # Merge all in one sf
 glob_merged <- dplyr::bind_rows(global_moran_out)
 
+# add significance
+glob_merged <- glob_merged %>% 
+  mutate(sign = case_when(p_val > 0.05 ~ 'n.s',
+                          p_val < 0.05 & p_val > 0.01 ~ '*',
+                          p_val < 0.01 & p_val > 0.001 ~ '**',
+                          p_val < 0.001  ~ '***'
+                          )) 
+
+# Create a barplot of the values
+p_glob_moran_bar <-ggplot(glob_merged, aes(x = year,
+                        y = stat,
+                        label = sign)) +
+  geom_col(fill = 'lightgrey', col = 'black') +
+  xlim(2014.3,2021.6) +
+  ylab('Moran I statistic\nstandard deviate')+
+  ylim(0,13) +
+  geom_text(aes(x = year,
+            y = stat + 1 )) + #rep(12.2, 7))) +
+  theme_bw() 
 
 
 
 # Get variograms: -----------------------------------------------------------------
 
 library(gstat)
+
+cutoff = 300000
 
 
 # how to make a function, with output raw data and model?? for each year??
@@ -321,22 +338,106 @@ get_variogram <- function(i, ...) {
 # Run on all years separately
 variogram_out <- lapply(years, get_variogram )
 
-# Merge all in one sf
+# Merge all in one df
 var_merged <- dplyr::bind_rows(variogram_out)
 
 
 # plot
 ggplot(var_merged,aes(x = dist/1000,
                       y = gamma,
-                      color = year)) +
+                      color = factor(year))) +
   geom_point() #+
  # geom_line() 
 
+# convert all into spatial object 
+ips_sum_sf <- ips_sum
+
+coordinates(ips_sum_sf) <- ~ x + y
+
+# plot the variograms and their fitted models one by one
+cutoff = 300000
+
+m15 <-  fit.variogram(variogram_out[[1]], 
+                     vgm(psill = 0.2, model="Sph", range = 200000, nugget = 0.11))
+
+#  # Slice specific year
+ips_sum_16 <-ips_sum %>% filter(year == 2016)
+coordinates(ips_sum_16) <- ~ x + y
+
+variogram_out[[2]] <- variogram(log10(sum_beetle)  ~ 1, 
+                           cutoff=cutoff,
+                           data = ips_sum_16)  # all directions are assumed equal
+
+m16 <-  fit.variogram(variogram_out[[2]], 
+                      vgm(psill = 0.17, model="Sph", range = 40000, nugget = 0.12))
+
+m17 <-  fit.variogram(variogram_out[[3]], 
+                      vgm(psill = 0.2, model="Lin", range = 200000, nugget = 0.11))
+
+m18 <-  fit.variogram(variogram_out[[4]], 
+                      vgm(psill = 0.2, model="Sph", range = 200000, nugget = 0.11))
+
+m19 <-  fit.variogram(variogram_out[[5]], 
+                      vgm(psill = 0.2, model="Lin", range = 200000, nugget = 0.11))
+
+#  # Slice specific year
+ips_sum_20 <-ips_sum %>% filter(year == 2020)
+coordinates(ips_sum_20) <- ~ x + y
+
+variogram_out[[6]] <- variogram(log10(sum_beetle)  ~ 1, 
+                                cutoff=400000,
+                                data = ips_sum_20)  # all directions are assumed equal  # ,
+#alpha = c(0, 45, + 90, 135)
+
+variogram_cloud_20 <- variogram(log10(sum_beetle)  ~ 1, 
+                                #cutoff=400000,
+                                data = ips_sum_20,
+                                cloud = T,
+                                alpha = c(0, 45, + 90, 135))
+
+# here cutoff needs to be 300000
+m20 <-  fit.variogram(variogram_out[[6]], 
+                      vgm(psill = 0.2, model="Lin", range = 300000, nugget = 0.11))
+
+plot(variogram_out[[6]], m20, main = "2020", cutoff = cutoff)
+
+m21 <-  fit.variogram(variogram_out[[7]], 
+                      vgm(psill = 0.2, model="Sph", range = 200000, nugget = 0.11))
 
 
 
+# Plot the fitted semivariogram
+windows()
+
+p15<-plot(variogram_out[[1]], m15, main = "2015", cutoff = cutoff)
+p16<-plot(variogram_out[[2]], m16, main = "2016", cutoff = cutoff)
+p17<-plot(variogram_out[[3]], m17, main = "2017", cutoff = cutoff)
+p18<-plot(variogram_out[[4]], m18, main = "2018", cutoff = cutoff)
+p19<-plot(variogram_out[[5]], m19, main = "2019", cutoff = cutoff)
+p20<-plot(variogram_out[[6]], m20, main = "2020", cutoff = cutoff)
+p21<-plot(variogram_out[[7]], m21, main = "2021", cutoff = cutoff)
+
+library('cowplot') # arrange plots
+windows()
+semi_out <- plot_grid(p15, p16, p17, p18, p19, p20, p21, nrow = 3)# , label_size = 8
 
 
+# year 2020 has many outliers:
+hist(ips_sum_20$sum_beetle)
+
+ips_sum_20 %>% 
+  data.frame() %>% 
+  dplyr::filter(sum_beetle > 40000)
+  dplyr::filter(falsto_name %in% c('Auerbach_2', 'Auerbach_1',
+                                   'Heinrichsthaler_Forst_2', 
+                                   'Heinrichsthaler_Forst_1'))
+
+# values over 100.000 beetles per year:
+#     year             falsto_name sum_beetle       x       y optional
+# 4   2020              Auerbach_2     121600 4548500 2858706     TRUE
+# 52  2020 Heinrichsthaler_Forst_2     113920 4276581 2992330     TRUE
+# 125 2020             Sugenheim_1     106408 4354050 2942596     TRUE
+# 137 2020             Wegscheid_1      84930 4599349 2838491     TRUE
 
 # Load dataset sliced by year 
 
@@ -348,17 +449,7 @@ ips_sum_15 <-ips_sum %>%
 # Create a spatial points data frame
 coordinates(ips_sum_15) <- ~ x + y
 
-
-#data(ips_sum_15)
-
-# Create a "SpatialPointsDataFrame" object
-#coordinates(your_data) <- c("X", "Y")
-
-# Define the variogram model
-windows()
-
-cutoff = 300000
-
+# Define the variogram 
 variogram_raw_directions <- variogram(log10(sum_beetle)  ~ 1, 
                              data = ips_sum_15,  
                              alpha = c(0, 45, + 90, 135)) # check different directions (angles)
@@ -381,7 +472,7 @@ plot(variogram_cloud)
 # show different functions: 
 show.vgms(par.strip.text=list(cex=0.75))
 
-m1 <-  fit.variogram(variogram_raw, vgm(1, 'Sph', 1), fit.kappa = TRUE)
+#m1 <-  fit.variogram(variogram_raw, vgm(1, 'Sph', 1), fit.kappa = TRUE)
 
 m2 <-  fit.variogram(variogram_raw, 
                      vgm(psill = 0.2, model="Cir", range = 200000, nugget = 0.11))
@@ -428,7 +519,7 @@ variogram_raw <- variogram(log10(sum_beetle)  ~ 1,
 plot(variogram_raw)
 
 # plot variogram cloud:
-variogram_cloud <- variogram(log10(sum_beetle)~1, data=ips_sum_15, 
+variogram_cloud <- variogram(log10(sum_beetle)~1, data=ips_sum_20, 
                              cutoff=cutoff,width = 5000, cloud=TRUE)
 
 plot(variogram_cloud)
@@ -452,23 +543,23 @@ plot(variogram_raw, m2, main = "Fitted Semivariogram", cutoff = cutoff)
 # eye-ball modell fitting
 
 
-
-library(geoR)
-library(sf)
-
-library(sp)        # for meuse dataset
-
-library("gstat")   # geostatistics
-library("mapview") # map plot
-library("sf")      # spatial vector data
-library("stars")   # spatial-temporal data
-library("terra")   # raster data handling 
-library("ggplot2") # plotting
-mapviewOptions(fgb = FALSE)
-
-meuse <- ips_sum_15 #read_sf('data/meuse.gpkg')
-v.eye <- eyefit(variog(as.geodata(meuse["sum_beetle"]), max.dist = 10000))
-ve.fit <- as.vgm.variomodel(v.eye[[1]])
+# 
+# library(geoR)
+# library(sf)
+# 
+# library(sp)        # for meuse dataset
+# 
+# library("gstat")   # geostatistics
+# library("mapview") # map plot
+# library("sf")      # spatial vector data
+# library("stars")   # spatial-temporal data
+# library("terra")   # raster data handling 
+# library("ggplot2") # plotting
+# mapviewOptions(fgb = FALSE)
+# 
+# meuse <- ips_sum_15 #read_sf('data/meuse.gpkg')
+# v.eye <- eyefit(variog(as.geodata(meuse["sum_beetle"]), max.dist = 10000))
+# ve.fit <- as.vgm.variomodel(v.eye[[1]])
 
 
 # from WSL
@@ -490,7 +581,10 @@ plot(variogram(log(zinc)~1, meuse))
 
 save(p_lisa_sub, 
      p_lisa_all,
+     p_lisa_freq,
      glob_merged,
+     semi_out,
+     p_glob_moran_bar,
      file = "outData/lisa.Rdata")
 
 
