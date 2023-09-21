@@ -416,7 +416,7 @@ df %>%
 # per week: 1000 beetles - warning: expected spread
 #           3000 beetles - danger: high risk of standing infestation
 #           5000 beetles
-beetle_threshold = 5000
+beetle_threshold = 1000
 
 ips.aggreg <- df.daily %>% 
   group_by(year, falsto_name) %>% 
@@ -743,7 +743,7 @@ p_aggreg <-
   ggplot(bav_sf) +   # base map
   geom_sf(color = 'black', 
           fill  = 'grey80') + 
-  geom_sf(data = filter(ips.aggreg.sf, doy < 150),
+  geom_sf(data = filter(ips.aggreg.sf, doy < 130),
           aes(color = doy,
               size  = doy
           )
@@ -759,7 +759,7 @@ p_aggreg <-
   xlab("Longitude") + 
   ylab("Latitude") +
   labs(title = paste('Beetle aggregation ', beetle_threshold),
-       subtitle = 'doy <150',
+       subtitle = 'doy <130',
        color  = "DOY",
        size = "DOY")
 
@@ -872,6 +872,44 @@ p_ips.max.diff <- ggplot(data = max.diff.doy,
   ggtitle("Max increase (diff in #beetles)") + 
   theme_bw()
 
+# get correlation between trap1 and trap 2
+# get function to plot the lm equation and R squared:
+lm_eqn <- function(df){
+  m <- lm(y ~ x, df);
+  eq <- substitute(italic(y) == a + b %.% italic(x)*","~~italic(r)^2~"="~r2, 
+                   list(a = format(unname(coef(m)[1]), digits = 2),
+                        b = format(unname(coef(m)[2]), digits = 2),
+                        r2 = format(summary(m)$r.squared, digits = 3)))
+  as.character(as.expression(eq));
+}
+
+p1 <- p + geom_text(x = 25, y = 300, label = lm_eqn(df), parse = TRUE)
+
+
+# !!!!
+df_compare_traps <- ips.year.sum %>% 
+  mutate(trap_n =  substr(falsto_name, nchar(falsto_name)-1+1, nchar(falsto_name)),
+         loc =  substr(falsto_name, 1, nchar(falsto_name)-2))%>%
+  dplyr::select(-falsto_name) %>% 
+  tidyr::spread(trap_n, sum_ips)# %>% 
+  dplyr::rename(x = '1',         y = '2') #%>% 
+  
+
+library(ggpubr)   # add formulas using  stat_regline_equation(label.x=30000, label.y=40000)
+library(ggpmisc) # stat_poly_line() +
+# stat_poly_eq(use_label(c("eq", "adj.R2", "f", "p", "n"))) +
+ggplot(df_compare_traps, aes(x = x,
+             y = y,
+             group = year)) +
+    geom_point() +
+  geom_smooth(method = "lm") +
+  facet_wrap(year~., scales = 'free') +
+  theme_bw() +
+  stat_regline_equation(label.x=30000, label.y=40000)
+ # geom_text(x = 25, y = 300, label = lm_eqn(df_compare_traps), parse = TRUE)
+  
+  
+  
 
 
 
