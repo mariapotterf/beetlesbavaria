@@ -29,6 +29,9 @@ library(ggplot2)
 library(zoo)
 library(data.table)
 library(ggpubr)
+#library(ggpubr)   # add formulas using  stat_regline_equation(label.x=30000, label.y=40000)
+library(ggpmisc)  # add equation to plots smooth 
+
 
 
 # Colors libs 
@@ -888,7 +891,7 @@ lm_eqn <- function(df){
 # + geom_text(x = 25, y = 300, label = lm_eqn(df), parse = TRUE)
 
 
-# !!!!
+# Linear regression between trap 1&2 --------------------------------------------
 df_compare_traps <- ips.year.sum %>% 
   mutate(trap_n =  substr(falsto_name, nchar(falsto_name)-1+1, nchar(falsto_name)),
          loc =  substr(falsto_name, 1, nchar(falsto_name)-2))%>%
@@ -898,9 +901,7 @@ df_compare_traps <- ips.year.sum %>%
                 y = '2') #%>% 
   
 
-#library(ggpubr)   # add formulas using  stat_regline_equation(label.x=30000, label.y=40000)
-library(ggpmisc) # stat_poly_line() +
-
+# get lm between trap 1 & 2
 p_lm_traps <- 
   ggplot(df_compare_traps, aes(x = x/10^3,
                                y = y/10^3,
