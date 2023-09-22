@@ -381,17 +381,18 @@ df_predictors_year <-
   dplyr::select(-c('globalid', 'OBJECTID')) # 
 
 
-  
-ips2 <- 
-    ips.year.sum %>% 
-    left_join(df_predictors_year, by = join_by(year, falsto_name)) #, by = c("falsto_name", 'globalid', 'year'))
-  
-names(ips2)
-names(ips2_test)
+
 
 # Merge dependent and predictors df ------------------------------------------
-# can be DOY, sum_beetles_year
-df_predictors_doy <- max.diff.doy %>% 
+# [1] sum betles year
+ips_sum_preds <- 
+  ips.year.sum %>% 
+  left_join(df_predictors_year, by = join_by(year, falsto_name)) #, by = c("falsto_name", 'globalid', 'year'))
+
+
+# [2] Max Diff DOY
+df_predictors_doy <-    # merge max difference by doy with the yearly predictors
+  max.diff.doy %>% 
   df_predictors_year
   
 
@@ -404,7 +405,7 @@ v_predictors <- c('year', # if analyse predictors, 'year' needs to be removed!
                       'spei3', 'spei6', 'spei12', 
                       'elev', 'slope', 'aspect', 'tpi', 'tri', 'roughness')
   
-ips2_predictors <- ips2 %>% 
+ips2_predictors <- ips_sum_preds %>% 
   ungroup(.) %>%  
   dplyr::select(-c('year', 'falsto_name', 'x', 'y', 'species'))
 
@@ -422,13 +423,13 @@ vif_model <- lm(sum_ips ~ temp + elev + prec + swvl+
                   tpi, # + 
                 #tri +
                 #roughness, 
-                data = ips2)
+                data = ips_sum_preds)
 
 
 # get a vector of vif values
-vif_values <- vif(vif_model)
+vif_values <- car::vif(vif_model)
 
-#vif_values
+vif_values
 
 
 #create horizontal bar chart to display each VIF value
@@ -483,23 +484,24 @@ ggplot(df_predictors_doy, aes(x = diff,
                           color = year)) +
   geom_point() 
 
-# add globalid to merge with clim data
-ips2 <- 
-  ips.year.sum %>% 
-  left_join(xy_df, by = c('falsto_name')) %>% 
-  left_join(df_clim_veg, by = c("falsto_name", "year")) %>% # , "month" 
-  left_join(df_conif , by = c("falsto_name", 'globalid')) %>% 
-  left_join(df_topo, by = c("falsto_name", 'globalid')) %>% #mutate(year = as.factor(as.character(year)))
-  dplyr::select(-c('globalid', 'OBJECTID'))
+# # add globalid to merge with clim data
+# ips2 <- 
+#   ips.year.sum %>% 
+#   left_join(xy_df, by = c('falsto_name')) %>% 
+#   left_join(df_clim_veg, by = c("falsto_name", "year")) %>% # , "month" 
+#   left_join(df_conif , by = c("falsto_name", 'globalid')) %>% 
+#   left_join(df_topo, by = c("falsto_name", 'globalid')) %>% #mutate(year = as.factor(as.character(year)))
+#   dplyr::select(-c('globalid', 'OBJECTID'))
 
-write.csv(ips2, 'C:/Users/ge45lep/Documents/2022_BarkBeetles_Bavaria/outTable/ips_sum.csv')
+write.csv(ips_sum_preds, 'C:/Users/ge45lep/Documents/2022_BarkBeetles_Bavaria/outTable/ips_sum.csv')
 
 
-summary(ips2)
+summary(ips_sum_preds)
 
 # Save data ---------------------------------------------------------------
 
-save(ips2,                  # predictors aggregated by year, sum beetle by year
+save(ips_sum_preds,           # final df: predictors aggregated by year, sum beetle by year
+     df_predictors_year,      # df predictors per year, can be merged with different dependent variables
      p_temp,                  # plot temp
      p_prec,                  # plot prec
      file="outData/predict.Rdata") 
@@ -518,30 +520,30 @@ save(ips2,                  # predictors aggregated by year, sum beetle by year
 
 # check hist of conts
 windows()
-hist(ips2$sum_ips)
-median(ips2$sum_ips)
-mean(ips2$sum_ips)
-sd(ips2$sum_ips)
+hist(ips_sum_preds$sum_ips)
+median(ips_sum_preds$sum_ips)
+mean(ips_sum_preds$sum_ips)
+sd(ips_sum_preds$sum_ips)
 
 
-ggplot(ips2, aes(x = sum_ips)) + 
+ggplot(ips_sum_preds, aes(x = sum_ips)) + 
   geom_histogram(colour = 4, fill = "white", 
                  bins = 2000)
 
 # check for 0
-ips2 %>% 
+ips_sum_preds %>% 
   filter(sum_ips == 0) %>% # 0 no!! 
   distinct(falsto_name)
 # no 0
 
-fitdistr(ips2$sum_ips, 'Poisson')
+fitdistr(ips_sum_preds$sum_ips, 'Poisson')
 
 
 # poisson: mean and variance are equal
 # negative-binomial - allows for overdispersion (variance excees the mean) - not my case
 
 glm1 <- glm(sum_ips ~ temp + prec + elev + temp:as.numeric(year) + spei12,
-   data = ips2,
+   data = ips_sum_preds,
    family = "poisson",
    na.action = "na.fail")
 
@@ -572,7 +574,7 @@ testDispersion(simulationOutput)
 # 
 # # Fit a zero-inflated negative binomial model
 # m_zero <- zeroinfl(sum_ips ~ temp*year + m_spei3, 
-#                    dist = "negbin", data = ips2)
+#                    dist = "negbin", data = ips_sum_preds)
 # 
 # # View the model summary
 # summary(m_zero)
@@ -583,7 +585,7 @@ testDispersion(simulationOutput)
 
 
 # Compute the correlation matrix
-cor_matrix <- cor(ips2[, c(#"year",
+cor_matrix <- cor(ips_sum_preds[, c(#"year",
                            "temp", 
                            'prec',
                            #"m_spei1",
@@ -602,7 +604,7 @@ print(cor_matrix)
 
 
 
-ggplot(ips2, aes(x = year, 
+ggplot(ips_sum_preds, aes(x = year, 
                  y = sum_ips)) + 
   geom_point() +
   stat_smooth(method = "glm")
@@ -615,7 +617,7 @@ model <- glm(sum_ips ~ temp:year + elev + prec:year + swvl:year +
                  slope+  
                  aspect+
                  tpi, 
-               data = ips2,
+               data = ips_sum_preds,
              "poisson")
 
 # Perform an analysis of variance (ANOVA) to assess the significance of the interaction terms
@@ -681,7 +683,7 @@ k.check(m_counts)
 plot(m_counts, plot.all = T)
 
 
-ggplot(data = ips2, aes(y = fangmenge, 
+ggplot(data = ips_sum_preds, aes(y = fangmenge, 
                         x = spei1)) +
   geom_point() +
   geom_line(aes(y = fitted(m_counts)),
