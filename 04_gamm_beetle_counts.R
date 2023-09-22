@@ -20,12 +20,12 @@ library(raster)
 library(rgdal)
 library(tidyverse)
 library(lubridate)
-library(patchwork)
+#library(patchwork)
 library(fasterize)
-library(ggpubr)
 library(terra)
 library(ggplot2)
 library(ggpubr)
+library(ggpmisc)  # add equation to plots smooth 
 
 # Stats
 library('here')
@@ -41,10 +41,14 @@ library('tidyr')
 library("knitr")
 library("viridis")
 library('readr')
-library('gganimate')
 library('itsadug')
 library(DHARMa)
 library(MASS)
+library(car)     # for VIF
+
+# colors
+library(RColorBrewer)
+
 
 
 # load cleaned data
@@ -238,7 +242,7 @@ df_spei <- df_spei %>%
 
 # convert spei long to wide format, to keep scale values as columns 
 df_spei_all <- df_spei %>% 
-  pivot_wider(!spei_cat, 
+  pivot_wider(id_cols = !spei_cat, 
               names_from =  scale, 
               values_from = Series.1, 
               names_prefix = "spei")
@@ -246,12 +250,9 @@ df_spei_all <- df_spei %>%
 
 
 # Get frequency of extremely dry locations: -----------------------------------------
-# 
-library(RColorBrewer)
-#display.brewer.pal(7, "BrBG")
 
 # This SPEI has all 12 months!!!
-df_spei %>% 
+p_spei_freq <- df_spei %>% 
   group_by(year, spei_cat) %>% 
   tally() %>% 
   #filter(spei_cat == 'ext_dry'|spei_cat == 'sev_dry') %>% 
@@ -272,14 +273,14 @@ df_swvl_sub <- df_swvl %>%
   rename(swvl = value)
 
 # add SWVL - now only from 2015, not from 2000 as the others
-df_clim <- df_prec %>% 
+df_clim_month <- df_prec %>% 
   full_join(df_temp,  by = c("globalid", "month", "year")) %>% 
   full_join(df_spei_all, by = c("globalid", "month", "year")) %>%
   full_join(xy_df, by = c("globalid")) %>% 
   full_join(df_swvl_sub, by = c("falsto_name", "month", "year")) %>%
   dplyr::filter(globalid %in% trap_globid)
 
-length(unique(df_clim$globalid))
+length(unique(df_clim_month$globalid))
 
 # Boxplots: TEMP and PRCP -------------------------------------------------
 # calculate mean summer season values over year
@@ -354,7 +355,7 @@ df_swvl_year %>%
 # Summarize climate per veg season ----------------------------------------------
 
 # avg temp, spei, PRCP :april 31 - oct 30 
-df_clim_veg <- df_clim %>% 
+df_clim_veg <- df_clim_month %>% 
   filter(year > 2014 & year < 2022  ) %>% 
   filter(month %in% 4:10) %>% # vegetation period: April 1 - Oct 31
   group_by(falsto_name, year) %>% 
@@ -367,27 +368,74 @@ df_clim_veg <- df_clim %>%
             spei12 = mean(spei12, na.rm = T)
             )
 
-length(unique(df_clim_veg$falsto_name))
-# DOY of max increase  --------------------------------------------------------------
-v_predictors <- c('year', # if analyse predictors, 'year' needs to be removed! 
-  'temp', 'prec', 'swvl',
-                  'spei1', 
-                  'spei3', 'spei6', 'spei12', 
-                  'elev', 'slope', 'aspect', 'tpi', 'tri', 'roughness')
 
-df_predictors_doy <-
-  max.diff.doy %>% 
-  left_join(df_clim_veg, by = c("falsto_name", "year")) %>% # , "month" 
+#### add site conditions -------------------------------------
+# have a table with all predictors: as the dependent vriable will be changing (likely)
+
+df_predictors_year <- 
+  df_clim_veg %>% 
   left_join(df_conif , by = c("falsto_name")) %>% 
-  #left_join(df_xy, by = c("falsto_name", 'x', 'y')) %>% # df_xy3035
-  left_join(df_topo, by = c("falsto_name")) %>% #mutate(year = as.factor(as.character(year)))
-  ungroup(.) %>% 
-  dplyr::select_if(is.numeric) %>% 
-  # keep only predictors for multicollinearity analysis:
-  dplyr::select(c('doy', 
-                'diff',
-                'cumsum',
-                all_of(v_predictors)))    
+  left_join(df_topo, by = c("falsto_name", 'globalid')) %>% 
+  left_join(xy_df, by = c('falsto_name',"globalid")) %>% 
+  ungroup(.) %>%
+  dplyr::select(-c('globalid', 'OBJECTID')) # 
+
+
+  
+ips2 <- 
+    ips.year.sum %>% 
+    left_join(df_predictors_year, by = join_by(year, falsto_name)) #, by = c("falsto_name", 'globalid', 'year'))
+  
+names(ips2)
+names(ips2_test)
+
+# Merge dependent and predictors df ------------------------------------------
+# can be DOY, sum_beetles_year
+df_predictors_doy <- max.diff.doy %>% 
+  df_predictors_year
+  
+
+
+# # variance inflation factor (VIF) ---------------------------------------------
+# https://www.statology.org/variance-inflation-factor-r/
+v_predictors <- c('year', # if analyse predictors, 'year' needs to be removed! 
+                      'temp', 'prec', 'swvl',
+                      'spei1', 
+                      'spei3', 'spei6', 'spei12', 
+                      'elev', 'slope', 'aspect', 'tpi', 'tri', 'roughness')
+  
+ips2_predictors <- ips2 %>% 
+  ungroup(.) %>%  
+  dplyr::select(-c('year', 'falsto_name', 'x', 'y', 'species'))
+
+# Check out which predictors are highly correlated to remove them from teh VIF
+cor(ips2_predictors)
+
+# Compute the VIF values: remove multicollinearity between predictors
+# https://www.statology.org/variance-inflation-factor-r/
+vif_model <- lm(sum_ips ~ temp + elev + prec + swvl+ 
+                  spei12 + 
+                  #spei1 + spei3 + spei6 +  
+                  # species_n + 
+                  freq+ 
+                  slope+  aspect+
+                  tpi, # + 
+                #tri +
+                #roughness, 
+                data = ips2)
+
+
+# get a vector of vif values
+vif_values <- vif(vif_model)
+
+#vif_values
+
+
+#create horizontal bar chart to display each VIF value
+barplot(vif_values, main = "VIF Values", horiz = TRUE, col = "steelblue")
+
+#add vertical line at 5
+abline(v = 5, lwd = 3, lty = 2)
 
 
 # Get overal plots of all predictors by site:
@@ -548,41 +596,6 @@ cor_matrix <- cor(ips2[, c(#"year",
 print(cor_matrix)
 
 
-# variance inflation factor (VIF)
-# https://www.statology.org/variance-inflation-factor-r/
-# Load the 'car' package (if not already loaded)
-library(car)
-
-ips2_predictors <- ips2 %>% ungroup(.) %>%  dplyr::select(-c('year', 'falsto_name', 'x', 'y', 'species'))
-
-# Check out which predictors are highly correlated to remove them from teh VIF
-cor(ips2_predictors)
-
-# Compute the VIF values: remove multicollinearity between predictors
-# https://www.statology.org/variance-inflation-factor-r/
-vif_model <- lm(sum_ips ~ temp + elev + prec + swvl+ 
-                  spei12 + 
-                  #spei1 + spei3 + spei6 +  
-                  # species_n + 
-                  freq+ 
-                  slope+  aspect+
-                  tpi, # + 
-                #tri +
-                #roughness, 
-                data = ips2)
-
-
-# get a vector of vif values
-vif_values <- vif(vif_model)
-
-#vif_values
-
-
-#create horizontal bar chart to display each VIF value
-barplot(vif_values, main = "VIF Values", horiz = TRUE, col = "steelblue")
-
-#add vertical line at 5
-abline(v = 5, lwd = 3, lty = 2)
 
 
 #AIC(m_zero,glm1)
@@ -718,7 +731,7 @@ ips_sum_month <- dat.ips.clean %>%
 ips_sum2 <- 
   ips_sum_month %>%
   left_join(xy_df, by = c('falsto_name')) %>% 
-  left_join(filter(df_clim, year > 2014), by = c("falsto_name", "year", 'month','globalid','x', 'y'))  %>% # , "month" 
+  left_join(filter(df_clim_month, year > 2014), by = c("falsto_name", "year", 'month','globalid','x', 'y'))  %>% # , "month" 
   left_join(df_conif , by = c("falsto_name", 'globalid')) %>% 
   left_join(df_topo, by = c("falsto_name", 'globalid')) %>% #mutate(year = as.factor(as.character(year)))
   dplyr::select(-c('globalid', 'OBJECTID'))
