@@ -381,10 +381,80 @@ df_predictors_year <-
   dplyr::select(-c('globalid', 'OBJECTID')) # 
 
 
+# make lm ----------------------------------------------------------------------
+# temp vs elevation - nice trend
+df_predictors_year %>% 
+  ggplot(aes(x = temp,
+             y = elev,
+             group = year)) +
+  stat_poly_line() +
+  stat_poly_eq(use_label(c( "R2", 'p'))) + #"eq",
+  geom_point(alpha = 0.5) +
+  facet_wrap(.~year) + #, scales = 'free'
+  theme_bw()
+
+
+# precip vs elevation - quite ok trend
+df_predictors_year %>% 
+  ggplot(aes(x = prec,
+             y = elev,
+             group = year)) +
+  stat_poly_line() +
+  stat_poly_eq(use_label(c( "R2", 'p'))) + #"eq",
+  geom_point(alpha = 0.5) +
+  facet_wrap(.~year) + #, scales = 'free'
+  theme_bw()
+
+# spei12 vs soil water content - weird trend with many locations showing not variation in spei??
+df_predictors_year %>% 
+  ggplot(aes(x = spei12,
+             y = swvl,
+             group = year)) +
+  stat_poly_line() +
+  #stat_poly_eq(use_label(c( "R2", 'p'))) + #"eq",
+  geom_point(alpha = 0.5) +
+  facet_wrap(.~year) + #, scales = 'free'
+  theme_bw()
+
+# precipitation vs spruce share
+df_predictors_year %>% 
+  ggplot(aes(x = prec,
+             y = freq,  # share of spruce
+             group = year)) +
+  stat_poly_line() +
+  #stat_poly_eq(use_label(c( "R2", 'p'))) + #"eq",
+  geom_point(alpha = 0.5) +
+  facet_wrap(.~year) + #, scales = 'free'
+  theme_bw()
+
+# temp vs spruce share
+df_predictors_year %>% 
+  ggplot(aes(x = temp,
+             y = freq,  # share of spruce
+             group = year)) +
+  stat_poly_line('lm') +
+  stat_poly_eq(use_label(c( "R2", 'p'))) + #"eq",
+  geom_point(alpha = 0.5) +
+  facet_wrap(.~year) + #, scales = 'free'
+  theme_bw()
+
+# temp vs spruce share - together
+# temp vs spruce share
+df_predictors_year %>% 
+  ggplot(aes(x = temp,
+             y = freq #,  # share of spruce
+             #group = year
+             )) +
+  stat_poly_line() +
+  stat_poly_eq(use_label(c( "R2", 'p'))) + #"eq",
+  geom_point(alpha = 0.5) +
+  #facet_wrap(.~year) + #, scales = 'free'
+  theme_bw()
+
 
 
 # Merge dependent and predictors df ------------------------------------------
-# [1] sum betles year
+# [1] sum beetles year
 ips_sum_preds <- 
   ips.year.sum %>% 
   left_join(df_predictors_year, by = join_by(year, falsto_name)) #, by = c("falsto_name", 'globalid', 'year'))
@@ -414,7 +484,19 @@ cor(ips2_predictors)
 
 # Compute the VIF values: remove multicollinearity between predictors
 # https://www.statology.org/variance-inflation-factor-r/
-vif_model <- lm(sum_ips ~ temp + elev + prec + swvl+ 
+vif_model_all <- lm(sum_ips ~ temp + elev + prec + swvl+ 
+                  spei12 + 
+                  spei1 + spei3 + spei6 +  
+                  # species_n + 
+                  freq+ 
+                  slope+  aspect+
+                  tpi, # + 
+                 tri +
+                 roughness, 
+                data = ips_sum_preds)
+
+
+vif_model_fin <- lm(sum_ips ~ temp + elev + prec + swvl+ 
                   spei12 + 
                   #spei1 + spei3 + spei6 +  
                   # species_n + 
@@ -427,17 +509,22 @@ vif_model <- lm(sum_ips ~ temp + elev + prec + swvl+
 
 
 # get a vector of vif values
-vif_values <- car::vif(vif_model)
+vif_values_all <- car::vif(vif_model_all)
+vif_values_fin <- car::vif(vif_model_fin)
 
-vif_values
 
 
 #create horizontal bar chart to display each VIF value
-barplot(vif_values, main = "VIF Values", horiz = TRUE, col = "steelblue")
+p <- barplot(vif_values_all, main = "VIF Values", horiz = TRUE, col = "steelblue")
 
 #add vertical line at 5
-abline(v = 5, lwd = 3, lty = 2)
+p_vif_all <- p + abline(v = 5, lwd = 3, lty = 2)
 
+#create horizontal bar chart to display each VIF value
+p <- barplot(vif_values_fin, main = "VIF Values", horiz = TRUE, col = "steelblue")
+
+#add vertical line at 5
+p_vif_fin <- p + abline(v = 5, lwd = 3, lty = 2)
 
 # Get overal plots of all predictors by site:
 # density plot + points()
