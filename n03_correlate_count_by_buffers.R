@@ -8,8 +8,12 @@
 
 # Process:
 
-# get input data
-# get a XY data
+# get input disturbance data: drought vs windthrow
+# get a XY of the final trap set: one trap can have several locations! 
+#            needs to make a new location file, with 
+#            locations of the shifting traps: maybe then rerun LISA et GLobal Moran's?
+# get one XY file per year!
+
 # make a buffers around XY data
 # get info of mortality over years from RS per cell
 # aggregate traps into cells, standardize by number of traps per year/cell
@@ -22,7 +26,7 @@
 # bavaria shp
 # disturbance raster
 # xy traps
-# beetle data
+# beetle count data
 # raster species composition: deciduous/coniferous
 
 rm(list=ls()) 
@@ -39,28 +43,92 @@ library(data.table)
 library(tidyr)
 library(raster)
 library(rgdal)
-library(tidyverse)
+#library(tidyverse)
 library(lubridate)
-library(patchwork)
+#library(patchwork)
 library(fasterize)
 library(ggpubr)
 library(terra)
 
 
+# load cleaned data
+load("outData/ips.Rdata")
+load("outData/spatial.Rdata")
 
 # Read data
-disturbance <- rast(paste(myPath, outFolder,  "disturbance14_conif.tif", sep = "/"))
+disturb_year <- rast('C:/Users/ge45lep/Documents/2022_BarkBeetles_Bavaria/rawData/germany114/disturbance_year_1986-2020_germany.tif')
+disturb_type <- rast('C:/Users/ge45lep/Documents/2022_BarkBeetles_Bavaria/rawData/storm_fire_harvest/storm_fire_other_classification_germany.tif')
+#rast(paste(myPath, outFolder,  "disturbance14_conif.tif", sep = "/"))
+crs(disturb_year)
+crs(disturb_type)
+# disturbance coding: 
+# 0 = no disturbance
+# 1 = other disturbances (not storm- or fire-related)
+# 2 = storm disturbances
+# 3 = fire disturbances
 
 
 # Get beetle counts
-dat      <- fread(paste(myPath, outFolder, "dat.csv", sep = "/"))
+dat      <- ips.year.sum #fread(paste(myPath, outFolder, "dat.csv", sep = "/"))
 
-# Get spatial data for each trap
-xy      <- vect(paste(myPath, outFolder, "xy_3035.gpkg", sep = "/"), 
-                   layer = 'xy_3035') # read watershed
+# Get spatial data for each trap: each trap has to have only one location per one year! 
+# 158 traps in total (79*2), 7
+#xy      <- vect(paste(myPath, outFolder, "xy_3035.gpkg", sep = "/"), 
+#                   layer = 'xy_3035') # read watershed
+xy_sf_all  # all XY traps
+xy_sf_fin  # selected traps with consistent monitoring , one trap have only one XY per all years (I neglected thet they moved over years)
+
 
 # Get climate data for traps:
-xy_clim <- fread(paste(myPath, outTable, 'xy_clim.csv', sep = "/"))
+#xy_clim <- fread(paste(myPath, outTable, 'xy_clim.csv', sep = "/"))
+
+# Clean trap cooordinates ------------------------------------------
+# to do: get the shifting XY per trap to work with the disturbance map data!
+trap_names = unique(xy_sf_fin$falsto_name)
+
+
+# get study period
+all_years = 2006:2021
+study_period = 2015:2021
+
+# Expand coordinates table to have a geometry for each trap and year
+xy_sf_expand <- 
+  xy_sf_all %>% 
+  filter(falsto_name %in% trap_names ) %>% 
+    dplyr::mutate(x = sf::st_coordinates(.)[,1],
+                  y = sf::st_coordinates(.)[,2]) %>% 
+  dplyr::select(von_dat, bis_dat, falsto_name, globalid, x, y) %>% #, geometry
+  mutate(from_year = lubridate::year(dmy(von_dat)))  %>% # get the year from the starting date
+  group_by(falsto_name) %>% 
+  complete(from_year = all_years)  %>% 
+  arrange(falsto_name, from_year) %>% 
+ # df %>%
+   tidyr::fill(globalid, .direction = 'down') %>%
+    tidyr::fill(x, .direction = 'down') %>%
+    tidyr::fill(y, .direction = 'down')%>%
+   # dplyr::rename(from_year = year) #%>% 
+  filter(from_year %in% study_period) %>% # filter only years 2015:2021
+    st_as_sf(coords = c("x", "y"), 
+             crs = 3035) %>% 
+  mutate(year = from_year) %>% 
+  dplyr::select(-c(from_year, von_dat, bis_dat))
+
+
+# Merge ips counts per year with geometry
+xy_sf_expand_ips <- xy_sf_expand %>% 
+  right_join(ips.year.sum, by = c('falsto_name', 'year')) # %>% 
+#  dplyr::left_join(, by = c(falsto_name, year, globalid)) # , 
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -89,6 +157,11 @@ m <- c(1, 90, NA,
 rclmat <- matrix(m, ncol=3, byrow=TRUE)
 spruce1 <- classify(spruce, rclmat, include.lowest=TRUE)
 
+
+
+
+
+
 #  ---------------------------------------------------------------------
 # How much mortality happened in each buffer? 
 # ----------------------------------------------------------------------
@@ -101,18 +174,14 @@ spruce1 <- classify(spruce, rclmat, include.lowest=TRUE)
 # Project the vector (XY) into raster data
 # Check if the CRS is the same
 #crs(disturbance) == crs(xy)
-#
+
+# convert to terra object
+xy <- vect(xy_sf_expand)
+
+xy$id <- 1:nrow(xy)
+
 # change the projection of the XY data
-xy <- terra::project(xy, crs(disturbance))
-
-# Create buffers around XY point: r = 500 m to link the estimate RS damage
-buff_500 = xy %>% 
-  buffer(500)   # 500 m
-
-#windows()
-#plot(xy_500['OBJECTID'])
-#plot(xy['OBJECTID'], add = T, col = 'red')
-
+xy <- terra::project(xy, crs(disturb_year))
 
 
 # ---------------------------------------------------------------
@@ -126,7 +195,62 @@ buff_500 = xy %>%
 # export as values from rasters to have a dataframe
 # for each trap: 
 
-buff_ls <- terra::split(buff_500, "OBJECTID")
+# create a list to look over
+xy_ls <- terra::split(xy, c('id')) #,# "OBJECTID" # 
+
+# make a function to export df from each buffer: keep years, disturbance type and forest
+extract_rst_val <- function(xy, ...) {
+   xy<- xy_ls[[10]]
+   id <- xy$id
+   
+   # get buffer
+   buff <- buffer(xy, 500)
+   
+   # disturbance year
+   # crop data and then mask them to have a circle
+   dist_year_crop <- crop(disturb_year, buff)
+   dist_year_mask <- mask(dist_year_crop, buff)
+   
+   
+   # disturbance type
+   dist_type_crop <- crop(disturb_type, buff)
+   dist_type_mask <- mask(dist_type_crop, buff)
+   
+   # Get vector of values
+   val_year <- values(dist_year_mask)
+   val_type <- values(dist_type_mask)
+   
+   # count number of cells:
+   df <- as.data.frame(table(val_type, val_year))
+   
+   # add name
+   df$id <- id
+   
+   return(df)
+  
+  }
+
+#extract_rst_val(xy_ls[[5]])
+
+# run over all locations
+out_ls <- lapply(xy_ls, extract_rst_val) #extract_rst_val(xy_ls[[10]])
+
+# merge partial tables into one df
+dist_df      <-do.call("rbind", out_ls)
+
+# remove all old years
+dist_df <- dist_df %>% 
+  mutate(val_year = as.numeric(as.character(val_year))) %>% 
+  filter(val_year  > 2014 )
+
+# output needed: for every year, I need how many cells was disturbed by what agent
+
+  
+
+
+
+
+
 
 # get functions to calculate sum mortality and forest composition:
 mortality_by_buff <- function(spatVect, ...) {
