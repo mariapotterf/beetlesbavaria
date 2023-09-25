@@ -1,6 +1,7 @@
 
 
-#  Try GAMs on beetle data counts
+#  Explore dependent vs predictors variables
+# on raw beetle counts (per month) vs summarized values over year (sum, DOY of max increase, DOY of aggregation)
 
 
 rm(list=ls()) 
@@ -124,12 +125,12 @@ head(dat.ips.clean)
 
 # Analyze data ------------------------------------
 
-# rename column names to join the datasets:
+# dplyr::rename column names to join the datasets:
 df_prec <- df_prec %>% 
-  rename(PRCP = vals)
+  dplyr::rename(PRCP = vals)
 
 df_temp <- df_temp %>% 
-  rename(TMED = vals) %>% 
+  dplyr::rename(TMED = vals) %>% 
   mutate(TMED = TMED/10)  # as in the description
 
 # select only coniferous: == 2, 0 is no forest (eg. covers the whole 500 m buffer)
@@ -170,12 +171,17 @@ p_spei12<- df_spei %>%
   ylab(paste('SPEI', spei_scale))
 
 
+# SPEI SEEMS weird!!!!!
+# I have the lowest SPEI in 2016, and 2018-2019 seem quite wet!! - remove SPEI for now
+df_spei %>% 
+  filter(year == 2016 & month == 7)
+
 
 # SPEI plot on map: ----------------------------------------------
 df_spei_avg <- df_spei %>% 
   filter(scale == spei_scale) %>%
   group_by(globalid, year ) %>% 
-  summarize(spei_med = median(Series.1))
+  dplyr::summarize(spei_med = median(Series.1))
            
 
 # merge SPEI data
@@ -189,12 +195,7 @@ p_spei12_bav <- ggplot(bav_sf) +
           fill  = 'grey93') + 
   geom_sf(data = df_spei_avg_sf,
           aes(color = spei_med)) + # , size = Age, size = 0.8size by factor itself!
-  # scale_color_viridis(name = 'Drought islands\nmedian SPEI year <1', 
-  #                     alpha = 0.8,
-  #                     option = 'magma',
-  #                     direction = -1,
-  #                     na.value = 'transparent') +
-  scale_color_distiller(type = 'div', 
+   scale_color_distiller(type = 'div', 
                         palette = "RdBu", 
                         direction = 1, 
                         "SPEI") + 
@@ -213,6 +214,24 @@ p_spei12_bav <- ggplot(bav_sf) +
 # near normal conditions (−1 < SPEI < + 1) (Slette et al., 2019).
 range(df_spei$Series.1, na.rm = T)
 #  -3.076544  2.980012
+
+
+# Understand different SPEI:
+
+df_spei %>% 
+  filter(globalid == "84617C77-1ECE-4119-8C04-452E41126A05") %>% 
+  ggplot(aes(x = month,
+             y = Series.1,
+             color = scale)) + 
+  geom_point() +
+  geom_line() +
+  facet_grid(year~scale)
+
+# SPEI 12 seems quite even; find locations with etreme drought to see that?
+df_spei %>%  
+  filter(Series.1 < -2) 
+  
+
 
 df_spei <- df_spei %>% 
   mutate(spei_cat = case_when(Series.1 <= -2 ~ 'ext_dry',
@@ -270,7 +289,7 @@ p_spei_freq <- df_spei %>%
 # join PREC, TEMP, SPEI data --------------------------------------------------
 df_swvl_sub <- df_swvl %>% 
   dplyr::select(value, falsto_name, month, year) %>% 
-  rename(swvl = value)
+  dplyr::rename(swvl = value)
 
 # add SWVL - now only from 2015, not from 2000 as the others
 df_clim_month <- df_prec %>% 
@@ -356,16 +375,16 @@ df_swvl_year %>%
 
 # avg temp, spei, PRCP :april 31 - oct 30 
 df_clim_veg <- df_clim_month %>% 
-  filter(year > 2014 & year < 2022  ) %>% 
-  filter(month %in% 4:10) %>% # vegetation period: April 1 - Oct 31
+  dplyr::filter(year > 2014 & year < 2022  ) %>% 
+  dplyr::filter(month %in% 4:10) %>% # vegetation period: April 1 - Oct 31
   group_by(falsto_name, year) %>% 
-  summarise(prec = mean(PRCP),
-            temp = mean(TMED),
-            swvl = mean(swvl),
-            spei1 = mean(spei1, na.rm = T),
-            spei3 = mean(spei3, na.rm = T),
-            spei6 = mean(spei6, na.rm = T),
-            spei12 = mean(spei12, na.rm = T)
+  dplyr::summarise(prec = median(PRCP),
+            temp = median(TMED),
+            swvl = median(swvl),
+            spei1 = median(spei1, na.rm = T),
+            spei3 = median(spei3, na.rm = T),
+            spei6 = median(spei6, na.rm = T),
+            spei12 = median(spei12, na.rm = T)
             )
 
 
@@ -432,7 +451,7 @@ df_predictors_year %>%
   ggplot(aes(x = temp,
              y = freq,  # share of spruce
              group = year)) +
-  stat_poly_line('lm') +
+  stat_poly_line() +
   stat_poly_eq(use_label(c( "R2", 'p'))) + #"eq",
   geom_point(alpha = 0.5) +
   facet_wrap(.~year) + #, scales = 'free'
@@ -463,7 +482,7 @@ ips_sum_preds <-
 # [2] Max Diff DOY
 df_predictors_doy <-    # merge max difference by doy with the yearly predictors
   max.diff.doy %>% 
-  df_predictors_year
+  left_join(df_predictors_year, by = join_by(year, falsto_name))
   
 
 
@@ -475,12 +494,6 @@ v_predictors <- c('year', # if analyse predictors, 'year' needs to be removed!
                       'spei3', 'spei6', 'spei12', 
                       'elev', 'slope', 'aspect', 'tpi', 'tri', 'roughness')
   
-ips2_predictors <- ips_sum_preds %>% 
-  ungroup(.) %>%  
-  dplyr::select(-c('year', 'falsto_name', 'x', 'y', 'species'))
-
-# Check out which predictors are highly correlated to remove them from teh VIF
-cor(ips2_predictors)
 
 # Compute the VIF values: remove multicollinearity between predictors
 # https://www.statology.org/variance-inflation-factor-r/
@@ -521,10 +534,10 @@ p <- barplot(vif_values_all, main = "VIF Values", horiz = TRUE, col = "steelblue
 p_vif_all <- p + abline(v = 5, lwd = 3, lty = 2)
 
 #create horizontal bar chart to display each VIF value
-p <- barplot(vif_values_fin, main = "VIF Values", horiz = TRUE, col = "steelblue")
+barplot(vif_values_fin, main = "VIF Values", horiz = TRUE, col = "steelblue")
 
 #add vertical line at 5
-p_vif_fin <- p + abline(v = 5, lwd = 3, lty = 2)
+abline(v = 5, lwd = 3, lty = 2)
 
 # Get overal plots of all predictors by site:
 # density plot + points()
@@ -536,12 +549,17 @@ summary(df_predictors_doy)
 # get correlation coefficient across all predictors:------------------------------
 # (to run this, need to remove the y-vars from above: doy, diff, cumsum!)
 # http://www.sthda.com/english/wiki/correlation-matrix-a-quick-start-guide-to-analyze-format-and-visualize-a-correlation-matrix-using-r-software
-preds.res <- cor(df_predictors_doy, use = "complete.obs")
+ips2_predictors <- ips_sum_preds %>% 
+  ungroup(.) %>%  
+  dplyr::select(-c('year', 'falsto_name', 'x', 'y', 'species'))
+
+# Check out which predictors are highly correlated to remove them from teh VIF
+preds.res <- cor(ips2_predictors, use = "complete.obs")
 round(preds.res, 2)  # simplify visualization
 
 # p-values are missing: get them from different package:
 library("Hmisc")
-res2 <- Hmisc::rcorr(as.matrix(df_predictors_doy))
+res2 <- Hmisc::rcorr(as.matrix(ips2_predictors))
 res2
 
 
@@ -557,29 +575,14 @@ corrplot(res2$r, type="upper", order="hclust",
 
 
 # Check for scatter plots between precistors:
-install.packages("PerformanceAnalytics")
+#install.packages("PerformanceAnalytics")
 
 library("PerformanceAnalytics")
 my_data <- mtcars[, c(1,3,4,5,6,7)]
-chart.Correlation(df_predictors_doy, histogram=TRUE, pch=19)
+chart.Correlation(ips2_predictors, histogram=TRUE, pch=19)
 
 
-
-# check random scatter plts: what can be my y variable? -----------
-ggplot(df_predictors_doy, aes(x = diff,
-                          y = prec,
-                          color = year)) +
-  geom_point() 
-
-# # add globalid to merge with clim data
-# ips2 <- 
-#   ips.year.sum %>% 
-#   left_join(xy_df, by = c('falsto_name')) %>% 
-#   left_join(df_clim_veg, by = c("falsto_name", "year")) %>% # , "month" 
-#   left_join(df_conif , by = c("falsto_name", 'globalid')) %>% 
-#   left_join(df_topo, by = c("falsto_name", 'globalid')) %>% #mutate(year = as.factor(as.character(year)))
-#   dplyr::select(-c('globalid', 'OBJECTID'))
-
+# export final table ------------------------------------------------------------
 write.csv(ips_sum_preds, 'C:/Users/ge45lep/Documents/2022_BarkBeetles_Bavaria/outTable/ips_sum.csv')
 
 
@@ -591,6 +594,10 @@ save(ips_sum_preds,           # final df: predictors aggregated by year, sum bee
      df_predictors_year,      # df predictors per year, can be merged with different dependent variables
      p_temp,                  # plot temp
      p_prec,                  # plot prec
+     p_spei12,
+     p_spei12_bav, 
+     p_spei_freq, 
+     vif_values_fin,          # VIF values for final set of predictors
      file="outData/predict.Rdata") 
 
 
