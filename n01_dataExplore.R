@@ -426,8 +426,8 @@ beetle_threshold = 1000
 ips.aggreg <- df.daily %>% 
   group_by(year, falsto_name) %>% 
   arrange(doy) %>% 
-  filter(cumsum > beetle_threshold) %>%
-  filter(row_number()==1)     # filter first record per group > 2000
+  dplyr::filter(cumsum > beetle_threshold) %>%
+  dplyr::filter(row_number()==1)     # filter first record per group > 2000
   
 ips.aggreg %>% 
   ggplot(aes(y=doy,
@@ -558,10 +558,11 @@ max.diff.doy.sf <- xy_sf_fin %>%   # to keep the sf structure, need to add df to
 
 # Get spatial data: cumulative DOY -----------------------------
 ips.aggreg.sf <- xy_sf_fin %>%   # to keep the sf structure, need to add df to sf
+  dplyr::select(falsto_name, geometry) %>% 
   right_join(ips.aggreg, 'falsto_name')
 
 
-
+head(ips.aggreg)
 
 
 ### Table: Max increase check range DOY: -------------------------------------
@@ -592,14 +593,6 @@ max.diff.doy %>%
 # the main diference in counts happends earlier in the season
 avg.doy <- mean(df.daily$doy)
 
-#windows()
-df.daily %>% 
-  ggplot(aes(y = doy,
-             x = factor(year))) +
-  geom_violin() +
-  stat_summary() +
-  geom_hline(yintercept = avg.doy, lty = 'dashed', col = "red")
-  #stat_summary(fun = mean, geom="line")
 
 
 
@@ -712,25 +705,6 @@ p_ips.year.sum <- ggplot(data = ips.year.sum,
 p_ips.year.sum
 
 # 2.population increase -------------------------------------------------------------
-ggplot(bav_sf) +   # base map
-  geom_sf(color = 'black', 
-          fill  = 'grey33') + 
-  geom_sf(data = max.diff.doy.sf,
-          aes(color = diff#,
-              #size = diff
-          )
-  ) + # , size = Age, size = 0.8size by factor itself!
-  colorspace::scale_color_continuous_sequential(palette = "Heat", alpha = 0.8,
-                                                rev = TRUE) + # reverse order  = sooner = darker color
-  # annotation_scale(location = "bl", 
-  #                   width_hint = 0.4) +
-  theme_void() +
-  facet_wrap(~year) +
-  xlab("Longitude") + 
-  ylab("Latitude") +
-  labs(title = 'Max increase/trap/day',
-       #color  = "DOY",
-       size = "Ips increase [day/trap]")
 
 
 # three aspects: the max increase in season
@@ -742,7 +716,7 @@ ggplot(bav_sf) +   # base map
 
 
 ## 3. Aggeragte beetle numbers (beetle_threshold per trap) IPS -------------------------------
-lab_doy_cumulative = paste('DOY of cumulative ', beetle_threshold)
+lab_doy_cumulative = paste('DOY of cumulative \n', beetle_threshold)
 
 p_aggreg <- 
   ggplot(bav_sf) +   # base map
@@ -791,7 +765,7 @@ p_ips.agg <- ggplot(data = ips.aggreg,
     fun = median,
     geom  = 'errorbar',
     width = .2) +
-  ggtitle(paste("DOY of reaching", beetle_threshold,  "beetles")) + 
+  ggtitle(paste("Aggregation: DOY ", beetle_threshold,  "beetles")) + 
   theme_bw()
   #coord_cartesian(ylim=c(60, 67)) # ylim=c(59,66)
 
@@ -852,7 +826,7 @@ p_ips.max.diff.doy <- ggplot(data = max.diff.doy,
     fun = median,
     geom  = 'errorbar',
     width = .2) +
-  ggtitle("DOY of max increase") + 
+  ggtitle("Emergence: DOY of max increase") + 
   theme_bw()
 
 
@@ -874,7 +848,7 @@ p_ips.max.diff <- ggplot(data = max.diff.doy,
     fun = median,
     geom  = 'errorbar',
     width = .2) +
-  ggtitle("Max increase (diff in #beetles)") + 
+  ggtitle("Emergence: Max increase (diff in #beetles)") + 
   theme_bw()
 
 # get correlation between trap1 and trap 2
