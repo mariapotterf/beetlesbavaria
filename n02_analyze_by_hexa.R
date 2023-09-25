@@ -24,8 +24,6 @@
 
 # Process:
 
-# get input data
-# get a grid
 # get info of mortality over years from RS per cell
 # aggregate traps into cells, standardize by number of traps per year/cell
 # merge databases by cell_id
