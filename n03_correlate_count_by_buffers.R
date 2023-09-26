@@ -58,6 +58,9 @@ load("outData/spatial.Rdata")
 # Read data
 disturb_year <- rast('C:/Users/ge45lep/Documents/2022_BarkBeetles_Bavaria/rawData/germany114/disturbance_year_1986-2020_germany.tif')
 disturb_type <- rast('C:/Users/ge45lep/Documents/2022_BarkBeetles_Bavaria/rawData/storm_fire_harvest/storm_fire_other_classification_germany.tif')
+forest_cover <- rast('C:/Users/ge45lep/Documents/2022_BarkBeetles_Bavaria/rawData/germany114/forestcover_germany.tif')
+
+
 #rast(paste(myPath, outFolder,  "disturbance14_conif.tif", sep = "/"))
 crs(disturb_year)
 crs(disturb_type)
@@ -88,7 +91,7 @@ trap_names = unique(xy_sf_fin$falsto_name)
 
 
 # get study period
-all_years = 2006:2021
+all_years    = 2006:2021
 study_period = 2015:2021
 
 # Expand coordinates table to have a geometry for each trap and year
@@ -114,10 +117,6 @@ xy_sf_expand <-
   dplyr::select(-c(from_year, von_dat, bis_dat))
 
 
-# Merge ips counts per year with geometry
-xy_sf_expand_ips <- xy_sf_expand %>% 
-  right_join(ips.year.sum, by = c('falsto_name', 'year')) # %>% 
-#  dplyr::left_join(, by = c(falsto_name, year, globalid)) # , 
 
 
 
@@ -127,35 +126,6 @@ xy_sf_expand_ips <- xy_sf_expand %>%
 
 
 
-
-
-
-
-
-# Get forest type: 
-forest_type <- rast(paste(myPath, outFolder, "bav_fortype_ext30_int2u_LZW.tif", sep = "/"))
-# code: 
-# 2 - coniferous
-# 1 - deciduous
-# 0 - background
-
-spruce <- rast(paste(myPath, outFolder, "bav_spruce.tif", sep = "/"))
-# keep as spruce only the pixel values 88-100 (the % probability of spruce occurence: visually tested with teh coniferous data extent)
-
-# check the projection of teh raster!
-crs(forest_type) == crs(disturbance)
-crs(spruce) == crs(disturbance)
-
-forest_type <- terra::project(forest_type, crs(disturbance))
-spruce <- terra::project(spruce, crs(disturbance))
-
-# reclassify spruce: keep only values 88-100 as 1
-unique(values(spruce))
-m <- c(1, 90, NA,
-       90, 100, 1,
-       100, 256, NA)
-rclmat <- matrix(m, ncol=3, byrow=TRUE)
-spruce1 <- classify(spruce, rclmat, include.lowest=TRUE)
 
 
 
@@ -200,7 +170,8 @@ xy_ls <- terra::split(xy, c('id')) #,# "OBJECTID" #
 
 # make a function to export df from each buffer: keep years, disturbance type and forest
 extract_rst_val <- function(xy, ...) {
-   xy<- xy_ls[[10]]
+   
+   #xy<- xy_ls[[13]]
    id <- xy$id
    
    # get buffer
@@ -230,22 +201,225 @@ extract_rst_val <- function(xy, ...) {
   
   }
 
-#extract_rst_val(xy_ls[[5]])
+
+# make a function to export df from each buffer: keep years, disturbance type and forest
+extract_forest <- function(xy, ...) {
+  #xy<- xy_ls[[10]]
+  id <- xy$id
+  
+  # get buffer
+  buff <- buffer(xy, 500)
+  
+  # disturbance year
+  # crop data and then mask them to have a circle
+  forest_crop <- crop(forest_cover, buff)
+  forest_mask <- mask(forest_crop, buff)
+  
+  # Get vector of values
+  val <- values(forest_mask)
+  
+  # count number of cells:
+  df <- as.data.frame(table(val))
+  
+  # add name
+  df$id <- id
+  
+  return(df)
+  
+}
+
+
 
 # run over all locations
-out_ls <- lapply(xy_ls, extract_rst_val) #extract_rst_val(xy_ls[[10]])
+# extract disturbances
+out_dist_ls <- lapply(xy_ls, extract_rst_val) #extract_rst_val(xy_ls[[10]])
 
 # merge partial tables into one df
-dist_df      <-do.call("rbind", out_ls)
+dist_df      <-do.call("rbind", out_dist_ls)
 
-# remove all old years
-dist_df <- dist_df %>% 
-  mutate(val_year = as.numeric(as.character(val_year))) %>% 
-  filter(val_year  > 2014 )
+# check data
+dist_df[order(dist_df$id),]
 
-# output needed: for every year, I need how many cells was disturbed by what agent
-
+#dist_df_wide <- 
+  #dist_df %>% 
+  #spread(val_type, Freq) %>% 
   
+    
+table(dist_df$id, dist_df$val_year)
+
+# remove years before study period 
+dist_df_out <- 
+  dist_df %>% 
+  as.data.frame(stringsAsFactors = FALSE) %>% 
+  mutate(val_year = as.numeric(as.character(val_year))) %>% # convert factor to numeric
+    group_by(val_year, id) %>%
+    filter(val_type != 0) %>% # remove 0 = No disturbance!!!!  
+    mutate(all_dist_sum = sum(Freq)) %>% 
+    spread(val_type, Freq) %>% 
+  #filter(val_year  > 2014 ) %>% 
+#  filter(val_type == '1') %>%  # 1 = other disturbances (no wind or fire), 2 wind, 3-fire
+  dplyr::rename(year = val_year)
+# output needed: for every year, I need how many cells was disturbed by what agent
+# forest cover = 1, it copntains all disturbances
+
+names(dist_df_out) <- c("year" , "id","all_dist_sum","harvest","wind", "fire")
+
+# investigate teh disturbances per years and trap buffer
+ggplot(dist_df_out, aes(x = year,
+                        y = all_dist_sum,
+                        color = id)) +
+  geom_point()
+
+
+# extract forest ------------------------------------------------
+out_forest_ls <- lapply(xy_ls, extract_forest ) #extract_rst_val(xy_ls[[10]])
+
+# merge partial tables into one df
+forest_df      <-do.call("rbind", out_forest_ls)
+
+forest_df <- forest_df %>% 
+  filter(val == '1') %>%   # 1 = forest from 1986!!!!
+  dplyr::select(-val) %>% 
+  dplyr::rename(forest_freq =Freq)
+
+
+# Merge ips counts per year withbuffer info  ---------------------------------------
+
+df_fin <- 
+  xy %>% 
+  as.data.frame() %>% 
+  left_join(forest_df, c('id')) %>% 
+  left_join(dist_df_out, c('id', 'year')) %>%
+  left_join(ips.year.sum, by = c('falsto_name', 'year'))  %>% 
+  group_by(falsto_name) %>% 
+  arrange(falsto_name, year) %>% 
+   mutate(lag1_dist_sum  = dplyr::lag(all_dist_sum, n=1),
+          lag1_harvest   = dplyr::lag(harvest,      n=1),
+          lag2_harvest   = dplyr::lag(harvest,      n=2)) 
+
+
+
+df_fin %>% 
+  ggplot(aes(harvest*0.09))+ 
+  geom_histogram(binwidth = 0.1) + 
+  facet_wrap(year~.)
+
+df_fin %>% 
+  ggplot(aes(sum_ips))+ 
+  geom_histogram() + 
+  facet_wrap(year~.)
+
+
+library(ggpmisc)
+df_fin %>% 
+  ggplot(aes(x = sum_ips/10000,
+             y = all_dist_sum )) +
+  stat_poly_line() +
+  stat_poly_eq(use_label(c( "R2", 'p'))) + #"eq",
+  geom_point(alpha = 0.5) +
+  facet_wrap(year ~. ) +
+  ggtitle('All disturbances')
+ 
+
+
+df_fin %>% 
+  ggplot(aes(x = sum_ips/10000,
+             y = harvest*0.09  )) +
+ # stat_poly_line() +
+  #stat_poly_eq(use_label(c( "R2", 'p'))) + #"eq",
+  geom_point(alpha = 0.5) +
+  facet_wrap(year ~.,) +
+  ggtitle('Harvest') + 
+  theme_bw()
+
+
+
+# need to lag values by one-two year! eg high number of beetles in year n
+# triggers high mortality in next one to two years
+# export all disturbances = sum, maybe that will work?
+
+
+df_fin %>%
+  as.data.frame() %>% 
+  ggplot(aes(x = sum_ips/10000,
+             y = lag1_dist_sum  )) +
+  stat_poly_line() +
+  stat_poly_eq(use_label(c( "R2", 'p'))) + #"eq",
+  geom_point(alpha = 0.5) +
+  # geom_smooth('lm') +
+  facet_wrap(year ~., scales = 'free') +
+  ggtitle('Lag1 all disturb')
+
+
+# buffer area = 780 ha
+df_fin %>% 
+  ggplot(aes(x = sum_ips/10000,
+             y = lag1_harvest*0.09  )) +
+  #stat_poly_line() +
+ # stat_poly_eq(use_label(c( "R2", 'p'))) + #"eq",
+  geom_point(alpha = 0.5) +
+  facet_wrap(year ~.) + # , scales = 'free'
+  ggtitle('Harvest +1year') + 
+  theme_bw()
+
+
+
+df_fin %>% 
+  ggplot(aes(x = sum_ips,
+             y = lag2_harvest  )) +
+  stat_poly_line() +
+  stat_poly_eq(use_label(c( "R2", 'p'))) + #"eq",
+  geom_point(alpha = 0.5) +
+  # geom_smooth('lm') +
+  facet_wrap(year ~., scales = 'free') +
+  ggtitle('Lag2 Harvest')
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# Get forest type: 
+forest_type <- rast(paste(myPath, outFolder, "bav_fortype_ext30_int2u_LZW.tif", sep = "/"))
+# code: 
+# 2 - coniferous
+# 1 - deciduous
+# 0 - background
+
+spruce <- rast(paste(myPath, outFolder, "bav_spruce.tif", sep = "/"))
+# keep as spruce only the pixel values 88-100 (the % probability of spruce occurence: visually tested with teh coniferous data extent)
+
+# check the projection of teh raster!
+crs(forest_type) == crs(disturbance)
+crs(spruce) == crs(disturbance)
+
+forest_type <- terra::project(forest_type, crs(disturbance))
+spruce <- terra::project(spruce, crs(disturbance))
+
+# reclassify spruce: keep only values 88-100 as 1
+unique(values(spruce))
+m <- c(1, 90, NA,
+       90, 100, 1,
+       100, 256, NA)
+rclmat <- matrix(m, ncol=3, byrow=TRUE)
+spruce1 <- classify(spruce, rclmat, include.lowest=TRUE)
+
+
+
+
+
+
+
+
 
 
 
