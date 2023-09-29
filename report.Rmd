@@ -56,7 +56,9 @@ load(file = "outData/lisa.Rdata")
 library(dplyr)
 library(cowplot)
 library(ggplot2)
-#library(ggpubr)
+library(ggpubr)
+library(ggpmisc)
+library(kableExtra)
 
 ```
 
@@ -64,6 +66,7 @@ library(ggplot2)
 
 Q1: Variation of beetle population dynamics over time and space: 
 
+ - Do beetle counts vary between trap pairs? 
  - How do beetle counts change over time and space?
    - Sum beetle counts per trap/year
  - Does beetle population increase earlier in the year? When does the main increase in population (*swarming*) happen?
@@ -71,22 +74,21 @@ Q1: Variation of beetle population dynamics over time and space:
  - Do beetles aggregate faster? When they reach the same threshold? (1000 beetles) *aggregation*
    - Identify (DOY) of reaching the 1000 beetles per trap.
    
-Q2: Regional vs global variation?
+Q2: Regional vs global variation? - run on 'sum of beetles/year' variable (posible to run on other dependent variables as well)
 
 - are the traps near by more similar than the traps further away?
-- LISA - local indicators of spatial assotiationa
-- Global Moran's I
-- variograms
+- LISA - local indicators of spatial association
+- Global Moran's I - global indicators of spatial autocorrelation
+- variograms - identifies the distance at what two random location are equally different (their difference does not further increase with increasing distance)
 
 Q3: Drivers? (data collected, but not analyzed yet)
 
 - temperature
 - precipitation
-- SPEI (drought) index - lower value, more drought
-- soil water content (swvl) - ration volume water/volume soil: higher the number, more water, less drought
+- soil water content (swvl) - ratio volume water/volume soil: higher the number, more water, less drought
 - elevation
 - spruce%
-- spruce vs. deciduous%
+
 
 
 # Methods
@@ -96,39 +98,40 @@ Q3: Drivers? (data collected, but not analyzed yet)
 ### Beetle trap dataset overview
 
 - trap datasets in trap pairs, covering area of Bavaria over 2015-2021
-- consistent monitoring: 79*2 traps per whole research period
+- cca 10 x 10 km span, 1 km distance one trap from the other in one location
+- consistent monitoring: 79*2= 158 traps/year per whole research period
+- removed traps without pair (e.g. '3'), also traps that were added later in the study period (mostly in Bavarian forests, north-west Bavaria)
 - traps emptied over whole year, roughtly in two weeks interval (range 7 - 30 days)
-- individual trap name = 'falsto_name' - one trap can have several globalid, if moved over years. Keep only one globalid per trap. Only one 'globalid' for Ips and Pityogenes traps locations.
-
-
-To test if the importance of drivers explaining variability changed over time: 
-perform temporal interaction analysis - 
-allows to assess whether the relationships between the drivers 
-and the response variable differ across different time periods. 
+- filtered trap data from April 1st to Oct 30th
+- individual trap name = 'falsto_name' - one trap can have several globalid, if moved over years. Keep only one globalid per trap. Only one 'globalid' for traps locations.
 
 
 
 
 
-## Dependent variables
+### Dependent variables
 
-- total sum of beetles per trap/year.
-- beetle emergence: the max difference in beetle counts between consecutive dates 
-- beetle aggregation : DOY of the beetles reaching 1000 beetles/trap.
+- total sum of beetles per trap/year
+- beetle **emergence**: the max difference in beetle counts between two consecutive dates 
+- beetle **aggregation** : DOY of the beetles reaching 1000 beetles/trap.
 
 
 
 
 
 
-```{r summary-tab, caption = 'sum table'}
-
-summary(ips2)
+```{r summary-tab, caption = 'Summary table f the beetle counts per year and predictors '}
+ips_sum_preds %>% 
+  dplyr::select(-c(spei1, spei3, spei6, spei12, tpi, tri )) %>% 
+summary()
 
 ```
 
 
-```{r p_clim_data}
+```{r p_clim_data, fig.width = 6, fig.height = 3, fig.cap= "Red line indicates local mean."}
+
+ggarrange(p_temp, p_prec)
+
 #cowplot::plot_grid(p_temp, p_prec)
 ```
 
@@ -146,17 +149,100 @@ summary(ips2)
 
 
 
-### Identify multicollinearity
+### Identify multicollinearity between predictors
 
 VIF - variance inflation factor
 values for each predictor variable in the model to determine if multicollinearity
 
-<1 - relatively independent
-1-5 - very little dependent
->5 - likely concerning
-### Predictors maps
+Based on VIF values:
 
-SPEI
+ - less 1  - relatively independent
+ - 1-5  - very little dependent
+ - more 5  - likely concerning - removed
+
+Based on VIF values, I have removed the most correlated predictors.
+
+Set of the least correlated predictors, which can be further used for analysis:
+
+```{r p_vif_fin, fig.width = 3, fig.height = 3.5, echo = F, fig.cap="Values of the selected predictors based on the low (<5) values of Variance Inflation Factors. Vertical line represent value 1, indicating non-correlated precictors."}
+
+vif_values_fin
+
+#create horizontal bar chart to display each VIF value
+barplot(vif_values_fin, main = "VIF Values", horiz = TRUE, col = "steelblue")
+
+#add vertical line at 5
+abline(v = 1, lwd = 3, lty = 2)
+
+
+```
+
+### Check correlation for selected predictores 
+
+
+
+```{r lm_temp_elev, fig.width = 5, fig.height = 5, echo = F, fig.cap="Correlation between known predictors: elevation vs temperature"}
+
+df_predictors_year %>% 
+  ggplot(aes(x = temp,
+             y = elev,
+             group = year)) +
+  stat_poly_line() +
+  stat_poly_eq(use_label(c( "R2", 'p'))) + #"eq",
+  geom_point(alpha = 0.5) +
+  facet_wrap(.~year) + #, scales = 'free'
+  theme_bw()
+
+```
+
+
+```{r lm_prec_elev, fig.width = 5, fig.height = 5, echo = F, fig.cap="Correlation between known predictors: precipitation vs elevation" }
+
+df_predictors_year %>% 
+  ggplot(aes(x = prec,
+             y = elev,
+             group = year)) +
+  stat_poly_line() +
+  stat_poly_eq(use_label(c( "R2", 'p'))) + #"eq",
+  geom_point(alpha = 0.5) +
+  facet_wrap(.~year) + #, scales = 'free'
+  theme_bw()
+
+```
+
+
+```{r lm_prec_freq, fig.width = 5, fig.height = 5, echo = F, fig.cap="Correlation between known predictors: precipitation vs spruce share" }
+
+# precipitation vs spruce share
+df_predictors_year %>% 
+  ggplot(aes(x = prec,
+             y = freq,  # share of spruce
+             group = year)) +
+  stat_poly_line() +
+  #stat_poly_eq(use_label(c( "R2", 'p'))) + #"eq",
+  geom_point(alpha = 0.5) +
+  facet_wrap(.~year) + #, scales = 'free'
+  theme_bw()
+
+```
+
+```{r lm_temp_freq, fig.width = 5, fig.height = 5, echo = F, fig.cap="Correlation between known predictors: temperature vs spruce share (freq)" }
+
+# temp vs spruce share
+df_predictors_year %>% 
+  ggplot(aes(x = temp,
+             y = freq,  # share of spruce
+             group = year)) +
+  stat_poly_line() +
+  stat_poly_eq(use_label(c( "R2", 'p'))) + #"eq",
+  geom_point(alpha = 0.5) +
+  facet_wrap(.~year) + #, scales = 'free'
+  theme_bw()
+
+
+
+```
+
 
 # Results 
 
@@ -173,28 +259,29 @@ DOY overview
 
 ## Descriptive stats
 
-```{r p_hist_daily_counts, fig.width = 3, fig.height = 2.5, echo = F, fig.cap="Histogram of average daily traps"}
-#hist(df.daily$avg_day_count)
+### Correlation between trap pairs
+
+Linear regression between traps 1&2.
+
+```{r p_lm_traps, fig.width = 5, fig.height = 5, echo = F, fig.cap="LM of the beetle sums per year between trap 1 and trap 2 (same location)"}
+p_lm_traps
 ```
 
 
-## Beetle dynamics spatio-temporal variation
+
+
+## Beetle dynamics over time and space
 
 ### Beetle counts, emergence and aggregation DOY
 
 ```{r p_bars, fig.width = 6, fig.height = 6, echo = F, fig.cap="Beetle population dynamics. (a) total sum per year. (b) DOY of beetle aggregation per trap. (c) DOY of max increase between dates, (d) Max increase in beetle numbers. Shown are medians and IQR. "}
 
 
-plot_grid(p_ips.year.sum, 
+ggarrange(p_ips.year.sum,
           p_ips.agg,
           p_ips.max.diff.doy,
           p_ips.max.diff, labels = 'auto',
           ncol = 2, nrow = 2 )
-# ggarrange(p_ips.year.sum, 
-#           p_ips.agg,
-#           p_ips.max.diff.doy, 
-#           p_ips.max.diff, labels = 'auto',
-#           ncol = 2, nrow = 2 )
 
 ```
 
@@ -246,7 +333,9 @@ max.diff.doy %>%
             #cv     = sd/mean,
             median = median(doy)) %>% 
   round() %>% 
-  knitr::kable("markdown", caption = 'DOY of the max increase in beetle numbers.')
+  knitr::kable("markdown", caption = 'DOY of the max increase in beetle numbers.') %>% 
+  #kable("html") %>%
+  kable_styling(font_size = 7)
 
 
 # Check Max increase population
@@ -260,6 +349,7 @@ max.diff.doy %>%
            # cv = sd/mean,
             median = median(diff)
             )  %>% 
+  round() %>% 
   knitr::kable("markdown", caption = 'Max increase of beetle numbers ')
 
 ```
@@ -269,7 +359,7 @@ max.diff.doy %>%
 
 #### Map: Beetle aggregation per DOY (DOY < 130)
 
-```{r map_p_aggreg, fig.width = 6, fig.height = 6, echo = F, fig.cap="DOY (<130) of aggregated beetles per trap"}
+```{r map_p_aggreg, fig.width = 6, fig.height = 6, echo = F, fig.cap="Timing of reaching 1000 beetles per trap & year. Selected are DOY <130 for improved visibility."}
 
 p_aggreg  
 
@@ -287,6 +377,7 @@ ips.aggreg %>%
                    sd     = sd(doy),
                   # cv     = sd/mean,
                    median = median(doy))  %>% 
+  round() %>% 
   knitr::kable("markdown", caption = 'DOY of Beetle aggregation (1000)') 
   
 ```
@@ -300,7 +391,7 @@ ips.aggreg %>%
 ### LISA: measure of similarity between trap and its surrounding
 
 10 nearest distance neighbors
-LISA idetifies the (di)similarity in beetles counst between neighbouring locations. 
+LISA identifies the (di)similarity in beetles counts/trap between neighbouring traps 
 
 Categories: 
 
@@ -318,9 +409,12 @@ p_lisa_sub
 
 ```
 
-What is the share of the similar vs dissimilar beetle counts over years?
+How many traps are similar vs dissimilar over years?
 
-```{r p_lisa_freq, fig.width = 3, fig.height = 2.5, echo = F, fig.cap="Local Indicators of Spatial Assotiation. Frequency of the similarity categories: High-High, High-Low, Low-High, Low-Low"}
+- share of 'high-high' increases over years
+- lowest dissimilarity between traps: 2020, highest in 2016
+
+```{r p_lisa_freq, fig.width = 3, fig.height = 2.5, echo = F, fig.cap="Local Indicators of Spatial Assotiation. Frequency of the similarity categories per trap: High-High, High-Low, Low-High, Low-Low"}
 
 p_lisa_freq +
   theme_bw()
@@ -342,5 +436,6 @@ semi_out
 
 ```
     
+
 
 
