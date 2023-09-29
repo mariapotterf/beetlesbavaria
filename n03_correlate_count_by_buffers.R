@@ -57,19 +57,19 @@ load("outData/spatial.Rdata")
 
 # Read data
 disturb_year <- rast('C:/Users/ge45lep/Documents/2022_BarkBeetles_Bavaria/rawData/germany114/disturbance_year_1986-2020_germany.tif')
-disturb_type <- rast('C:/Users/ge45lep/Documents/2022_BarkBeetles_Bavaria/rawData/storm_fire_harvest/storm_fire_other_classification_germany.tif')
+disturb_type <- rast('C:/Users/ge45lep/Documents/2022_BarkBeetles_Bavaria/rawData/agen_classes/agent_classes_germany.tif')
 forest_cover <- rast('C:/Users/ge45lep/Documents/2022_BarkBeetles_Bavaria/rawData/germany114/forestcover_germany.tif')
 
 
 #rast(paste(myPath, outFolder,  "disturbance14_conif.tif", sep = "/"))
 crs(disturb_year)
 crs(disturb_type)
-# disturbance coding: 
-# 0 = no disturbance
-# 1 = other disturbances (not storm- or fire-related)
-# 2 = storm disturbances
-# 3 = fire disturbances
+# disturbance BIOTIC: 
+# 1 = wind & beetles
+# 2 = fire
+# 3 = harvest
 
+crs(disturb_type) <- crs(disturb_year)
 
 # Get beetle counts
 dat      <- ips.year.sum #fread(paste(myPath, outFolder, "dat.csv", sep = "/"))
@@ -117,15 +117,9 @@ xy_sf_expand <-
   dplyr::select(-c(from_year, von_dat, bis_dat))
 
 
-
-
-
-
-
-
-
-
-
+# export XZ file with shifting traps
+xy_sf_expand %>%  
+  st_write(paste(myPath, "outSpatial/xy_fin_years_3035.gpkg", sep = '/'), append=FALSE)
 
 
 
@@ -145,7 +139,7 @@ xy_sf_expand <-
 # Check if the CRS is the same
 #crs(disturbance) == crs(xy)
 
-# convert to terra object
+# convert to terra object; keep XY naminf for conveniece
 xy <- vect(xy_sf_expand)
 
 xy$id <- 1:nrow(xy)
@@ -168,6 +162,8 @@ xy <- terra::project(xy, crs(disturb_year))
 # create a list to look over
 xy_ls <- terra::split(xy, c('id')) #,# "OBJECTID" # 
 
+buff_width = 1000
+
 # make a function to export df from each buffer: keep years, disturbance type and forest
 extract_rst_val <- function(xy, ...) {
    
@@ -175,7 +171,7 @@ extract_rst_val <- function(xy, ...) {
    id <- xy$id
    
    # get buffer
-   buff <- buffer(xy, 500)
+   buff <- buffer(xy, buff_width)
    
    # disturbance year
    # crop data and then mask them to have a circle
@@ -208,7 +204,7 @@ extract_forest <- function(xy, ...) {
   id <- xy$id
   
   # get buffer
-  buff <- buffer(xy, 500)
+  buff <- buffer(xy, buff_width)
   
   # disturbance year
   # crop data and then mask them to have a circle
@@ -262,13 +258,13 @@ dist_df_out <-
 # output needed: for every year, I need how many cells was disturbed by what agent
 # forest cover = 1, it copntains all disturbances
 
-names(dist_df_out) <- c("year" , "id","all_dist_sum","harvest","wind", "fire")
+names(dist_df_out) <- c("year" , "id","all_dist_sum",'wind', "harvest")
 
 # investigate teh disturbances per years and trap buffer
-ggplot(dist_df_out, aes(x = year,
-                        y = all_dist_sum,
-                        color = id)) +
-  geom_point()
+#ggplot(dist_df_out, aes(x = year,
+#                        y = all_dist_sum,
+#                        color = id)) +
+#  geom_point()
 
 
 # extract forest ------------------------------------------------
@@ -278,12 +274,16 @@ out_forest_ls <- lapply(xy_ls, extract_forest ) #extract_rst_val(xy_ls[[10]])
 forest_df      <-do.call("rbind", out_forest_ls)
 
 forest_df <- forest_df %>% 
-  filter(val == '1') %>%   # 1 = forest from 1986!!!!
+  filter(val == '1') %>%   # 1 = forest from 1986!!!! if needed for beetle pressureon remaining forest, need to reme the ditsuyrbances
   dplyr::select(-val) %>% 
   dplyr::rename(forest_freq =Freq)
 
 
 # Merge ips counts per year withbuffer info  ---------------------------------------
+
+# how many beetles we need to see teh damage?
+# 1 pixel = 20 trees = 3000 beetles to kill tree = 20*3000 = 60.000 - filter data for higher counts!
+
 
 df_fin <- 
   xy %>% 
@@ -295,7 +295,49 @@ df_fin <-
   arrange(falsto_name, year) %>% 
    mutate(lag1_dist_sum  = dplyr::lag(all_dist_sum, n=1),
           lag1_harvest   = dplyr::lag(harvest,      n=1),
-          lag2_harvest   = dplyr::lag(harvest,      n=2)) 
+          lag2_harvest   = dplyr::lag(harvest,      n=2),
+          lag1_beetles   = dplyr::lag(wind,      n=1),
+          lag2_beetles   = dplyr::lag(wind,      n=2)) 
+
+
+
+# LM only for high beetle data
+df_fin %>% 
+  #filter(sum_ips > 50000) %>% 
+  ggplot(aes(x = sum_ips,
+             y = harvest*0.09  )) +
+  # stat_poly_line() +
+  #stat_poly_eq(use_label(c( "R2", 'p'))) + #"eq",
+  geom_point(alpha = 0.5) +
+  facet_wrap(year ~.,) +
+  ggtitle('Harvest') + 
+  theme_bw()
+
+
+df_fin %>% 
+  #filter(sum_ips > 50000) %>% 
+  ggplot(aes(x = sum_ips,
+             y = lag1_beetles*0.09  )) +
+  # stat_poly_line() +
+  #stat_poly_eq(use_label(c( "R2", 'p'))) + #"eq",
+  geom_point(alpha = 0.5) +
+  facet_wrap(year ~.,) +
+  ggtitle('Wind+ beetles') + 
+  theme_bw()
+
+
+
+df_fin %>% 
+  #filter(sum_ips > 50000) %>% 
+  ggplot(aes(x = sum_ips,
+             y = wind*0.09 + harvest*0.09  )) +
+  # stat_poly_line() +
+  #stat_poly_eq(use_label(c( "R2", 'p'))) + #"eq",
+  geom_point(alpha = 0.5) +
+  facet_wrap(year ~.,) +
+  ggtitle('Harvest + Wind+ beetles') + 
+  theme_bw()
+
 
 
 
