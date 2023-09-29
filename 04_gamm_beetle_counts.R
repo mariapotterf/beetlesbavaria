@@ -73,7 +73,7 @@ df_prec       <- fread(paste(myPath, outTable, 'xy_precip.csv', sep = '/'))
 df_temp       <- fread(paste(myPath, outTable, 'xy_temp.csv', sep = '/'))
 df_clim_ERA   <- fread(paste(myPath, outTable, 'xy_clim.csv', sep = '/')) # need to filter soils volume content index!
 df_clim_ERA_ID<- fread(paste(myPath, outTable, 'xy_clim_IDs.csv', sep = '/')) # get the ID to join falsto_name
-
+df_anom       <- fread(paste(myPath, outTable, 'xy_anom.csv', sep = '/')) #
 
 
 # Get coniferous cover data: coniferous == 2! 
@@ -150,8 +150,25 @@ df_spei <- df_spei %>%
   mutate(date = format(as.Date(date, "%d/%m/%Y"), "%m.%Y")) %>%
   separate(date, c('month', 'year')) %>%
   mutate(month = as.numeric(month),
-         year = as.numeric(year)) %>%
-  filter(year > 2014)
+         year = as.numeric(year)) #%>%
+  #filter(year > 2014)
+
+reference_period = 1986:2010
+
+df_spei_summer_anom <- df_spei %>% 
+  filter(scale == 1) %>%
+  filter(month %in% c(6,7,8)) %>%
+  group_by(year, globalid) %>%
+  summarize(spei = mean(spei)) %>%
+  group_by(globalid) %>%
+  mutate(spei_z = (spei - mean(spei[year %in% reference_period])) / sd(spei[year %in% reference_period]))# %>%
+  
+
+ggplot(df_spei_summer_anom, aes(x = year,
+                           y = spei_z)) +
+  geom_point()
+
+# Get df SPEI for summer months: scale = 1
 
 # check scales -----------------------------------------------------------------
 unique(df_spei$scale)
@@ -161,7 +178,7 @@ spei_scale = 12  # visually tested all '1,3,6,12', and the most contrasting is s
 p_spei12<- df_spei %>% 
   filter(scale == spei_scale) %>% 
   ggplot(aes(x = factor(year),
-             y = Series.1)) +
+             y = spei)) +
   geom_boxplot(#outlier.shape = NA, #,
                fill = 'grey80' ) +
   geom_hline(yintercept = 0) +
@@ -181,7 +198,7 @@ df_spei %>%
 df_spei_avg <- df_spei %>% 
   filter(scale == spei_scale) %>%
   group_by(globalid, year ) %>% 
-  dplyr::summarize(spei_med = median(Series.1))
+  dplyr::summarize(spei_med = median(spei))
            
 
 # merge SPEI data
@@ -212,7 +229,7 @@ p_spei12_bav <- ggplot(bav_sf) +
 # severely dry (−2 < SPEI ≤ −1.5), 
 # moderately dry (−1.5 < SPEI ≤ −1), and 
 # near normal conditions (−1 < SPEI < + 1) (Slette et al., 2019).
-range(df_spei$Series.1, na.rm = T)
+range(df_spei$spei, na.rm = T)
 #  -3.076544  2.980012
 
 
@@ -221,7 +238,7 @@ range(df_spei$Series.1, na.rm = T)
 df_spei %>% 
   filter(globalid == "84617C77-1ECE-4119-8C04-452E41126A05") %>% 
   ggplot(aes(x = month,
-             y = Series.1,
+             y = spei,
              color = scale)) + 
   geom_point() +
   geom_line() +
@@ -229,18 +246,18 @@ df_spei %>%
 
 # SPEI 12 seems quite even; find locations with etreme drought to see that?
 df_spei %>%  
-  filter(Series.1 < -2) 
+  filter(spei < -2) 
   
 
 
 df_spei <- df_spei %>% 
-  mutate(spei_cat = case_when(Series.1 <= -2 ~ 'ext_dry',
-                              Series.1 > -2 & Series.1 <= -1.5 ~ 'sev_dry',
-                              Series.1 > -1.5 & Series.1 <= -1 ~ 'mod_dry',
-                              Series.1 > -1 & Series.1 <= +1 ~ 'normal',
-                              Series.1 > +1 & Series.1 <= +1.5 ~ 'mod_wet',
-                              Series.1 > +1.5 & Series.1 <= +2 ~ 'sev_wet',
-                              Series.1 > 2 ~ 'ext_wet'
+  mutate(spei_cat = case_when(spei <= -2 ~ 'ext_dry',
+                              spei > -2 & spei <= -1.5 ~ 'sev_dry',
+                              spei > -1.5 & spei <= -1 ~ 'mod_dry',
+                              spei > -1 & spei <= +1 ~ 'normal',
+                              spei > +1 & spei <= +1.5 ~ 'mod_wet',
+                              spei > +1.5 & spei <= +2 ~ 'sev_wet',
+                              spei > 2 ~ 'ext_wet'
                               ))
 
 # order spei classification
@@ -263,7 +280,7 @@ df_spei <- df_spei %>%
 df_spei_all <- df_spei %>% 
   pivot_wider(id_cols = !spei_cat, 
               names_from =  scale, 
-              values_from = Series.1, 
+              values_from = spei, 
               names_prefix = "spei")
 
 
@@ -396,11 +413,13 @@ df_predictors_year <-
   left_join(df_conif , by = c("falsto_name")) %>% 
   left_join(df_topo, by = c("falsto_name", 'globalid')) %>% 
   left_join(xy_df, by = c('falsto_name',"globalid")) %>% 
+  left_join(df_anom, by = c('falsto_name',"year")) %>% 
+  left_join(df_spei_summer_anom, by = c('globalid',"year")) %>% 
   ungroup(.) %>%
   dplyr::select(-c('globalid', 'OBJECTID')) # 
 
 
-# make lm ----------------------------------------------------------------------
+# make lm predictors ----------------------------------------------------------------------
 # temp vs elevation - nice trend
 df_predictors_year %>% 
   ggplot(aes(x = temp,
@@ -480,10 +499,119 @@ ips_sum_preds <-
 
 
 # [2] Max Diff DOY
-df_predictors_doy <-    # merge max difference by doy with the yearly predictors
+df_max_diff_doy <-    # merge max difference by doy with the yearly predictors
   max.diff.doy %>% 
   left_join(df_predictors_year, by = join_by(year, falsto_name))
   
+
+# [3] Agg DOY
+df_agg_doy <-    # merge max difference by doy with the yearly predictors
+  ips.aggreg %>% 
+  left_join(df_predictors_year, by = join_by(year, falsto_name))
+
+# LM anomalies ------------------------------------------------------------
+
+ggplot(ips_sum_preds, aes(x = sm_z,
+                          y = sum_ips,
+                          color = factor(year))) + 
+  geom_point(alpha = 0.5) + 
+  theme_classic()# + facet_wrap(.~year)
+
+
+ggplot(ips_sum_preds, aes(x = vpd_z,
+                          y = sum_ips,
+                          color = factor(year))) + 
+  geom_point(alpha = 0.5) + 
+  theme_classic() + 
+  facet_wrap(.~year)
+
+
+
+# earlier peak culmination 
+ggplot(df_max_diff_doy, aes(x = sm_z,
+                          y = doy,
+                          color = factor(year))) + 
+  geom_point(alpha = 0.5) + 
+  theme_classic() + facet_wrap(.~year)
+
+
+ggplot(df_max_diff_doy, aes(x = sm_z,
+                          y = doy,
+                          color = factor(year))) + 
+  geom_point(alpha = 0.5) + 
+  theme_classic() + 
+  facet_wrap(.~year)
+
+
+# earlier agregation
+ggplot(df_agg_doy , aes(x = sm_z,
+                            y = doy,
+                            color = factor(year))) + 
+  geom_point(alpha = 0.5) + 
+  theme_classic() + facet_wrap(.~year)
+
+
+# earlier agregation
+ggplot(df_agg_doy , aes(x = spei_z,
+                        y = doy,
+                        color = factor(year))) + 
+  geom_point(alpha = 0.5) + 
+  theme_classic() + facet_wrap(.~year)
+
+
+ggplot(df_agg_doy , aes(x = sm_z,
+                        y = doy,
+                        color = factor(year))) + 
+  geom_point(alpha = 0.5) + 
+  theme_classic() + facet_wrap(.~year)
+
+
+
+# line plot - IPS sum count over years per trap 
+p1 <- ips_sum_preds %>% 
+  group_by(year, falsto_name) %>% 
+  summarize(sum_ips = sum(sum_ips)) %>% 
+  ggplot(aes(x = year,
+             y = sum_ips/1000,
+             color = falsto_name)) +
+  geom_line(alpha = 0.2, show.legend = FALSE) +
+  stat_summary(fun = median, geom = "path",
+               mapping = aes(group = -1), show.legend = FALSE) +
+  theme_classic() +
+  ggtitle('Sum beetles/year') +
+  theme(aspect.ratio = 1, 
+        panel.background = element_rect(fill = "white", colour = "black"))
+
+p2<-df_max_diff_doy %>% 
+  group_by(year, falsto_name) %>% 
+  ggplot(aes(x = year,
+             y = doy,
+             color = falsto_name)) +
+  geom_line(alpha = 0.2, show.legend = FALSE) +
+  stat_summary(fun = median, geom = "path",
+               mapping = aes(group = -1), show.legend = FALSE) +
+  theme_classic() +
+  ggtitle('Beetle peak population') +
+  theme(aspect.ratio = 1, 
+        panel.background = element_rect(fill = "white", colour = "black"))
+
+p3<-df_agg_doy %>% 
+  group_by(year, falsto_name) %>% 
+  ggplot(aes(x = year,
+             y = doy,
+             color = falsto_name)) +
+  geom_line(alpha = 0.2, show.legend = FALSE) +
+  stat_summary(fun = median, geom = "path",
+               mapping = aes(group = -1), show.legend = FALSE) +
+  theme_classic() +
+  ggtitle('Beetle aggregation') +
+  theme(aspect.ratio = 1, 
+        panel.background = element_rect(fill = "white", colour = "black"))
+
+
+ggarrange(p1, p2, p3, ncol = 3)
+
+
 
 
 # # variance inflation factor (VIF) ---------------------------------------------
