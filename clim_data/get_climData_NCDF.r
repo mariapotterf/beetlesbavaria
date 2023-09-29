@@ -48,7 +48,8 @@ library(PCICt)
 
 
 # Read .nc data as a raster in terra - way faster!  
-dat_ras <- terra::rast(paste(myPath, inFolder,  "ERA_Bav.nc", sep = "/"))
+#dat_ras <- terra::rast(paste(myPath, inFolder,  "ERA_Bav_12months.nc", sep = "/"))
+dat_ras <- terra::rast('C:/Users/ge45lep/Documents/2022_BarkBeetles_Bavaria/rawData/ERA_NET/ERA_Bav_1980_2023_swvl.nc')
 
 # extract all values to the xy coordinates:
 dat_ext_df <- terra::extract(dat_ras, xy_latlng)
@@ -61,14 +62,15 @@ xy_names <- data.frame(ID = xy_latlng$ID,
 
 
 # Check the variables of interest:
-var_names <- varnames(dat_ras)    # 9 variables
-ras_time  <- time(dat_ras)        # 441
-n_layer   <- nlyr(dat_ras)        # 441 
+(var_names <- varnames(dat_ras))    # 6 variables
+(ras_time  <- time(dat_ras))        # 1584
+(ras_source<- sources(dat_ras))        # 1584
+(n_layer   <- nlyr(dat_ras))        # 1584 
 
 
 # terra works well, but require correct naming of variables:
 
-sort(unique(xy_latlng$OBJECTID)) == sort(unique(dat_ext_df$ID))
+#sort(unique(xy_latlng$OBJECTID)) == sort(unique(dat_ext_df$ID))
 
 length(unique(xy_latlng$falsto_name))
 # naming: need to be make manually:
@@ -82,16 +84,17 @@ df_melt <- data.table::melt(dat_ext_df,
                             id.vars = c('ID'))
 
 # Add time  to df and split in months:
-df <- df_melt %>% 
+df <- 
+  df_melt %>% 
   arrange(ID, variable) %>%
   mutate(time = rep(ras_time, nrow(dat_ext_df))) %>% 
   separate(variable, 
-           c("var", "time_num"), "_") %>% 
+           c("var", "time_num", 'xx'), "_") %>% 
   dplyr::mutate(year  = lubridate::year(time), 
                 month = lubridate::month(time), 
                 day   = lubridate::day(time),
-                doy   =  lubridate::yday(time) + 1)  # as POXIT data has January 1st at 0
-
+                doy   =  lubridate::yday(time) + 1)  %>%  # as POXIT data has January 1st at 0
+  dplyr::select(-day)
 
 # combine soil moisture data: sum the 4 layers:
 soil_vars <- c("swvl1", "swvl2", "swvl3", "swvl4")
@@ -103,28 +106,78 @@ df_vars <- df %>%
   filter(!(var %in% soil_vars))
   
 
-# For soil water content: need to get sums as Cornelius?
-df_soil <- df %>% 
-  filter(var %in% soil_vars ) %>%
-  group_by(ID, year, month, day) %>% 
-  mutate(#sum_swv = sum(value),
-         value = sum(value)) 
+# For soil water content: need to get sums of swvl1:swvl4
+df_soil <-
+  df %>% 
+  dplyr::filter(var %in% soil_vars ) %>% # filter only soil water content
+    na.omit() %>% 
+    dplyr::select(-c(time_num, xx)) %>% # remove unnecessary cols
+  group_by(ID, year, month) %>% 
+  summarize(#sum_swv = sum(value),
+         sm = sum(value)) 
 
 
-# remove the variable and create a new one:
-df_soil <- df_soil %>% 
-  #dplyr::select(-c(var)) %>% 
-  mutate(var = c('swv')) %>% 
-  dplyr::select("ID",   # correctly order the columns
-                "var",
-                "time_num",
-                "value",
-                "time", 
-                "year",
-                "month" ,
-                "day",
-                "doy"  )
-  
+
+
+# Water pressure deficit data --------------------------------------------------
+# combine soil moisture data: sum the 4 layers:
+
+
+# Formula from https://journals.ametsoc.org/view/journals/apme/54/6/jamc-d-14-0321.1.xml?tab_body=pdf
+# Based on Allen, R. G., et al. (1998), Crop evapotranspiration. Guidelines for computing crop water requirements. Irrigation and Drainage Paper 56, FAO,Rome, Italy, 27 pp.
+
+vpd_calc <- function(t, td, c1 = 0.611, c2 = 17.67, c3 = 243.5) {
+  c1 * exp((c2 * (t - 273.15)) / (t - 273.15 + c3)) - c1 * exp((c2 * (td - 273.15)) / (td - 273.15 + c3))
+}
+
+
+vdp_vars <- c("t2m", "d2m")
+
+
+# Vapour pressure deficit ------------------------------------------------------
+df_vpd <-
+  df %>% 
+  dplyr::filter(var %in% vdp_vars ) %>% # filter only soil water content
+  na.omit() %>% 
+  dplyr::select(-c(time_num,time, xx)) %>% # remove unnecessary cols
+  spread(var, value) %>% 
+  mutate(vpd = vpd_calc(t = t2m, td = d2m))
+
+
+
+# calculate anomalies ----------------------------------------------------------
+reference_period <- 1980:2010
+
+df_anom <- 
+  df_soil %>% 
+  left_join(df_vpd) %>% 
+  group_by(year, ID) %>%
+  summarize(sm = mean(sm),
+            vpd = mean(vpd)) %>%
+  group_by(ID) %>%
+  mutate(sm_z = (sm - mean(sm[year %in% reference_period])) / sd(sm[year %in% reference_period]),
+         vpd_z = (vpd - mean(vpd[year %in% reference_period])) / sd(vpd[year %in% reference_period])) %>%
+  ungroup() %>% 
+  left_join(xy_names, by = join_by(ID))
+
+
+
+# check some plots
+ggplot(df_anom, aes(x = year,
+                    y = sm_z)) +
+  geom_point()
+
+ggplot(df_anom, aes(x = year,
+                    y = vpd_z)) +
+  geom_point()
+
+
+
+
+
+
+
+
 
 
 # Merge the df_soil and df_vars onto single file
@@ -136,11 +189,12 @@ df_out <- rbind(df_soil, df_vars)
 
 data.table::fwrite(df_out, 
                    paste(myPath, outTable, 'xy_clim.csv', sep = "/"))
-
-
-
 data.table::fwrite(xy_names, 
                    paste(myPath, outTable, 'xy_clim_IDs.csv', sep = "/"))
+data.table::fwrite(df_anom, 
+                   paste(myPath, outTable, 'xy_anom.csv', sep = "/"))
+
+
 
 
 
