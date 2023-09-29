@@ -22,7 +22,7 @@ library(data.table)
 library(tidyr)
 library(rgdal)
 library(raster)
-library(tidyverse)
+#library(tidyverse)
 library(lubridate)
 library(patchwork)
 library(fasterize)
@@ -32,8 +32,8 @@ library(R.utils)
 library(zoo)
 
 # Get spatial data for each trap
-xy        <- vect(paste(myPath, outFolder, "xy_3035.gpkg", sep = "/"), 
-                  layer = 'xy_3035') # read trap location
+xy        <- vect(paste(myPath, outFolder, "xy_fin_3035.gpkg", sep = "/"), 
+                  layer = 'xy_fin_3035') # read trap location
 # Convert data to DWD coordinate system:
 xy2 <- terra::project(xy, "EPSG:31467")  # coordinate system from the DWD data: Germany
 
@@ -88,7 +88,7 @@ df$BAL <- df$PRCP-df$PET
 
 # convert df to time series
 df.ts <- df %>% 
-  ts(df, start = c(2000, 01), end=c(2021,12), frequency=12) 
+  ts(df, start = c(1980, 01), end=c(2021,12), frequency=12) 
 
 spei1 <- spei(df[,'BAL'], scale = 1) # calculate SPEI for current month
 
@@ -109,7 +109,7 @@ get_SPEI <- function(df, ...){
   
   # convert df to time series
   df.ts <- df %>% 
-    ts(df, start = c(2000, 01), end=c(2021,12), frequency=12) 
+    ts(df, start = c(1980, 01), end=c(2021,12), frequency=12) 
   
   # Calculate spei or different time intervals:
   my_scales = c(1,3,6,12)
