@@ -23,7 +23,6 @@ source('myPaths.R')
 library(lubridate)
 library(dplyr)
 library(sf)
-#library(tidyverse)
 library(stringr)
 library(ggplot2)
 library(zoo)
@@ -116,24 +115,10 @@ dat <- dat %>%
                 month = lubridate::month(kont_dat), 
                 day   = lubridate::day(kont_dat),
                 doy   = lubridate::yday(kont_dat) + 1)  # as POXIT data has January 1st at 0
-
-
+ 
+filter(dat, year == 2014)  # I do not have trap names neither globalid for 2014 year
 # get basic stats: count by beetles over year, counts by records/traps
 nrow(dat) # >73.000 rows
-
-
-# # Some basic plotting
-# dat %>% 
-#   group_by(art, year) %>% 
-#   summarise(my_mean = mean(fangmenge, na.rm = T)) %>% 
-#   ggplot(aes(x = year,
-#              y = my_mean,
-#              fill = art,
-#              group = year)) +
-#   geom_point() +
-#   geom_line() +
-#  # ylim(0, 250000) +
-#   facet_grid(.~art)
 
 
 # How may traps in total? falsto_name = unique trap name  
@@ -153,6 +138,7 @@ dat <- dat %>%
 
 # how to handle if one trap  has several globalids? - just select the first in the row to calculate the LISA
 # check several globalids
+# now I have XY for every year of the final trap set
 # !!!!
 dat %>% 
   filter(art == "Buchdrucker") %>% 
@@ -527,6 +513,10 @@ de_sf <- ne_states(country = "germany", returnclass = "sf")
 # Get only bavaria
 bav_sf <- de_sf %>% 
   dplyr::filter(name_en == "Bavaria")
+
+bav_sf %>%  
+  st_write(paste(out_path, "outSpatial/bavaria.gpkg", sep = '/'), append=FALSE)
+
 
 buch_df_f <- ips.year.sum_sf %>% 
   filter(sum_ips > 3000)
