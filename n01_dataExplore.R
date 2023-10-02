@@ -884,7 +884,7 @@ p_lm_traps <-
 # Save  ------------------------------------------------------------
 save(trap_names,                 # vector of final trap names (79*2)
      df.daily,                   # avg daily beetle counts (adjusted by revisit times), over DOY 
-    # ips.year.avg,               # sum & avg number per beetles/trap per vegetation season (), over whole year
+     ips.year.avg,               # sum & avg number per beetles/trap per vegetation season (), over whole year
      ips.year.sum,               # simple beetle sum per trap
      ips.year.sum_sf,            # simple beetl sum per trap sf
      dat.ips.clean,              # cleaned IPS counts (only consisten trap selected, checked for revisit time,...)
