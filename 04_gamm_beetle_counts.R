@@ -51,6 +51,10 @@ library(car)     # for VIF
 library(RColorBrewer)
 
 
+# for anomalies: 
+reference_period = 1986:2010
+
+
 
 # load cleaned data
 load("outData/ips.Rdata")
@@ -60,21 +64,23 @@ load("outData/spatial.Rdata")
 # - dat.ips.clean      # dat <- fread(paste(myPath, outFolder, "dat.csv", sep = "/"))
 # - max.diff.doy       # get DOY of max increase
 # - ips.aggreg         # get DOY of max increase
-# - ips.year           # sum beetles/year, avg/betles/year per trap
+# - ips.year.avg       # sum beetles/year, 
+# - df.daily           # avg/betles/year per trap
  
 # Spatial data: 
 # - xy_sf_fin  # XY as sf data, filtered to have only one globalid per trap
-
-#!!! need to filter data for my 158 fin traps!!!!!!!!
 
 # Get SPEI and clim data: they are for whole year! check only veg season?
 df_spei       <- fread(paste(myPath, outTable, 'xy_spei.csv', sep = '/'))
 df_prec       <- fread(paste(myPath, outTable, 'xy_precip.csv', sep = '/'))
 df_temp       <- fread(paste(myPath, outTable, 'xy_temp.csv', sep = '/'))
 df_clim_ERA   <- fread(paste(myPath, outTable, 'xy_clim.csv', sep = '/')) # need to filter soils volume content index!
-df_clim_ERA_ID<- fread(paste(myPath, outTable, 'xy_clim_IDs.csv', sep = '/')) # get the ID to join falsto_name
-df_anom       <- fread(paste(myPath, outTable, 'xy_anom.csv', sep = '/')) #
+df_clim_ERA_ID<- fread(paste(myPath, outTable, 'xy_clim_IDs.csv', sep = '/'), encoding = 'Latin-1') # get the ID to join falsto_name
+df_anom       <- fread(paste(myPath, outTable, 'xy_anom_summer.csv', sep = '/')) #
 
+# set correct encoding for german characters
+Encoding(df_anom$falsto_name)        <-  "UTF-8"
+Encoding(df_clim_ERA_ID$falsto_name) <-  "UTF-8"
 
 # Get coniferous cover data: coniferous == 2! 
 # spruce: share of spruce
@@ -112,18 +118,18 @@ df_topo <- df_topo %>%
 
 # Filter soil drought : soil water content
 df_swvl <- df_clim_ERA %>% 
-  filter(var == "swv") %>% 
+  filter(var == "swvl") %>% 
   full_join(df_clim_ERA_ID, by = 'ID')
 
-#View(df_swvl)
-
-length(unique(xy_df$globalid))
-
-# Do neighboring traps correlate in beetle numbers? --------------------------
-head(dat.ips.clean)
 
 
-# Analyze data ------------------------------------
+df_anom <- df_anom %>% 
+  dplyr::select(-falsto_name) %>%  # unproper special characters
+  full_join(df_clim_ERA_ID, by = 'ID')
+
+
+
+# Process predictors  data ------------------------------------
 
 # dplyr::rename column names to join the datasets:
 df_prec <- df_prec %>% 
@@ -135,8 +141,9 @@ df_temp <- df_temp %>%
 
 # select only coniferous: == 2, 0 is no forest (eg. covers the whole 500 m buffer)
 df_conif <- df_tree %>% 
-  filter(species == 2 ) %>% 
+  filter(species == 2 ) %>% # 2 = conifers, can be spruce and pine
   filter(globalid %in% trap_globid) %>% 
+  dplyr::select(-species) %>% 
   full_join(xy_df %>% dplyr::select(falsto_name, globalid))
 
 # species = 2 = conif
@@ -153,22 +160,22 @@ df_spei <- df_spei %>%
          year = as.numeric(year)) #%>%
   #filter(year > 2014)
 
-reference_period = 1986:2010
+
 
 df_spei_summer_anom <- df_spei %>% 
   filter(scale == 1) %>%
   filter(month %in% c(6,7,8)) %>%
   group_by(year, globalid) %>%
-  summarize(spei = mean(spei)) %>%
+  dplyr::summarize(spei = mean(spei)) %>%
   group_by(globalid) %>%
   mutate(spei_z = (spei - mean(spei[year %in% reference_period])) / sd(spei[year %in% reference_period]))# %>%
   
 
-ggplot(df_spei_summer_anom, aes(x = year,
-                           y = spei_z)) +
-  geom_point()
+#ggplot(df_spei_summer_anom, aes(x = year,
+#                           y = spei_z)) +
+#  geom_point()
 
-# Get df SPEI for summer months: scale = 1
+# Get df SPEI for summer months: scale = 1 = current month
 
 # check scales -----------------------------------------------------------------
 unique(df_spei$scale)
@@ -190,8 +197,6 @@ p_spei12<- df_spei %>%
 
 # SPEI SEEMS weird!!!!!
 # I have the lowest SPEI in 2016, and 2018-2019 seem quite wet!! - remove SPEI for now
-df_spei %>% 
-  filter(year == 2016 & month == 7)
 
 
 # SPEI plot on map: ----------------------------------------------
@@ -408,6 +413,9 @@ df_clim_veg <- df_clim_month %>%
 #### add site conditions -------------------------------------
 # have a table with all predictors: as the dependent vriable will be changing (likely)
 
+# check falsto_name - is joining proper due to special characters?
+
+
 df_predictors_year <- 
   df_clim_veg %>% 
   left_join(df_conif , by = c("falsto_name")) %>% 
@@ -417,6 +425,235 @@ df_predictors_year <-
   left_join(df_spei_summer_anom, by = c('globalid',"year")) %>% 
   ungroup(.) %>%
   dplyr::select(-c('globalid', 'OBJECTID')) # 
+
+unique(df_clim_veg$falsto_name)
+unique(df_anom$falsto_name)
+
+
+
+# add dependent variables------------------------------
+# add also my dependent variables: sum, aggregation and peak population:
+ips_sum_preds <- 
+  ips.year.sum %>% 
+  left_join(df_predictors_year, by = join_by(year, falsto_name)) 
+
+
+# [2] Max Diff DOY
+max.diff.doy <- max.diff.doy %>% 
+  dplyr::select(c(falsto_name, year, doy, diff)) %>% 
+  dplyr::rename(peak_doy = doy,
+                peak_diff = diff)
+
+# [3] Agg DOY !!!!: only 1080 rows!!! some traps dis not reached the values in time; need to increase threshold or somehow account for this!
+ips.aggreg <- ips.aggreg %>% 
+  dplyr::select(c(falsto_name, year, doy)) %>% 
+  dplyr::rename(agg_doy = doy )
+  
+# [4] avg number of beetles per trap/catch
+ips.year.avg <- ips.year.avg %>% 
+  ungroup(.) %>% 
+  dplyr::select(c(year, falsto_name, avg_beetles_trap))
+
+
+# make a final table with all Ys, and all Xs to see a correlation matrix. reduce predictors to keep meaningful ones.----------
+dat_fin <- df_predictors_year %>% 
+  right_join(ips.year.sum) %>%
+  #right_join(ips.year.avg) %>%
+  right_join(max.diff.doy) %>%
+right_join(ips.aggreg) %>%
+  dplyr::select(c(falsto_name,year,prec,temp, swvl, freq,elev,
+                  x, y,
+                  sm, vpd, 
+                  sm_z, vpd_z,
+                  tmp, tmp_z,
+                  spei, spei_z,
+                 # avg_beetles_trap,
+                  sum_ips, 
+                  peak_doy,
+                  peak_diff, #, 
+                  agg_doy
+                 ))
+
+
+
+theme_set(theme_classic())
+
+theme_update(aspect.ratio = 1, 
+                panel.background = element_rect(fill = "white", colour = "black"))
+
+
+
+
+
+
+
+
+
+p1<- dat_fin %>% 
+  ggplot(aes(x = tmp-273.15,   # temp is in Kelvin ->convert to C by substrating 273.15, https://cds.climate.copernicus.eu/cdsapp#!/dataset/reanalysis-era5-land-monthly-means?tab=overview
+             y = sum_ips,
+             color= factor(year))) +
+  geom_point(alpha = 0.5) +
+  geom_smooth(aes(x = tmp-273.15,   # temp is in Kelvin ->convert to C by substrating 273.15, https://cds.climate.copernicus.eu/cdsapp#!/dataset/reanalysis-era5-land-monthly-means?tab=overview
+                  y = sum_ips,
+                  color= NULL),
+              color = 'black')
+
+
+p2<- 
+  dat_fin %>% 
+  ggplot(aes(x = tmp-273.15,
+             y = peak_doy,
+             color= factor(year))) +
+  geom_point(alpha = 0.5) +
+  geom_smooth(aes(x = tmp-273.15,
+                  y = peak_doy,
+                  color = NULL),
+              color = 'black')
+
+p3<- dat_fin %>% 
+  ggplot(aes(x = tmp-273.15,
+             y = agg_doy,
+             color= factor(year))) +
+  geom_point(alpha = 0.5) +
+  geom_smooth(aes(x = tmp-273.15,
+                  y = agg_doy,
+                  color= NULL),
+              color = 'black')
+
+
+p4<- dat_fin %>% 
+  ggplot(aes(x = tmp_z,
+             y = sum_ips,
+             color= factor(year))) +
+  geom_point(alpha = 0.5)  +
+  geom_smooth(aes(x = tmp_z,
+                  y = sum_ips,
+                  color= NULL),
+              color = 'black') 
+
+p5<- dat_fin %>% 
+  ggplot(aes(x = tmp_z,
+             y = peak_doy,
+             color= factor(year))) +
+  geom_point(alpha = 0.5)  +
+  geom_smooth(aes(x = tmp_z,
+                  y = peak_doy,
+                  color= NULL),
+              color = 'black')
+#facet_wrap(.~year)
+
+
+p6<- dat_fin %>% 
+  ggplot(aes(x = tmp_z,
+             y = agg_doy,
+             color= factor(year))) +
+  geom_point(alpha = 0.5)  +
+  geom_smooth(aes(x = tmp_z,
+                  y = agg_doy,
+                  color= NULL),
+              color = 'black')
+
+
+
+
+ggarrange(p1, p2, p3, 
+          p4, p5, p6, common.legend = TRUE)
+
+
+# distribution of temperatures adn anonalies by year
+p1 <- dat_fin %>% 
+  ggplot(aes(x = year,
+             y = tmp-273.15)) + 
+  geom_point()
+
+p2 <- dat_fin %>% 
+  ggplot(aes(x = year,
+             y = tmp_z)) + 
+  geom_point()
+
+
+ggarrange(p1,p2)
+
+
+preds_remove <- c('falsto_name', 'x', 'y', 
+                 'sm', 'vpd',
+                 'vpd_z', 
+                 'spei_z', 'freq', 'prec',
+                 'swvl')
+
+ips2_predictors <- dat_fin %>% 
+  ungroup(.) %>%  
+  dplyr::select(-c('year', preds_remove))
+
+
+# spliut by years:
+ips2_predictors_years <- dat_fin %>% 
+  dplyr::select(-all_of(preds_remove)) %>% 
+  group_by(year) %>%
+  group_split()
+ 
+
+
+head(dat_fin)
+
+m1 <- lme(log(sum_ips)~1, random = ~1|falsto_name, dat_fin)
+
+summary(m1)
+intervals(m1)
+
+hist(log(dat_fin$sum_ips))
+
+# odhad korelace na jednej trap:
+# interclass corelace: ICC: podiel rozptylu pasce k celkovemu rozptylu:
+# Random effects:
+#       Formula: ~1 | falsto_name
+#          (Intercept) Residual
+# StdDev:    0.4382265 0.6921968
+# 0.4382265^2/(0.4382265^2+0.6921968^2)  # 0.28612 - korelacia medzi pascami je len 28%
+# 
+# 
+#ls_corr <- lapply(ips2_predictors_years, function(df) {chart.Correlation(df, histogram=TRUE, pch=19)})
+
+
+# Check out which predictors are highly correlated to remove them from teh VIF
+preds.res <- cor(ips2_predictors, use = "complete.obs")
+round(preds.res, 2)  # simplify visualization
+
+# p-values are missing: get them from different package:
+library("Hmisc")
+res2 <- Hmisc::rcorr(as.matrix(ips2_predictors))
+res2
+
+
+library(corrplot)
+
+# Insignificant correlation are crossed
+corrplot(res2$r, type="upper", order="hclust", 
+         p.mat = res2$P, sig.level = 0.05, insig = "blank")
+
+
+
+# Check for scatter plots between precistors:
+#install.packages("PerformanceAnalytics")
+
+library("PerformanceAnalytics")
+chart.Correlation(ips2_predictors, histogram=TRUE, pch=19)
+#chart.Correlation(ips2_predictors_years[[2]], histogram=TRUE, pch=19)
+
+
+# export final table ------------------------------------------------------------
+write.csv(dat_fin, 'C:/Users/ge45lep/Documents/2022_BarkBeetles_Bavaria/outTable/ips_sum.csv')
+
+save(dat_fin, file="outData/fin.Rdata")
+
+summary(ips_sum_preds)
+
+
+
+
+
+
 
 
 # make lm predictors ----------------------------------------------------------------------
@@ -510,6 +747,18 @@ df_agg_doy <-    # merge max difference by doy with the yearly predictors
   left_join(df_predictors_year, by = join_by(year, falsto_name))
 
 # LM anomalies ------------------------------------------------------------
+# highlight groups by convex hull
+
+# Find the convex hull of the points being plotted
+#hull <- 
+  ips_sum_preds %>% 
+  group_by(factor(year)) %>%
+  dplyr::slice(chull(sm_z, sum_ips))
+
+plot + geom_polygon(data = hull, alpha = 0.2,
+                    aes(fill = Species,colour = Species))
+
+
 
 ggplot(ips_sum_preds, aes(x = sm_z,
                           y = sum_ips,
@@ -674,47 +923,6 @@ summary(df_predictors_doy)
 
 
 
-# get correlation coefficient across all predictors:------------------------------
-# (to run this, need to remove the y-vars from above: doy, diff, cumsum!)
-# http://www.sthda.com/english/wiki/correlation-matrix-a-quick-start-guide-to-analyze-format-and-visualize-a-correlation-matrix-using-r-software
-ips2_predictors <- ips_sum_preds %>% 
-  ungroup(.) %>%  
-  dplyr::select(-c('year', 'falsto_name', 'x', 'y', 'species'))
-
-# Check out which predictors are highly correlated to remove them from teh VIF
-preds.res <- cor(ips2_predictors, use = "complete.obs")
-round(preds.res, 2)  # simplify visualization
-
-# p-values are missing: get them from different package:
-library("Hmisc")
-res2 <- Hmisc::rcorr(as.matrix(ips2_predictors))
-res2
-
-
-library(corrplot)
-
-# Insignificant correlation are crossed
-corrplot(res2$r, type="upper", order="hclust", 
-         p.mat = res2$P, sig.level = 0.01, insig = "blank")
-# Insignificant correlations are leaved blank
-corrplot(res2$r, type="upper", order="hclust", 
-         p.mat = res2$P, sig.level = 0.01, insig = "blank")
-
-
-
-# Check for scatter plots between precistors:
-#install.packages("PerformanceAnalytics")
-
-library("PerformanceAnalytics")
-my_data <- mtcars[, c(1,3,4,5,6,7)]
-chart.Correlation(ips2_predictors, histogram=TRUE, pch=19)
-
-
-# export final table ------------------------------------------------------------
-write.csv(ips_sum_preds, 'C:/Users/ge45lep/Documents/2022_BarkBeetles_Bavaria/outTable/ips_sum.csv')
-
-
-summary(ips_sum_preds)
 
 # Save data ---------------------------------------------------------------
 
@@ -826,24 +1034,20 @@ print(cor_matrix)
 
 
 
-ggplot(ips_sum_preds, aes(x = year, 
+ggplot(dat_fin, aes(x = year, 
                  y = sum_ips)) + 
   geom_point() +
   stat_smooth(method = "glm")
 
 
 # Fit a linear regression model for each time period
-model <- glm(sum_ips ~ temp:year + elev + prec:year + swvl:year + 
-              spei12:year + 
-                 freq+ 
-                 slope+  
-                 aspect+
-                 tpi, 
-               data = ips_sum_preds,
+model <- glm(sum_ips ~ sm_z:year + elev + x + y, 
+               data = dat_fin,
              "poisson")
 
 # Perform an analysis of variance (ANOVA) to assess the significance of the interaction terms
-anova(model)
+anova(model) 
+interaction.plot(dat_fin$year, dat_fin$sum_ips )
 
 # Assess the significance of the interaction terms
 summary(model)
