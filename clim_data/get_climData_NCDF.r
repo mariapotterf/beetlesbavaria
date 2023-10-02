@@ -18,7 +18,7 @@ library(data.table)
 library(tidyr)
 library(rgdal)
 library(raster)
-library(tidyverse)
+#library(tidyverse)
 library(lubridate)
 library(patchwork)
 library(fasterize)
@@ -49,7 +49,7 @@ library(PCICt)
 
 # Read .nc data as a raster in terra - way faster!  
 #dat_ras <- terra::rast(paste(myPath, inFolder,  "ERA_Bav_12months.nc", sep = "/"))
-dat_ras <- terra::rast('C:/Users/ge45lep/Documents/2022_BarkBeetles_Bavaria/rawData/ERA_NET/ERA_Bav_1980_2023_swvl.nc')
+dat_ras <- terra::rast('C:/Users/ge45lep/Documents/2022_BarkBeetles_Bavaria/rawData/ERA_NET/ERA_Bav_1980_2023_12months.nc')
 
 # extract all values to the xy coordinates:
 dat_ext_df <- terra::extract(dat_ras, xy_latlng)
@@ -144,35 +144,56 @@ df_vpd <-
   mutate(vpd = vpd_calc(t = t2m, td = d2m))
 
 
+# Temp -------------------------------------------------------------------------
+df_temp <-
+  df %>% 
+  dplyr::filter(var %in% c('t2m') ) %>% # filter only soil water content
+  na.omit() %>% 
+  dplyr::select(-c(time_num,time, xx)) %>% # remove unnecessary cols
+  spread(var, value) %>% 
+  dplyr::rename(tmp = t2m ) 
+  #mutate(tmp = vpd_calc(t = t2m, td = d2m))
+
+
 
 # calculate anomalies ----------------------------------------------------------
 reference_period <- 1980:2010
+veg.period <- 4:6
 
 df_anom <- 
   df_soil %>% 
   left_join(df_vpd) %>% 
+  left_join(df_temp) %>% 
+ # filter(month %in% veg.period) %>% # filter chunk of veg period
   group_by(year, ID) %>%
   summarize(sm = mean(sm),
-            vpd = mean(vpd)) %>%
+            vpd = mean(vpd),
+            tmp = mean(tmp)) %>%
   group_by(ID) %>%
   mutate(sm_z = (sm - mean(sm[year %in% reference_period])) / sd(sm[year %in% reference_period]),
-         vpd_z = (vpd - mean(vpd[year %in% reference_period])) / sd(vpd[year %in% reference_period])) %>%
+         vpd_z = (vpd - mean(vpd[year %in% reference_period])) / sd(vpd[year %in% reference_period]),
+         tmp_z = (tmp - mean(tmp[year %in% reference_period])) / sd(tmp[year %in% reference_period])) %>%
   ungroup() %>% 
   left_join(xy_names, by = join_by(ID))
 
 
 
 # check some plots
-ggplot(df_anom, aes(x = year,
+p1 <-ggplot(df_anom, aes(x = year,
                     y = sm_z)) +
   geom_point()
 
-ggplot(df_anom, aes(x = year,
+p2<-ggplot(df_anom, aes(x = year,
                     y = vpd_z)) +
   geom_point()
 
 
+p3<-ggplot(df_anom, aes(x = year,
+                    y = tmp_z)) +
+  geom_point()
 
+
+ggarrange(p1, p2, p3, nrow = 3)
 
 
 
