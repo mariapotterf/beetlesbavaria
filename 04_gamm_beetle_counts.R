@@ -20,7 +20,7 @@ library(tidyr)
 library(raster)
 library(rgdal)
 library(tidyverse)
-library(lubridate)
+#library(lubridate)
 #library(patchwork)
 library(fasterize)
 library(terra)
@@ -150,8 +150,6 @@ df_conif <- df_tree %>%
 # species_n = how many cells are coniferous
 # freq = what is share of spruce
 
-length(unique(df_conif$globalid))
-
 # plot TEMP and SPEI --------------------------------------------------------
 df_spei <- df_spei %>%
   mutate(date = format(as.Date(date, "%d/%m/%Y"), "%m.%Y")) %>%
@@ -162,18 +160,18 @@ df_spei <- df_spei %>%
 
 
 
-df_spei_summer_anom <- df_spei %>% 
+df_spei_anom <- df_spei %>% 
   filter(scale == 1) %>%
-  filter(month %in% c(6,7,8)) %>%
+ # filter(month %in% c(6,7,8)) %>%
   group_by(year, globalid) %>%
   dplyr::summarize(spei = mean(spei)) %>%
   group_by(globalid) %>%
   mutate(spei_z = (spei - mean(spei[year %in% reference_period])) / sd(spei[year %in% reference_period]))# %>%
   
 
-#ggplot(df_spei_summer_anom, aes(x = year,
-#                           y = spei_z)) +
-#  geom_point()
+ggplot(df_spei_anom, aes(x = year,
+                           y = spei_z)) +
+  geom_point()
 
 # Get df SPEI for summer months: scale = 1 = current month
 
@@ -182,17 +180,17 @@ unique(df_spei$scale)
 spei_scale = 12  # visually tested all '1,3,6,12', and the most contrasting is spei12:
 # very low 2016, and 2014-2015m 2017-2018
 
-p_spei12<- df_spei %>% 
-  filter(scale == spei_scale) %>% 
-  ggplot(aes(x = factor(year),
-             y = spei)) +
-  geom_boxplot(#outlier.shape = NA, #,
-               fill = 'grey80' ) +
-  geom_hline(yintercept = 0) +
-  geom_hline(yintercept = -1, lty = 'dashed') +
-  theme_bw() +
-  theme(axis.text.x = element_text(angle = 90)) + 
-  ylab(paste('SPEI', spei_scale))
+# p_spei12<- df_spei %>% 
+#   filter(scale == spei_scale) %>% 
+#   ggplot(aes(x = factor(year),
+#              y = spei)) +
+#   geom_boxplot(#outlier.shape = NA, #,
+#                fill = 'grey80' ) +
+#   geom_hline(yintercept = 0) +
+#   geom_hline(yintercept = -1, lty = 'dashed') +
+#   theme_bw() +
+#   theme(axis.text.x = element_text(angle = 90)) + 
+#   ylab(paste('SPEI', spei_scale))
 
 
 # SPEI SEEMS weird!!!!!
