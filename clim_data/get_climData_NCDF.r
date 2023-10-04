@@ -24,6 +24,9 @@ library(patchwork)
 library(fasterize)
 library(ggpubr)
 library(terra)
+library(SPEI)
+
+library(lubridate)
 #library(easyclimate) # does not work on R 4.1
 # WorldClim - ends in 2018!!
 
@@ -41,15 +44,15 @@ xy_latlng <- terra::project(xy,
 library(ncdf4)
 library(ncdf4.helpers)
 library(PCICt)
+library(zoo)                # for as.Date() specification
 
 # Load ERA5 soil moisture data --------------------------------------------
 
 # Data was downloaded as netCDF from https://cds.climate.copernicus.eu/cdsapp#!/dataset/reanalysis-era5-land-monthly-means?tab=overview
 
-
 # Read .nc data as a raster in terra - way faster!  
 #dat_ras <- terra::rast(paste(myPath, inFolder,  "ERA_Bav_12months.nc", sep = "/"))
-dat_ras <- terra::rast('C:/Users/ge45lep/Documents/2022_BarkBeetles_Bavaria/rawData/ERA_NET/ERA_Bav_1980_2023_12months.nc')
+dat_ras <- terra::rast('C:/Users/ge45lep/Documents/2022_BarkBeetles_Bavaria/rawData/ERA_NET/all_ind/data.nc')
 
 # extract all values to the xy coordinates:
 dat_ext_df <- terra::extract(dat_ras, xy_latlng)
@@ -95,6 +98,103 @@ df <-
                 day   = lubridate::day(time),
                 doy   =  lubridate::yday(time) + 1)  %>%  # as POXIT data has January 1st at 0
   dplyr::select(-day)
+
+
+
+
+# SPEI: Standardized water precipitation index --------------------------------
+SPEI_vars <- c("t2m", "tp")
+
+temp_convert = 273.15  # convert temperature from Kelvin to Celsius
+
+
+# For soil water content: need to get sums of swvl1:swvl4
+df1 <-
+  df %>% 
+  dplyr::filter(var %in% SPEI_vars ) %>% # filter only soil water content
+  na.omit() %>% # remove duplicated values
+  dplyr::select(-c(time_num, xx)) %>% # remove unnecessary cols
+  spread(var, value) %>%
+    mutate(t2m = t2m - temp_convert) %>%
+    mutate(PET = thornthwaite(t2m, 48.7775),
+           BAL = tp - PET) #%>%   # Längengrad Mitte Bayern
+ 
+  
+# calculate SPEI for each XY location:
+df_ls <- df1 %>%
+    group_split(ID)
+
+
+# Calculate the SPEI for each location:
+get_SPEI <- function(df, ...){
+  
+  # get XY name
+  id = unique(df$ID)
+  
+  # convert df to time series
+  df.ts <- df %>% 
+    ts(df, start = c(1980, 01), end=c(2021,12), frequency=12) 
+  
+  # Calculate spei or different time intervals:
+  my_scales = c(1) # 3,6,12
+  spei_ls <- lapply(my_scales, function(s) {
+    
+    # extract just values from SPEI object:
+    dd = spei(df.ts[,'BAL'], scale = s)$fitted
+    
+    # covert to dataframe, convert date to format
+    df.out <- data.frame(spei=as.matrix(dd), 
+                         date=zoo::as.Date(time(dd)))
+    
+    # add scale indication
+    df.out <-df.out %>% 
+      mutate(scale = rep(s, nrow(df.out)))
+    return(df.out)
+  })
+  # merge scaes tables
+  out_scales = do.call('rbind', spei_ls)
+  
+  # add location indication
+  out_scales <-out_scales %>% 
+    mutate(ID = rep(id, nrow(out_scales)))
+  
+  return(out_scales)
+  
+}
+
+# apply over the list of df (locations):
+
+df_ls2<- lapply(df_ls, get_SPEI)
+
+# merge into one file:
+df_spei_ID <- do.call('rbind', df_ls2)
+
+
+## check the SPEI per single location -------------------------------------
+df_spei_ID %>% 
+  filter(ID == 10)%>%
+  # ts(start = c(1980, 01), end=c(2021,12), frequency=12) #%>% 
+  ggplot(aes(x = zoo::as.Date(date),
+             y = spei)) + 
+  geom_point()
+
+
+
+
+# export file:
+#fwrite(out.df, paste(myPath, outTable, 'xy_spei.csv', sep = "/"))
+
+df_spei_year <- 
+  df_spei_ID %>% 
+    dplyr::mutate(year  = lubridate::year(date), 
+                  month = lubridate::month(date)) %>% 
+    group_by(ID, year) %>% 
+  summarise(spei = median(spei))
+  
+
+  
+# Soil moisture ----------------------------------------------------------
+
 
 # combine soil moisture data: sum the 4 layers:
 soil_vars <- c("swvl1", "swvl2", "swvl3", "swvl4")
@@ -164,15 +264,18 @@ df_anom <-
   df_soil %>% 
   left_join(df_vpd) %>% 
   left_join(df_temp) %>% 
+  left_join(df_spei_year) %>%
  # filter(month %in% veg.period) %>% # filter chunk of veg period
   group_by(year, ID) %>%
   summarize(sm = mean(sm),
             vpd = mean(vpd),
-            tmp = mean(tmp)) %>%
+            tmp = mean(tmp),
+            spei = mean(spei)) %>%
   group_by(ID) %>%
   mutate(sm_z = (sm - mean(sm[year %in% reference_period])) / sd(sm[year %in% reference_period]),
          vpd_z = (vpd - mean(vpd[year %in% reference_period])) / sd(vpd[year %in% reference_period]),
-         tmp_z = (tmp - mean(tmp[year %in% reference_period])) / sd(tmp[year %in% reference_period])) %>%
+         tmp_z = (tmp - mean(tmp[year %in% reference_period])) / sd(tmp[year %in% reference_period]),
+         spei_z = (spei - mean(spei[year %in% reference_period])) / sd(spei[year %in% reference_period])) %>%
   ungroup() %>% 
   left_join(xy_names, by = join_by(ID))
 
@@ -180,7 +283,7 @@ df_anom <-
 
 # check some plots
 p1 <-ggplot(df_anom, aes(x = year,
-                    y = sm_z)) +
+                    y = spei_z)) +
   geom_point()
 
 p2<-ggplot(df_anom, aes(x = year,
