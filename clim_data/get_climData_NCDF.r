@@ -311,8 +311,8 @@ df_out <- rbind(df_soil, df_vars)
 
 # Export the final table:
 
-data.table::fwrite(df_out, 
-                   paste(myPath, outTable, 'xy_clim.csv', sep = "/"))
+# data.table::fwrite(df_out, 
+#                    paste(myPath, outTable, 'xy_clim.csv', sep = "/"))
 data.table::fwrite(xy_names, 
                    paste(myPath, outTable, 'xy_clim_IDs.csv', sep = "/"))
 data.table::fwrite(df_anom, 
