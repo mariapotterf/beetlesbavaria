@@ -1,9 +1,6 @@
 
 
 
-load(file="outData/final.Rdata")
-
-
 
 # Read my paths -----------------------------------------------------------
 source('myPaths.R')
@@ -45,44 +42,746 @@ library(plyr)
 library(RColorBrewer)
 
 
-# Inspect data ----------------------------------------------------------
-# VIF - variance inflation factor
-# depepndence between predictors - keep only independent ones
-# spatial and temporal autocorrelation
+# read data ----------------------------------------------------------------
 
-# get korelogram: if line overpass teh dashed line, there is a corelation
-acf(dat_fin$sum_ips) # super correlated!
+load(file="outData/final.Rdata")
+load(file =  "outData/buffers.Rdata")  # df_RS_out
 
-
-lag(1:5)
-head(dat_fin)
-
-
-scrambled <- slice_sample(
-  tibble(year = 2000:2005, value = (0:5) ^ 2),
-  prop = 1
-)
+# get unique falsto_names of traps that remained stable (only one globalid)
+# over time
+stable_traps <- 
+  df_RS_out %>% 
+  group_by(falsto_name, globalid) %>% 
+  dplyr::summarize(n = n()) %>% 
+  dplyr::filter(n == 7) %>% 
+  distinct(falsto_name) %>% 
+  pull() %>% 
+  as.vector()
 
 
-right <- mutate(scrambled, previous_year_value = lag(value, order_by = year))
 
-arrange(right, year)
 
+
+# clean up data from remoe sensing --------------------------------------------
+df_RS_out <- df_RS_out %>% 
+  dplyr::select(-c(globalid, id)) %>% 
+  dplyr::rename(trap_name = falsto_name)
 
 # add lag: previous year counts, previous year temperature
-dat_fin <- 
-  dat_fin %>%
+dat_lag <-   dat_fin %>%
     ungroup(.) %>% 
    group_by(trap_name) %>%
-    dplyr::mutate(previous_sum_ips = dplyr::lag(sum_ips, order_by = year),
-                  previous_tmp =  dplyr::lag(tmp, order_by = year))
+    dplyr::mutate(previous_sum_ips =  dplyr::lag(sum_ips, order_by = year),
+                 # previous_sum_ips2 =  dplyr::lag(sum_ips, order_by = year, n = 2),
+                  previous_tmp     =  dplyr::lag(tmp, order_by = year),
+                  previous_spei     =  dplyr::lag(spei, order_by = year)) %>% 
+  dplyr::mutate(population_growth = (sum_ips - previous_sum_ips) / previous_sum_ips * 100,
+                population_growth2 = dplyr::lag(population_growth, order_by = year)) %>%  # lag population growth by one more year
+  left_join(df_RS_out, by = join_by(trap_name, year, sum_ips)) %>% 
+  dplyr::mutate(trap_name = as.factor(trap_name)) %>% 
+  dplyr::mutate(next1_RS_beetle  = dplyr::lag(wind_beetle, n = 1, order_by = year),
+                next1_RS_harvest = dplyr::lag(harvest,     n = 1, order_by = year),
+                next2_RS_beetle  = dplyr::lag(wind_beetle, n = 2, order_by = year),
+                next2_RS_harvest = dplyr::lag(harvest,     n = 2, order_by = year)) #%>%
+  
+    #dplyr::select(c(year, trap_name, 
+    #                previous_tmp, tmp,
+    #                next2_RS_harvest, harvest )) #%>% 
+  
+# calculate population growth
+dat_lag %>%
+  filter(trap_name== 'Zusmarshausen_1') %>% 
+  dplyr::select(c(trap_name, year, sum_ips, previous_sum_ips,population_growth, population_growth2)) %>% 
+  View()
+
+
+
+# split df into individual files: predist ips_sum, DOY agg, doy _peak, 
+# predict RS damage
+
+# [1] "trap_name"         "year"              "conif_prop"        "elev"              "x"                
+# [6] "y"                 "sm"                "vpd"               "sm_z"              "vpd_z"            
+# [11] "tmp"               "tmp_z"             "spei"              "spei_z"            "sum_ips"          
+# [16] "peak_doy"          "peak_diff"         "agg_doy"           "location"          "previous_sum_ips" 
+# [21] "previous_tmp"      "previous_spei"     "population_growth" "wind_beetle"       "harvest"          
+# [26] "spruce_freq"       "all_dist_sum"      "cum_removed"       "remained_forest"   "next1_RS_beetle"  
+# [31] "next1_RS_harvest"  "next2_RS_beetle"   "next2_RS_harvest" 
+
+
   
 
+# Exploratory analyses IPS_SUM --------------------------------------------------
 
-dat_fin %>% 
+pairs(sum_ips ~ tmp + spei + vpd + elev + spruce_freq + previous_sum_ips+population_growth, dat_lag, panel = panel.smooth)
+
+pairs(sum_ips ~ previous_sum_ips+population_growth + tmp + previous_tmp , dat_lag, panel = panel.smooth)
+
+pairs(sum_ips ~ previous_sum_ips+ population_growth + tmp + previous_tmp + previous_spei , dat_lag, panel = panel.smooth)
+
+
+pairs(sum_ips ~ previous_sum_ips+ population_growth + tmp + previous_tmp + population_growth2, dat_lag, panel = panel.smooth)
+
+hist(dat_lag$population_growth)
+
+# to do: ------------------------------------------------------------------------
+# remove 0 wind-beetle damage 
+# run analyses with only stable traps over time?? - split df
+
+dat_lag_stable <- dat_lag %>% 
+  filter(trap_name %in% stable_traps) #
+
+dat_lag_stable %>% 
+  filter(wind_beetle > 0) %>% 
+  ggplot(aes(x = sum_ips, 
+             y = wind_beetle)) +
+  geom_point() +
+  geom_smooth()
+
+pairs(next1_RS_beetle ~  previous_sum_ips+ sum_ips+ population_growth + tmp + previous_tmp + previous_spei , dat_lag_stable, panel = panel.smooth)
+
+pairs(next1_RS_beetle ~ previous_sum_ips+ sum_ips +population_growth, #+
+      #  tmp + previous_tmp + previous_spei , 
+      dat_lag_stable, panel = panel.smooth)
+
+
+# [1.] predict beetle sums/year by environmantel predictors
+#
+
+
+dat_lag %>% 
   ggplot(aes(y = sum_ips,
              x = previous_sum_ips)) + 
-  geom_point()
+  geom_point() +
+  geom_smooth()
+
+# tested models: ips_sum --------------------------------------------------
+
+m1 <- gam(sum_ips ~ s(previous_sum_ips, k = 70) +
+            s(year, k = 6) +
+            tmp +
+            s(trap_name, bs = 're') +  # categorical, account for how much individual trap contributes to the total variation
+            s(location, bs = 're') +   # trap pair
+            s(x,y, k = 50) +
+            s(year, tmp),
+          dat_lag, family = tw)
+
+m2 <- gam(sum_ips ~ s(previous_sum_ips, k = 70) +
+            s(year, k = 6) +
+            previous_tmp + 
+            tmp +
+            s(trap_name, bs = 're') +  # categorical, account for how much individual trap contributes to the total variation
+            s(location, bs = 're') +   # trap pair
+            s(x,y, k = 50) +
+            s(year, tmp),
+          dat_lag, family = tw)
+
+m3 <- gam(sum_ips ~ s(previous_sum_ips, k = 70) +
+            s(year, k = 6) +
+            tmp +
+            spei +
+            s(trap_name, bs = 're') +  # categorical, account for how much individual trap contributes to the total variation
+            s(location, bs = 're') +   # trap pair
+            s(x,y, k = 50) +
+            s(year, tmp),
+          dat_lag, family = tw)
+
+
+m4 <- gam(sum_ips ~ s(previous_sum_ips, k = 70) +
+            s(year, k = 6) +
+            tmp +
+            spei +
+            s(trap_name, bs = 're') +  # categorical, account for how much individual trap contributes to the total variation
+            s(location, bs = 're') +   # trap pair
+           # s(x,y, k = 50) +
+            s(year, tmp),
+          dat_lag, family = tw)
+
+
+m5 <- gam(sum_ips ~ s(previous_sum_ips, k = 70) +
+            s(year, k = 6) +
+            s(elev) +
+            tmp +
+            spei +
+            s(trap_name, bs = 're') +  # categorical, account for how much individual trap contributes to the total variation
+            s(location, bs = 're') +   # trap pair
+            # s(x,y, k = 50) +
+            s(year, tmp),
+          dat_lag, family = tw)
+
+m6 <- gam(sum_ips ~ s(previous_sum_ips, k = 70) +
+            s(year, k = 6) +
+            s(elev) +
+            tmp +
+            spei +
+            s(trap_name, bs = 're') +  # categorical, account for how much individual trap contributes to the total variation
+            s(location, bs = 're') +   # trap pair
+            # s(x,y, k = 50) +
+            s(year, tmp),
+          dat_lag, family = tw)
+
+
+m7 <- gam(sum_ips ~ s(previous_sum_ips, k = 70) +
+            s(year, k = 6) +
+            #s(elev) +
+            s(spruce_freq) +
+                        tmp +
+            spei +
+            s(trap_name, bs = 're') +  # categorical, account for how much individual trap contributes to the total variation
+            s(location, bs = 're') +   # trap pair
+            # s(x,y, k = 50) +
+            s(year, tmp),
+          dat_lag, family = tw)
+
+m8 <- bam(sum_ips ~ s(previous_sum_ips, k = 70) +
+            s(year, k = 6) +
+            s(elev) +
+            s(spruce_freq) +
+            tmp +
+            spei +
+            s(trap_name, bs = 're') +  # categorical, account for how much individual trap contributes to the total variation
+            s(location, bs = 're') +   # trap pair
+            # s(x,y, k = 50) +
+            s(year, tmp),
+          method="fREML", 
+          dat_lag, family = tw)
+
+
+m9 <- bam(sum_ips ~ s(previous_sum_ips, k = 70) +
+            s(year, k = 6) +
+            s(elev) +
+            s(spruce_freq) +
+            tmp +
+            spei +
+            s(trap_name, bs = 're') +  # categorical, account for how much individual trap contributes to the total variation
+            s(location, bs = 're') +   # trap pair
+             s(x,y, k = 25, bs = 'ds') +
+            s(year, tmp),
+          method="fREML", 
+          dat_lag, family = tw)
+
+m9.nb <- bam(sum_ips ~ s(previous_sum_ips, k = 70) +
+            s(year, k = 6) +
+            s(elev) +
+            s(spruce_freq) +
+            tmp +
+            spei +
+            s(trap_name, bs = 're') +  # categorical, account for how much individual trap contributes to the total variation
+            s(location, bs = 're') +   # trap pair
+            s(x,y, k = 25, bs = 'ds') +
+            s(year, tmp),
+          method="fREML", 
+          dat_lag, family = nb)
+
+m9.poisson <- bam(sum_ips ~ s(previous_sum_ips, k = 70) +
+               s(year, k = 6) +
+               s(elev) +
+               s(spruce_freq) +
+               tmp +
+               spei +
+               s(trap_name, bs = 're') +  # categorical, account for how much individual trap contributes to the total variation
+               s(location, bs = 're') +   # trap pair
+               s(x,y, k = 25, bs = 'ds') +
+               s(year, tmp),
+             method="fREML", 
+             dat_lag, family = poisson)
+
+m9.poisson.sc <- bam(sum_ips ~ s(previous_sum_ips, k = 70) +
+                    s(year, k = 6) +
+                    s(elev) +
+                    s(spruce_freq) +
+                    tmp +
+                    spei +
+                    s(trap_name, bs = 're') +  # categorical, account for how much individual trap contributes to the total variation
+                    s(location, bs = 're') +   # trap pair
+                    s(x,y, k = 25, bs = 'ds') +
+                    s(year, tmp),
+                  method="fREML", 
+                  dat_lag, family = poisson, scale = -1)
+
+# add population growth
+m10 <- bam(sum_ips ~ s(previous_sum_ips, k = 70) +
+            s(year, k = 6) +
+            s(elev) +
+            s(spruce_freq) +
+            s(population_growth) +
+            tmp +
+            spei +
+            s(trap_name, bs = 're') +  # categorical, account for how much individual trap contributes to the total variation
+            s(location, bs = 're') +   # trap pair
+            # s(x,y, k = 50) +
+            s(year, tmp),
+          dat_lag,method="fREML",  family = tw)
+
+m10.2 <- bam(sum_ips ~ s(previous_sum_ips, k = 70) +
+             s(year, k = 6) +
+             s(elev) +
+             s(spruce_freq) +
+             s(population_growth) +
+             tmp +
+             spei +
+             s(trap_name, bs = 're') +  # categorical, account for how much individual trap contributes to the total variation
+             s(location, bs = 're') +   # trap pair
+             # s(x,y, k = 50) +
+             s(tmp, year),
+           dat_lag,method="fREML",  family = tw)
+
+
+# remove s(tmp, year)
+m10.3 <- bam(sum_ips ~ s(previous_sum_ips, k = 70) +
+               s(year, k = 6) +
+               s(elev) +
+               s(spruce_freq) +
+               s(population_growth) +
+               tmp +
+               spei +
+               s(trap_name, bs = 're') +  # categorical, account for how much individual trap contributes to the total variation
+               s(location, bs = 're'),# +   # trap pair
+               # s(x,y, k = 50) +
+              # s(tmp, year),
+             dat_lag,method="fREML",  family = tw)
+
+# interaction using tensor# s(tmp, year)
+m10.4 <- bam(sum_ips ~ s(previous_sum_ips, k = 70) +
+               s(year, k = 6) +
+               s(elev) +
+               s(spruce_freq) +
+               s(population_growth) +
+               tmp +
+               spei +
+               s(trap_name, bs = 're') +  # categorical, account for how much individual trap contributes to the total variation
+               s(location, bs = 're') +   # trap pair
+             # s(x,y, k = 50) +
+              ti(tmp, year),
+             dat_lag,method="fREML",  family = tw)
+
+
+# remove previous beetle sum
+m11 <- bam(sum_ips ~ #s(previous_sum_ips, k = 70) +
+             s(year, k = 6) +
+             s(elev) +
+             s(spruce_freq) +
+             s(population_growth) +
+             tmp +
+             spei +
+             s(trap_name, bs = 're') +  # categorical, account for how much individual trap contributes to the total variation
+             s(location, bs = 're') +   # trap pair
+             # s(x,y, k = 50) +
+             s(year, tmp),
+           dat_lag,method="fREML",  family = tw)
+
+# elevation as linear
+m12 <- bam(sum_ips ~ #s(previous_sum_ips, k = 70) +
+             s(year, k = 6) +
+             elev +
+             s(spruce_freq) +
+             s(population_growth) +
+             tmp +
+             spei +
+             s(trap_name, bs = 're') +  # categorical, account for how much individual trap contributes to the total variation
+             s(location, bs = 're') +   # trap pair
+             # s(x,y, k = 50) +
+             s(year, tmp),
+           dat_lag,method="fREML",  family = tw)
+
+
+
+# add temperature from previous year
+m13 <- bam(sum_ips ~ s(previous_sum_ips, k = 70) +
+               s(year, k = 6) +
+               s(elev) +
+               s(spruce_freq) +
+               s(population_growth) +
+               s(previous_tmp) +
+               tmp +
+               spei +
+               s(trap_name, bs = 're') +  # categorical, account for how much individual trap contributes to the total variation
+               s(location, bs = 're'),# +   # trap pair
+             # s(x,y, k = 50) +
+             # s(tmp, year),
+             dat_lag,method="fREML",  family = tw)
+
+#previous year pop growth
+m13.2 <- bam(sum_ips ~ s(previous_sum_ips, k = 70) +
+             s(year, k = 5) +
+             s(elev) +
+             s(spruce_freq) +
+             s(population_growth2, k = 6) +
+             s(previous_tmp) +
+             tmp +
+             spei +
+             s(trap_name, bs = 're') +  # categorical, account for how much individual trap contributes to the total variation
+             s(location, bs = 're'),# +   # trap pair
+           # s(x,y, k = 50) +
+           # s(tmp, year),
+           dat_lag,method="fREML",  family = tw)
+
+
+# set terms to linear
+m13.3 <- bam(sum_ips ~ s(previous_sum_ips, k = 70) +
+               s(year, k = 5) +
+               elev +
+               s(spruce_freq) +
+               population_growth2 +
+               previous_tmp +
+               tmp +
+               spei +
+               s(trap_name, bs = 're') +  # categorical, account for how much individual trap contributes to the total variation
+               s(location, bs = 're'),# +   # trap pair
+             # s(x,y, k = 50) +
+             # s(tmp, year),
+             dat_lag,method="fREML",  family = tw)
+
+
+
+# add previous year spei 
+m14 <- bam(sum_ips ~ s(previous_sum_ips, k = 70) +
+             s(year, k = 6) +
+             s(elev) +
+             s(spruce_freq) +
+             s(population_growth) +
+             s(previous_tmp) +
+             s(previous_spei) +
+             tmp +
+             spei +
+             s(trap_name, bs = 're') +  # categorical, account for how much individual trap contributes to the total variation
+             s(location, bs = 're'),# +   # trap pair
+           # s(x,y, k = 50) +
+           # s(tmp, year),
+           dat_lag,method="fREML",  family = tw)
+
+
+# add temperature from previous year
+m13.nb <- bam(sum_ips ~ s(previous_sum_ips, k = 70) +
+             s(year, k = 6) +
+             s(elev) +
+             s(spruce_freq) +
+             s(population_growth) +
+             s(previous_tmp) +
+             tmp +
+             spei +
+             s(trap_name, bs = 're') +  # categorical, account for how much individual trap contributes to the total variation
+             s(location, bs = 're'),# +   # trap pair
+           # s(x,y, k = 50) +
+           # s(tmp, year),
+           dat_lag,method="fREML",  family = nb(theta = 1.8))
+
+
+# use as linear terms if the edf = 1
+m15 <- bam(sum_ips ~ s(previous_sum_ips, k = 70) +
+             year +
+             elev +
+             spruce_freq +
+             s(population_growth) +
+             previous_tmp +
+             tmp +
+             spei +
+             s(trap_name, bs = 're') +  # categorical, account for how much individual trap contributes to the total variation
+             s(location, bs = 're'),# +   # trap pair
+           # s(x,y, k = 50) +
+           # s(tmp, year),
+           dat_lag,method="fREML",  family = tw(1.5))
+
+
+# use as linear terms if the edf = 1
+m16 <- bam(sum_ips ~ s(previous_sum_ips, k = 70) +
+             year +
+             elev +
+             spruce_freq +
+             s(population_growth, k =80) +
+             previous_tmp +
+             tmp +
+             spei +
+             s(trap_name, bs = 're') +  # categorical, account for how much individual trap contributes to the total variation
+             s(location, bs = 're'),# +   # trap pair
+           # s(x,y, k = 50) +
+           # s(tmp, year),
+           dat_lag,method="fREML",  family = tw(1.5))
+
+
+# use automatic k - does not work well!
+m17 <- bam(sum_ips ~ s(previous_sum_ips, k = TRUE) +
+             year +
+             elev +
+             spruce_freq +
+             s(population_growth, k =TRUE) +
+             previous_tmp +
+             tmp +
+             spei +
+             s(trap_name, bs = 're') +  # categorical, account for how much individual trap contributes to the total variation
+             s(location, bs = 're'),# +   # trap pair
+           # s(x,y, k = 50) +
+           # s(tmp, year),
+           dat_lag,method="fREML",  family = tw(1.5))
+
+
+
+
+#increase k values
+m16.2 <- bam(sum_ips ~ s(previous_sum_ips, k = 130) +
+             year +
+             elev +
+             spruce_freq +
+             s(population_growth, k =130) +
+             previous_tmp +
+             tmp +
+             spei +
+             s(trap_name, bs = 're') +  # categorical, account for how much individual trap contributes to the total variation
+             s(location, bs = 're'),# +   # trap pair
+           # s(x,y, k = 50) +
+           # s(tmp, year),
+           dat_lag,method="fREML",  family = tw(1.5))
+
+
+#reduce tweedie
+m16.3 <- bam(sum_ips ~ s(previous_sum_ips, k = 130) +
+               year +
+               elev +
+               spruce_freq +
+               s(population_growth, k =130) +
+               previous_tmp +
+               tmp +
+               spei +
+               s(trap_name, bs = 're') +  # categorical, account for how much individual trap contributes to the total variation
+               s(location, bs = 're'),# +   # trap pair
+             # s(x,y, k = 50) +
+             # s(tmp, year),
+             dat_lag,method="fREML",  family = tw)
+
+
+
+# increase k values for m13 model
+
+# work on m 13: inceaase k 
+m17 <- bam(sum_ips ~ s(previous_sum_ips, k = 100) +
+             s(year, k = 6) +
+             s(elev) +
+             s(spruce_freq) +
+             s(population_growth, k = 50) +
+             s(previous_tmp, k = 20) +
+             tmp +
+             spei +
+             s(trap_name, bs = 're') +  # categorical, account for how much individual trap contributes to the total variation
+             s(location, bs = 're'),# +   # trap pair
+           # s(x,y, k = 50) +
+           # s(tmp, year),
+           dat_lag,method="fREML",  family = tw)
+
+# set linear vars as linear, not smooths
+m18 <- bam(sum_ips ~ s(previous_sum_ips, k = 100) +
+             s(year, k = 6) +
+             elev +
+             spruce_freq +
+             s(population_growth, k = 50) +
+             previous_tmp +
+             tmp +
+             spei +
+             s(trap_name, bs = 're') +  # categorical, account for how much individual trap contributes to the total variation
+             s(location, bs = 're'),# +   # trap pair
+           # s(x,y, k = 50) +
+           # s(tmp, year),
+           dat_lag,method="fREML",  family = tw)
+
+# reduce 'k' consistently
+m19 <- bam(sum_ips ~ s(previous_sum_ips, k = 50) +
+             s(year, k = 6) +
+             elev +
+             spruce_freq +
+             s(population_growth, k = 50) +
+             previous_tmp +
+             tmp +
+             spei +
+             s(trap_name, bs = 're') +  # categorical, account for how much individual trap contributes to the total variation
+             s(location, bs = 're'),# +   # trap pair
+           # s(x,y, k = 50) +
+           # s(tmp, year),
+           dat_lag,method="fREML",  family = tw)
+
+
+
+
+# add remained forest as smooth
+m18.2 <- bam(sum_ips ~ s(previous_sum_ips, k = 50) +
+             s(year, k = 6) +
+             elev +
+             #spruce_freq +
+             s(remained_forest) +
+             s(population_growth, k = 20) +
+             previous_tmp +
+             tmp +
+             spei +
+             s(trap_name, bs = 're') +  # categorical, account for how much individual trap contributes to the total variation
+             s(location, bs = 're'),# +   # trap pair
+           # s(x,y, k = 50) +
+           # s(tmp, year),
+           dat_lag,method="fREML",  family = tw)
+
+
+# remove non significant and s termsadd remained forest as smooth
+m18.3 <- bam(sum_ips ~ s(previous_sum_ips, k = 50) +
+               s(year, k = 6) +
+               elev +
+               #spruce_freq +
+               remained_forest +
+               s(population_growth, k = 20) +
+               previous_tmp +
+               tmp +
+               spei +
+               s(trap_name, bs = 're') +  # categorical, account for how much individual trap contributes to the total variation
+               s(location, bs = 're'),# +   # trap pair
+             # s(x,y, k = 50) +
+             # s(tmp, year),
+             dat_lag,method="fREML",  family = tw)
+
+
+
+# put linear trends as linear
+
+summary(m18.2)
+gam.check(m17)
+k.check(m18)
+appraise(m17)
+plot(m18, page = 1, shade = T, scale = 0)
+AIC(#m1, m2, m3, m4, m5, m7, 
+  m8,  # intercept is NaN, which is not correct!
+  m9,
+  #m9.nb,
+  #m9.poisson, 
+  #m9.poisson.sc,
+  m10, 
+  #m10.2, m10.3, m10.4, 
+  m13,
+  m13.2,
+ m13.3 # # !!!! this is the winner! having reasonable error distributions and explaining 50% od deviance
+  # m13.nb
+  #m14
+  #m11, m12
+ #m15, 
+ #m16, m16.2,
+ #m17,
+ #m18,
+# m18.2
+# m19
+  )
+
+
+
+# Plot the smoothed term with an exponentiated y-axis
+plot(m13.3, pages = 1, scale = 0, shade= T)
+plot(m8, pages = 1, scale = 0, shade= T)
+
+# Plot explained variability m13.3 -------------------------------------------------
+
+
+# Extract the F or t statistics as measures of effect size
+effect_size <- c(
+  previous_sum_ips = 20.257,
+  year = 5.850,
+  spruce_freq = 2.037,
+  trap_name = 0.000, 
+  location = 2.572,
+  elev = abs(1.800),                # t-value
+  population_growth2 = abs(1.325),  # t-value
+  previous_tmp = abs(2.787),        # t-value
+  tmp = abs(0.840),                 # t-value
+  spei = abs(2.952)                 # t-value
+)
+
+# Create a data frame for plotting
+df <- data.frame(term = names(effect_size), effect_size = unname(effect_size))
+df <- df[order(df$effect_size, decreasing = TRUE),]
+
+# Create the bar plot
+ggplot(df, aes(x = reorder(term, effect_size), y = effect_size)) + 
+  geom_bar(stat = "identity") + 
+  coord_flip() + 
+  labs(x = "Term", y = "Effect Size (F or |t| value)", title = "Effect Sizes of Terms in GAM Model")
+
+
+
+
+# standardize the dependent and predictors vals  -------------------------------------------------------
+# Standardize beetle counts for each trap over years
+dat_lag_standardized <- 
+  dat_lag %>%
+    ungroup(.) %>% 
+  dplyr::select(-c(trap_name, location, year, x, y)) %>%
+  # Apply the scale function to standardize each column
+  mutate_all(scale)
+
+# move back removed columns
+dat_lag_standardized$trap_name <- dat_lag$trap_name
+dat_lag_standardized$location  <- dat_lag$location
+dat_lag_standardized$year      <- dat_lag$year
+dat_lag_standardized$x         <- dat_lag$x
+dat_lag_standardized$y         <- dat_lag$y
+
+hist(dat_lag_standardized$sum_ips)
+
+dat_lag_standardized2 <- dat_lag_standardized %>% drop_na() %>% as.data.frame()
+
+
+m8_st <- bam(sum_ips ~ s(previous_sum_ips) +
+            s(year, k = 3) +
+            s(elev) +
+            s(spruce_freq) +
+            tmp +
+            spei +
+            s(trap_name, bs = 're') +  # categorical, account for how much individual trap contributes to the total variation
+            s(location, bs = 're') +   # trap pair
+            s(year, tmp),
+            method="fREML",
+            data = dat_lag_standardized2)
+
+
+m13.3_st <- bam(sum_ips ~ s(previous_sum_ips, k = 70) + 
+               s(year, k = 5) + 
+               elev + 
+               s(spruce_freq) + 
+               population_growth2 + 
+               previous_tmp + 
+               tmp + 
+               spei + 
+               s(trap_name, bs = "re") + 
+               s(location, bs = "re"),
+             method="fREML",
+             data = dat_lag_standardized2)
+
+
+
+AIC(m8_st, m13.3, m13.3_st)
+appraise(m13.3_st)
+plot(m13.3_st, page = 1, shade = T)
+
+# 10/17/2023 - after standardizing, the AIC is way lower and calculation is faster, but teh reults are the same
+# calculate beetle population growth (compare teh pup. from 
+#ne year to another)
+# identify transition points: how does this work???
+#
+# Install and load the changepoint package if not already installed
+# install.packages("changepoint")
+#library(changepoint)
+
+# Sample beetle counts data (replace with your data)
+beetle_counts <- c(100, 120, 150, 80, 100, 500, 800, 900, 1200, 1100, 1150)
+
+# Perform changepoint analysis to detect transitions
+cpt <- cpt.meanvar(beetle_counts)
+
+# Plot the data with changepoints
+plot(cpt)
+
+
+plot_smooth(m4, view = 'tmp')
+pXXX<- plot_smooth(m1, 
+                          view="tmp", 
+                          rm.ranef =TRUE)$fv
+
+
+
+
+
+windows()
+plot(m1, page = 1)
 
 
 dat_fin %>% 
@@ -105,6 +804,15 @@ m1 <- gam(sum_ips ~s(previous_sum_ips, k =50) +
 appraise(m1)
 summary(m1)
 plot(m1, page = 1, shade = T)
+
+# Inspect data ----------------------------------------------------------
+# VIF - variance inflation factor
+# depepndence between predictors - keep only independent ones
+# spatial and temporal autocorrelation
+
+# get korelogram: if line overpass teh dashed line, there is a corelation
+acf(dat_fin$sum_ips) # super correlated!
+
 
 
 
