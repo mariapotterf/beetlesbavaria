@@ -13,6 +13,15 @@ load(file =  "outData/buffers.Rdata")
 
 names(df_fin)
 
+library(mgcv)
+
+
+m1 <- gam(sum_ips   ~ s(year, k = 5) + s(harvest) + s(remained_forest), df_fin, family=tw) 
+summary(m1)
+
+plot(m1)
+
+
 
 # [1] "falsto_name"     "globalid"        "year"            "id"              "wind_beetle"     "harvest"         "forest_freq"     "all_dist_sum"    "cum_removed"    
 #[10] "remained_forest" "sum_ips"         "lag1_dist_sum"   "lag1_harvest"    "lag2_harvest"    "lag1_beetles"    "lag2_beetles"   
