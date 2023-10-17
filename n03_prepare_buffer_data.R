@@ -247,7 +247,7 @@ extract_rst_val <- function(xy, ...) {
 
 # make a function to export df from each buffer: keep years, disturbance type and forest
 extract_forest <- function(xy, ...) {
-  #xy<- xy_ls[[8]]
+ # xy1<- xy_ls[[8]]
   id <- xy$id
   
   # get buffer
@@ -280,16 +280,14 @@ out_dist_ls <- lapply(xy_ls, extract_rst_val) #extract_rst_val(xy_ls[[10]])
 # merge partial tables into one df
 dist_df      <-do.call("rbind", out_dist_ls)
 
-# check data
-dist_df[order(dist_df$id),]
 
-
+# pre-process table
 dist_df_out <- 
   dist_df %>% 
-  mutate(year = as.numeric(as.character(year))) %>% # convert factor to numeric
+  #mutate(year = as.numeric(as.character(year))) %>% # convert factor to numeric
     group_by(year, type, id) %>%
       dplyr::select(-spruce) %>% 
-      summarize(Freq = n()) %>% # get count of rows
+      dplyr::summarize(Freq = n()) %>% # get count of rows
      spread(type, Freq) 
   
 # rplelace NA by 0
@@ -326,17 +324,35 @@ forest_df %>%
 
 #  Merge forest and yearly disturbances -----------------------------------
 # calculate remaining spruce forest
-df_merge <- 
+dist_df_exp <- 
   dist_df_out %>% 
   group_by(id) %>% 
   complete(year = 1986:2021,  # expand to all years
-           fill = list(id = id)) %>%
+           fill = list(id = id))  #%>%
+
+# this data is already clipped to the spruce 2017, but I can get a new ones from raw Coenrlius data?
+  # summarize(sm = mean(sm),
+  #           vpd = mean(vpd),
+  #           tmp = mean(tmp),
+  #           spei = mean(spei)) %>%
+  # group_by(ID) %>%
+  # mutate(sm_z = (sm - mean(sm[year %in% reference_period])) / sd(sm[year %in% reference_period]),
+  #        vpd_z = (vpd - mean(vpd[year %in% reference_period])) / sd(vpd[year %in% reference_period]),
+  #        tmp_z = (tmp - mean(tmp[year %in% reference_period])) / sd(tmp[year %in% reference_period]),
+  #        spei_z = (spei - mean(spei[year %in% reference_period])) / sd(spei[year %in% reference_period])) %>%
+  
+
+# calculate anomalies!!!
+  
+  
+df_merge <- 
+  dist_df_exp %>% 
   mutate(wind_beetle  = replace_na(wind_beetle , 0),
          harvest  = replace_na(harvest , 0)) %>% 
-    full_join(forest_df, by = 'id') %>%
+    full_join(spruce_df, by = 'id') %>%
     mutate(all_dist_sum = wind_beetle + harvest,
-      cum_removed       = cumsum(all_dist_sum),
-      remained_forest   = forest_freq - cum_removed) # %>%
+           cum_removed       = cumsum(all_dist_sum),
+           remained_forest   = spruce_freq - cum_removed) # %>%
  
   #@filter(remained_forest< 0)
   
@@ -367,10 +383,10 @@ df_RS_out <-
 
 
 
-save(spruce_df,         # spruce cover by year
+save(spruce_df,         # spruce cover by id, from 2017
      dist_df_out,       # disturbances by year
-  df_RS_out,            # final table with coordinates, counts and Rs disturbances and present forest per year
+     df_RS_out,            # final table with coordinates, counts and Rs disturbances and present forest per year
      xy_sf_expand,      # all xy trap coordinates (shifted over years)
-    file =  "outData/buffers.Rdata")
+     file =  "outData/buffers.Rdata")
 
 
