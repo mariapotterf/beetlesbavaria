@@ -107,8 +107,18 @@ dat_lag %>%
 # [26] "spruce_freq"       "all_dist_sum"      "cum_removed"       "remained_forest"   "next1_RS_beetle"  
 # [31] "next1_RS_harvest"  "next2_RS_beetle"   "next2_RS_harvest" 
 
+# predict aggregation date:
+df_fin_agg <- dat_lag %>% 
+  dplyr::select(-c("wind_beetle",       "harvest",          
+                     "all_dist_sum",      "cum_removed",       "remained_forest" ,  "next1_RS_beetle" , 
+                   "next1_RS_harvest",  "next2_RS_beetle",   "next2_RS_harvest" ))
 
-  
+df_fin_peak <- dat_lag %>% 
+  dplyr::select(-c("wind_beetle",       "harvest",          
+                   "all_dist_sum",      "cum_removed",       "remained_forest" ,  "next1_RS_beetle" , 
+                   "next1_RS_harvest",  "next2_RS_beetle",   "next2_RS_harvest" ))
+
+df_fin_RS   
 
 # Exploratory analyses IPS_SUM --------------------------------------------------
 
@@ -123,10 +133,12 @@ pairs(sum_ips ~ previous_sum_ips+ population_growth + tmp + previous_tmp + popul
 
 hist(dat_lag$population_growth)
 
-# to do: ------------------------------------------------------------------------
+# Link beetle data with observed RS damage ------------------------------------------------------------------------
 # remove 0 wind-beetle damage 
 # run analyses with only stable traps over time?? - split df
 
+
+# [1] Only stable traps : Beetle damage 
 dat_lag_stable <- dat_lag %>% 
   filter(trap_name %in% stable_traps) #
 
@@ -135,11 +147,52 @@ dat_lag_stable %>%
   ggplot(aes(x = sum_ips, 
              y = wind_beetle)) +
   geom_point() +
-  geom_smooth()
+  geom_smooth() + ggtitle('Current year')
+
+dat_lag_stable %>% 
+  filter(next1_RS_beetle > 0) %>% 
+  ggplot(aes(x = sum_ips, 
+             y = next1_RS_beetle)) +
+  geom_point() +
+  geom_smooth() + ggtitle('Next year')
+
+dat_lag_stable %>% 
+  filter(next2_RS_beetle > 0) %>% 
+  ggplot(aes(x = sum_ips, 
+             y = next2_RS_beetle)) +
+  geom_point() +
+  geom_smooth() + ggtitle('Next 2 years')
+
+
+## [2] Only stable traps : Harvest  ------------------------------------------
+p_harv1 <- dat_lag_stable %>% 
+  filter(harvest > 0) %>% 
+  ggplot(aes(x = sum_ips, 
+             y = harvest)) +
+  geom_point() +
+  geom_smooth() + ggtitle('Current year')
+
+p_harv2 <- dat_lag_stable %>% 
+  filter(next1_RS_harvest > 0) %>% 
+  ggplot(aes(x = sum_ips, 
+             y = next1_RS_harvest)) +
+  geom_point() +
+  geom_smooth() + ggtitle('Next year')
+
+p_harv3 <- dat_lag_stable %>% 
+  filter(next2_RS_harvest > 0) %>% 
+  ggplot(aes(x = sum_ips, 
+             y = next2_RS_harvest)) +
+  geom_point() +
+  geom_smooth() + ggtitle('Next 2 years')
+
+ggarrange(p_harv1, p_harv2, p_harv3)
+
+# !!!
 
 pairs(next1_RS_beetle ~  previous_sum_ips+ sum_ips+ population_growth + tmp + previous_tmp + previous_spei , dat_lag_stable, panel = panel.smooth)
 
-pairs(next1_RS_beetle ~ previous_sum_ips+ sum_ips +population_growth, #+
+pairs(next1_RS_beetle ~ previous_sum_ips+ sum_ips +population_growth + population_growth2, #+
       #  tmp + previous_tmp + previous_spei , 
       dat_lag_stable, panel = panel.smooth)
 
@@ -417,6 +470,8 @@ m13.2 <- bam(sum_ips ~ s(previous_sum_ips, k = 70) +
 
 
 # set terms to linear
+
+# include autocorrelation: A, and check for autocorrelation by XXXX test
 m13.3 <- bam(sum_ips ~ s(previous_sum_ips, k = 70) +
                s(year, k = 5) +
                elev +
@@ -431,6 +486,8 @@ m13.3 <- bam(sum_ips ~ s(previous_sum_ips, k = 70) +
              # s(tmp, year),
              dat_lag,method="fREML",  family = tw)
 
+#!!!! glm, model averaging???
+
 
 
 # add previous year spei 
@@ -439,7 +496,7 @@ m14 <- bam(sum_ips ~ s(previous_sum_ips, k = 70) +
              s(elev) +
              s(spruce_freq) +
              s(population_growth) +
-             s(previous_tmp) +
+     s(previous_tmp)+
              s(previous_spei) +
              tmp +
              spei +
