@@ -47,7 +47,8 @@ library(effects) #what do my marginal effects look like?
 library(performance) #binomial model diagnostics
 library(emmeans) #post hoc for categorical predictors
 
-
+# test for autocorrelation
+library(lmtest)
 
 # colors
 library(RColorBrewer)
@@ -101,17 +102,18 @@ dat_lag <-   dat_fin %>%
                                       year %in% c(2015,2019, 2020) ~ 'high',
                                       year %in% c(2016,2017) ~ 'moderate',
                                       year== 2021 ~ 'low'),
-                temp_fact = as.factor(temp_fact))
+                temp_fact = as.factor(temp_fact)) 
+  
   
     #dplyr::select(c(year, trap_name, 
     #                previous_tmp, tmp,
     #                next2_RS_harvest, harvest )) #%>% 
   
-# calculate population growth
-dat_lag %>%
-  filter(trap_name== 'Zusmarshausen_1') %>% 
-  dplyr::select(c(trap_name, year, sum_ips, previous_sum_ips,population_growth, population_growth2)) %>% 
-  View()
+# check if results are correct
+# dat_lag %>%
+#   filter(trap_name== 'Zusmarshausen_1') %>% 
+#   dplyr::select(c(trap_name, year, sum_ips, previous_sum_ips,population_growth, population_growth2)) %>% 
+#   View()
 
 
 
@@ -126,7 +128,7 @@ dat_lag %>%
 # [26] "spruce_freq"       "all_dist_sum"      "cum_removed"       "remained_forest"   "next1_RS_beetle"  
 # [31] "next1_RS_harvest"  "next2_RS_beetle"   "next2_RS_harvest" 
 
-# predict aggregation date:
+# predict aggregation date: ----------------------------------------------------
 df_fin_agg <- dat_lag %>% 
   dplyr::select(-c("wind_beetle",       "harvest",          
                      "all_dist_sum",      "cum_removed",       "remained_forest" ,  "next1_RS_beetle" , 
@@ -151,6 +153,33 @@ df_fin_peak <- dat_lag %>%
 
   
 
+# Scale predictors ================================================================================
+
+dat_lag_scaled                <- dat_lag
+dat_lag_scaled$tmp            <- scale(dat_lag_scaled$tmp)
+dat_lag_scaled$spei           <- scale(dat_lag_scaled$spei)
+dat_lag_scaled$spruce_freq    <- scale(dat_lag_scaled$spruce_freq )
+dat_lag_scaled$year           <- factor(dat_lag_scaled$year )
+dat_lag_scaled$sum_ips_scaled <- scale(dat_lag_scaled$sum_ips)
+dat_lag_scaled$id             <- 1:nrow(dat_lag_scaled)  # Adding an observation ID
+# code 'year' as numeric to account for temp autocorrelation
+dat_lag_scaled$year_num       <- as.numeric(as.character(dat_lag_scaled$year))
+
+
+# consider year as random factor - non linear relationship betweeen years
+
+# how to improve model:
+# capp values:
+
+cap_at_percentiles <- function(x, lower = 0.01, upper = 0.99) {
+  bounds <- quantile(x, c(lower, upper))
+  pmin(pmax(x, bounds[1]), bounds[2])
+}
+
+# Apply to your data
+dat_lag_scaled$capped_sum_ips <- cap_at_percentiles(dat_lag_scaled$sum_ips)
+
+
 # Exploratory analyses IPS_SUM --------------------------------------------------
 
 pairs(sum_ips ~ tmp + spei + vpd + elev + spruce_freq + previous_sum_ips+population_growth, dat_lag, panel = panel.smooth)
@@ -164,12 +193,12 @@ pairs(sum_ips ~ previous_sum_ips+ population_growth + tmp + previous_tmp + popul
 
 hist(dat_lag$population_growth)
 
-# Link beetle data with observed RS damage ------------------------------------------------------------------------
+# RS:  Link beetle data with observed RS damage ------------------------------------------------------------------------
 # remove 0 wind-beetle damage 
 # run analyses with only stable traps over time?? - split df
 
 
-# [1] Only stable traps : Beetle damage 
+# [1] Only stable traps : Beetle damage  ---------------------------------------
 dat_lag_stable <- dat_lag %>% 
   filter(trap_name %in% stable_traps) #
 
@@ -313,7 +342,7 @@ summary(m4)
 plot(m4, page = 1)
 
 
-# Fit the GLMM with negative binomial distribution & random effects
+# Fit the GLMM with negative binomial distribution & random effects ------------
 m3 <- glmer.nb(sum_ips ~ tmp + spei + (1|location) + (1|trap_name), data = dat_lag)
 
 m3.1 <- glmer.nb(sum_ips ~ tmp  + (1|trap_name), data = dat_lag)
@@ -322,33 +351,6 @@ m3.2 <- glmer.nb(sum_ips ~ tmp  + (1|location), data = dat_lag)
 m3.3 <- glmer.nb(sum_ips ~ tmp + (1| year), data = dat_lag)
 
 m3.4 <- glmer.nb(sum_ips ~ tmp + year + (1| location), data = dat_lag)
-
-# scale values ================================================================================
-
-dat_lag_scaled              <- dat_lag
-dat_lag_scaled$tmp          <- scale(dat_lag_scaled$tmp)
-dat_lag_scaled$spei         <- scale(dat_lag_scaled$spei)
-dat_lag_scaled$spruce_freq  <- scale(dat_lag_scaled$spruce_freq )
-dat_lag_scaled$year         <- factor(dat_lag_scaled$year )
-#dat_lag_scaled$sum_ips <- scale(dat_lag_scaled$sum_ips)
-# consider year as random factor - non linear relationship betweeen years
-
-# how to improve model:
-# capp values:
-
-plot(residuals(m1.sc.poly2) ~ fitted(m1.sc.poly2))
-
-cap_at_percentiles <- function(x, lower = 0.01, upper = 0.99) {
-  bounds <- quantile(x, c(lower, upper))
-  pmin(pmax(x, bounds[1]), bounds[2])
-}
-
-# Apply to your data
-dat_lag_scaled$capped_sum_ips <- cap_at_percentiles(dat_lag_scaled$sum_ips)
-
-
-
-
 
 m3.5 <- glmer.nb(sum_ips ~ tmp + (1| year), data = dat_lag_scaled)
 # consider as polynomial
@@ -381,10 +383,16 @@ m3.7.3.poly <- glmer.nb(sum_ips ~ poly(tmp,2)*temp_fact + (1| location/trap_name
 # keep it linear
 m3.7.4.lin <- glmer.nb(sum_ips ~ tmp*temp_fact + (1| location/trap_name), data = dat_lag_scaled)
 
+# keep it exp
+m3.7.4.exp <- glmer.nb(sum_ips ~ exp(tmp)*temp_fact + (1| location/trap_name), data = dat_lag_scaled)
 
+
+AICc(m3.7.1, m3.7.3.poly, m3.7.4.lin, m3.7.4.exp)
 
 # try as smooths??
 m3.7.3.smooth <- glmer.nb(sum_ips ~ splines::bs(tmp, df = 4)*temp_fact + (1| location/trap_name), data = dat_lag_scaled)
+
+
 
 #splines::bs(x, degrees = 3) * factor(category)
 
@@ -402,31 +410,13 @@ AICc(m3.5, m3.6, m3.7)
 
 r2(m3.7.2)
 
-simulationOutput <- simulateResiduals(fittedModel = m3.7.3, plot = T)
+simulationOutput <- simulateResiduals(fittedModel = m3.7.3.poly, plot = T)
 
-
-# Assuming 'tmp' is your temperature variable and 'year' is a factor
-temp_range <- seq(min(dat_lag_scaled$tmp), 
-                  max(dat_lag_scaled$tmp), length.out = 100)
-# Create a data frame for all combinations of 'tmp' and 'temp_fact'
-new_data <- expand.grid(tmp = temp_range, 
-                        temp_fact = levels(dat_lag_scaled$temp_fact))
 
 # Predicting beetle counts
-AIC(m3.5, m3.7.1, m3.7.3)
-new_data$predicted_counts <- predict(m3.7.3, newdata = new_data, re.form = NULL)
+AIC(m3.5, m3.7.1, m3.7.3.poly, m3.7.3.smooth)
 
-# Plotting
-ggplot(new_data, aes(x = tmp, y = predicted_counts, color = year)) +
-  geom_line() +
-  labs(title = "Predicted Beetle Counts by Temperature and Year",
-       x = "Temperature (z-score)",
-       y = "Predicted Beetle Counts") +
-  theme_minimal()
-
-
-# ===================================================
-# Assuming you want to include 'trap_name' as a placeholder
+### plot GLM  ===================================================
 unique_trap_names <- levels(dat_lag_scaled$trap_name)
 unique_location   <- levels(dat_lag_scaled$location)
 unique_temp       <- levels(dat_lag_scaled$temp_fact)
@@ -438,7 +428,7 @@ new_data <- expand.grid(tmp = temp_range,
                         location = unique_location[1],
                         trap_name = unique_trap_names[1])
 
-new_data$predicted_counts <- predict(m3.7.3.poly, newdata = new_data, re.form = NULL)
+new_data$predicted_counts <- predict(m3.7.4.exp, newdata = new_data, re.form = NULL)
 
 # Plotting
 ggplot(new_data, aes(x = tmp, y = predicted_counts, color = temp_fact)) +
@@ -449,6 +439,11 @@ ggplot(new_data, aes(x = tmp, y = predicted_counts, color = temp_fact)) +
   theme_minimal()
 
 #
+r2(m3.7.4.exp)
+r2(m3.7.3.poly)
+r2(m3.7.4.lin)
+
+
 
 # ceck different seasons??
 ggplot(dat_lag_scaled, aes(x = tmp, y = sum_ips, color = temp_fact)) +
@@ -601,7 +596,7 @@ dat_lag %>%
 
 
 m.gam1 <- bam(sum_ips ~ 
-                s(tmp, by=temp_fact),# +
+                s(tmp, by=temp_fact, k = 4),# +
             #s(trap_name, bs = 're') +  # categorical, account for how much individual trap contributes to the total variation
             #s(location, bs = 're') +   # trap pair
             #s(x,y, k = 50)
@@ -611,18 +606,230 @@ m.gam1 <- bam(sum_ips ~
 
 
 m.gam2 <- bam(sum_ips ~ 
-                s(tmp, by=temp_fact) +
+                s(tmp, by=temp_fact, k = 4) +
               s(trap_name, bs = 're') +  # categorical, account for how much individual trap contributes to the total variation
               s(location, bs = 're') +   # trap pair
               s(x,y),
               dat_lag_scaled, 
               family = tw)
 
+# add base 'ds' for coordinates
+m.gam3 <- bam(sum_ips ~ 
+                s(tmp, by=temp_fact, k = 4) +
+                s(trap_name, bs = 're') +  # categorical, account for how much individual trap contributes to the total variation
+                s(location, bs = 're') +   # trap pair
+                s(x,y, bs = 'ds'),
+              dat_lag_scaled, 
+              family = tw)
+
+# add base 'ds' for coordinates
+m.gam4 <- bam(sum_ips ~ 
+                s(tmp, by=temp_fact, k = 4) +
+                s(trap_name, bs = 're') +  # categorical, account for how much individual trap contributes to the total variation
+                s(location, bs = 're') +   # trap pair
+                s(x,y, bs = 'ds'),
+              dat_lag_scaled, 
+              family = tw)
+
+# add year variable to account for autocorrelation
+m.gam5 <- bam(sum_ips ~ 
+                s(tmp, by=temp_fact, k = 4) +
+                s(year,bs = 're', k = 3) +
+                s(trap_name, bs = 're') +  # categorical, account for how much individual trap contributes to the total variation
+                s(location, bs = 're') +   # trap pair
+                s(x,y, bs = 'ds'),
+              dat_lag_scaled, 
+              family = tw)
+
+
+# add lagged variables to account for temp autocorrelation
+m.gam6 <- bam(sum_ips ~ 
+                s(previous_sum_ips, k = 3) +
+                s(tmp, by=temp_fact, k = 4) +
+                s(year,bs = 're', k = 3) +
+                s(trap_name, bs = 're') +  # categorical, account for how much individual trap contributes to the total variation
+                s(location, bs = 're') +   # trap pair
+                s(x,y, bs = 'ds'),
+              dat_lag_scaled, 
+              family = tw)
+
+
+### Evaluated GAM -------------------------------------------------------------
+AICc(m.gam1, m.gam2, m.gam3, m.gam4, m.gam5,m.gam6 ) 
 windows()
-plot(m.gam2, page = 1, shade = T)
-appraise(m.gam1)
+plot(m.gam6, page = 1, shade = T)
+appraise(m.gam6)
+summary(m.gam6)
 
 
+# Test autocorrelation of residuals ------------------------------------------------
+acf(residuals(m.gam6))
+pacf(residuals(m.gam6))
+
+acf(residuals(m.gam5))  # better one!
+pacf(residuals(m.gam5))
+
+
+# different ways to handle temporal autocorrelation --------------------------
+# wrong!! low AIC, but issueas with family, and not corect residuals
+m.gamm <- gamm(sum_ips ~ s(tmp, by = temp_fact, k = 4) +
+                 s(year_num, by = temp_fact, bs = "re") +
+                 s(location, bs = "re") +
+                 s(trap_name, bs = "re"),
+               data = dat_lag_scaled, 
+               family = nb())
+appraise(m.gamm$gam)
+plot(m.gamm$gam, page = 1)
+
+acf(residuals(m.gamm$gam))
+pacf(residuals(m.gamm$gam))
+
+# 1. if data are overdispersed, need to use neg bin family
+
+m.glmmTMB <- glmmTMB(sum_ips ~ poly(tmp, 2) * temp_fact + 
+                       (1 | year_num:temp_fact) + 
+                       (1 | location) + 
+                       (1 | trap_name),
+                     data = dat_lag_scaled, 
+                     family = nbinom2)
+
+# 2. handle overdispersion by add observation level ID as random effect
+m.gam1 <- gam(sum_ips ~ s(tmp, by = temp_fact, k = 4) +
+               s(location, bs = "re") +
+               s(trap_name, bs = "re") +
+               s(id, bs = "re"),  # Observation-level random effect
+             data = dat_lag_scaled, 
+             family = nb())
+
+m.gam2 <- gam(sum_ips ~ s(tmp, by = temp_fact, k = 4) +
+                s(location, bs = "re") +
+                s(trap_name, bs = "re") +
+                s(id, bs = "re"),  # Observation-level random effect
+              data = dat_lag_scaled, 
+              family = poisson())
+
+# the best!
+m.gam3 <- gam(sum_ips ~ s(tmp, by = temp_fact, k = 4) +
+                s(location, bs = "re") +
+                s(trap_name, bs = "re") +
+                s(id, bs = "re"),  # Observation-level random effect
+              data = dat_lag_scaled, 
+              family = tw())
+
+
+  plot_smooth(m.gam3, 
+                          view="tmp", 
+                          rm.ranef =TRUE, 
+                          #transform=function(x) 100*inv.logit(x),  
+                          plot_all="temp_fact")$fv
+
+
+
+
+###  GAM shown in a plot --------------------------------------------------------
+
+# Select specific levels for id, location, and trap_name
+selected_id <- unique(dat_lag_scaled$id)[5]      # Replace 1 with your chosen level
+selected_location <- unique(dat_lag_scaled$location)[5]
+selected_trap <- unique(dat_lag_scaled$trap_name)[5]
+
+# Generate Predicted Values
+new_data <- expand.grid(temp_fact = unique(dat_lag_scaled$temp_fact),
+                        tmp = seq(min(dat_lag_scaled$tmp), max(dat_lag_scaled$tmp), length.out = 100),
+                        location = selected_location,
+                        trap_name = selected_trap,
+                        id = selected_id)
+
+# Predict using your model
+new_data$predicted <- predict(m.gam3, newdata = new_data, type = "response")
+
+# Create the Plot
+ggplot(new_data, aes(x = tmp, y = predicted, color = temp_fact)) +
+  geom_line() +
+  labs(title = "Predicted sum_ips by Temp Factor",
+       x = "Temperature",
+       y = "Predicted sum_ips") +
+  theme_minimal() +
+  scale_color_brewer(palette = "Set1")
+
+# GAMM test model run, before improving autocorrelation - simpler - does not work!! -----------------
+m.gamm1 <- gamm(
+  sum_ips ~ s(tmp, by = temp_fact, k = 4) +
+    s(location, bs = "re") +
+    s(trap_name, bs = "re") +
+    s(id, bs = "re"),
+  data = dat_lag_scaled,
+  family = nb()
+)
+
+# include autocorrelation; make sure that 
+m.gamm2 <- gamm(
+  sum_ips ~ s(tmp, by = temp_fact, k = 4) +
+    s(location, bs = "re") +
+    s(trap_name, bs = "re") +
+    s(id, bs = "re"),
+  data = dat_lag_scaled,
+  family = nb(),
+  correlation = corAR1(form = ~ year_num)
+)
+
+AICc(m.gam1,m.gam2,m.gam3)
+appraise(m.gam3)
+
+acf(residuals(m.gam3))
+pacf(residuals(m.gam3))
+
+
+AICc(m.gamm,m.glmmTMB, m.gam)
+
+
+# test only for individual years, year needs to be treated as a factor for AR structure!
+# does not work
+m.gamm.ar <- gamm(
+  sum_ips ~ s(tmp, k = 4),# +
+   # s(location, bs = "re") +
+  #  s(trap_name, bs = "re") +
+   # s(id, bs = "re"),
+  data = dat_lag_scaled,
+  #family = nb(),
+  correlation = corAR1(form = ~ year_num)
+)
+
+
+
+# using mixed effects GAMM with explicit temporal autocorrelation -------------
+# Example of using gamm for temporal autocorrelation
+
+# to account for autocorrelation using corAR, I need to have one year per category
+m.gamm1 <- gamm(sum_ips ~ s(tmp, by=year, k = 4), 
+                  s(location, bs = "re") +
+                  s(trap_name, bs = "re"),
+                data = dat_lag_scaled, 
+                #family = nb(), 
+                correlation = corAR1(form = ~ year_num))
+
+
+
+
+
+
+
+m.gamm1 <- gamm(sum_ips ~ s(tmp, by=temp_fact, k = 4), 
+               s(year_num, by = temp_fact, bs = "re") +
+                 s(location, bs = "re") +
+                 s(trap_name, bs = "re"),
+               data = dat_lag_scaled, 
+               #family = nb(), 
+               correlation = corAR1(form = ~ year_num))
+
+# Perform the Durbin-Watson test - better for linear models? ACF,pACF are better for gams, GAMM (gams with mixed effects)
+dw_result <- dwtest(residuals(m.gam5) ~ fitted(m.gam5))
+(dw_result)
+
+
+
+
+# GAM first try, unscaled----------------------------------------------------------------
 
 m1 <- gam(sum_ips ~ s(previous_sum_ips, k = 70) +
             s(year, k = 6) +
@@ -1239,6 +1446,72 @@ ggplot(df, aes(x = reorder(term, effect_size), y = effect_size)) +
   geom_bar(stat = "identity") + 
   coord_flip() + 
   labs(x = "Term", y = "Effect Size (F or |t| value)", title = "Effect Sizes of Terms in GAM Model")
+
+
+
+
+
+
+
+# predict DOY aggregation ---------------------------------------------------
+
+# 
+p_agg <- dat_lag_scaled %>% 
+ggplot(aes(x = tmp,
+           y = agg_doy,
+           color = temp_fact)) +
+  geom_smooth()
+
+
+# peak 
+p_peak <- dat_lag_scaled %>% 
+  ggplot(aes(x = tmp,
+             y = peak_doy,
+             color = temp_fact)) +
+  geom_smooth()
+
+library(ggpubr)
+ggarrange(p_agg, p_peak, common.legend = TRUE, legend="bottom", ncol = 2)
+
+
+
+# try models
+# Normalize DOY to be between 0 and 1
+dat_lag_scaled$normalized_DOY_agg <- (dat_lag_scaled$agg_doy - 92) / (300 - 92)
+
+
+# try gams:  -----------------
+m.agg1 <- gam(normalized_DOY_agg ~ s(tmp), 
+              family = betar(link = "logit"),
+              data = dat_lag_scaled)
+
+
+# If this works, gradually add complexity
+m.agg2 <- gam(normalized_DOY_agg ~ s(tmp) + temp_fact, 
+              family = betar(link = "logit"),
+              data = dat_lag_scaled)
+
+# Original model with manual smoothing parameter
+m.agg3 <- gam(normalized_DOY_agg ~ s(tmp, by=temp_fact, sp=0.5),  # Adjust 'sp' as needed
+              family = betar(link = "logit"),
+              data = dat_lag_scaled)
+
+appraise(m.agg3)
+
+
+
+
+
+
+m.agg1 <- gam(agg_doy  ~ s(tmp, by=temp_fact), 
+               family = betar(link = "logit"),  # Choosing beta family with logit link
+               data = dat_lag_scaled)
+
+
+
+
+
+
 
 
 
