@@ -59,7 +59,7 @@ library(RColorBrewer)
 
 # read data ----------------------------------------------------------------
 
-load(file="outData/final.Rdata")
+load(file=   "outData/final.Rdata")
 load(file =  "outData/buffers.Rdata")  # df_RS_out
 
 # get unique falsto_names of traps that remained stable (only one globalid)
@@ -92,17 +92,18 @@ dat_lag <-   dat_fin %>%
                   previous_spei     =  dplyr::lag(spei, order_by = year)) %>% 
   dplyr::mutate(population_growth = (sum_ips - previous_sum_ips) / previous_sum_ips * 100,
                 population_growth2 = dplyr::lag(population_growth, order_by = year)) %>%  # lag population growth by one more year
-  left_join(df_RS_out, by = join_by(trap_name, year, sum_ips)) %>% 
+  left_join(df_RS_out, 
+            by = join_by(trap_name, year, sum_ips)) %>% 
   dplyr::mutate(trap_name = as.factor(trap_name)) %>% 
   dplyr::mutate(next1_RS_beetle  = dplyr::lag(wind_beetle, n = 1, order_by = year),
                 next1_RS_harvest = dplyr::lag(harvest,     n = 1, order_by = year),
                 next2_RS_beetle  = dplyr::lag(wind_beetle, n = 2, order_by = year),
-                next2_RS_harvest = dplyr::lag(harvest,     n = 2, order_by = year)) %>%
-  dplyr::mutate(temp_fact = case_when(year== 2018 ~ 'extreme',
-                                      year %in% c(2015,2019, 2020) ~ 'high',
-                                      year %in% c(2016,2017) ~ 'moderate',
-                                      year== 2021 ~ 'low'),
-                temp_fact = as.factor(temp_fact)) 
+                next2_RS_harvest = dplyr::lag(harvest,     n = 2, order_by = year)) #%>%
+  #dplyr::mutate(temp_fact = case_when(year== 2018 ~ 'extreme',
+   #                                   year %in% c(2015,2019, 2020) ~ 'high',
+   #                                   year %in% c(2016,2017) ~ 'moderate',
+   #                                   year== 2021 ~ 'low'),
+    #            temp_fact = as.factor(temp_fact)) 
   
   
     #dplyr::select(c(year, trap_name, 
@@ -266,7 +267,124 @@ pairs(next1_RS_beetle ~ previous_sum_ips+ sum_ips +population_growth + populatio
       dat_lag_stable, panel = panel.smooth)
 
 
-# Predict beetle sums/year by environmantel predictors --------------------
+
+# explore beetle counts and RS -------------------------------------------------
+df_RS_out <- df_RS_out %>% 
+  dplyr::mutate(trap_name = as.factor(trap_name)) %>% 
+  dplyr::mutate(next1_RS_beetle  = dplyr::lag(wind_beetle, n = 1, order_by = year),
+                next1_RS_harvest = dplyr::lag(harvest,     n = 1, order_by = year),
+                next2_RS_beetle  = dplyr::lag(wind_beetle, n = 2, order_by = year),
+                next2_RS_harvest = dplyr::lag(harvest,     n = 2, order_by = year)) %>%
+  mutate(location = gsub('.{2}$', '', trap_name)) %>% 
+  dplyr::mutate(location = as.factor(location)) 
+
+
+# scale RS data
+df_RS_scaled <- df_RS_out
+
+
+df_RS_scaled$sum_ips_scaled <- scale(df_RS_scaled$sum_ips)
+
+
+# check which values are inf???, if ref was 0 - no beetle damage during ref period
+df_RS_out %>%
+  filter(if_any(.cols = everything(), is.infinite))
+
+
+# does beetle sums corresponds to beetle anomaly? YES! if I am using only smooths, not points... ---------
+
+## PLOT anomalies ---------------
+
+df_RS_out %>% 
+  ggplot(aes(x = sum_ips,
+             y = anom_wind_beetle )) +
+  geom_smooth() 
+
+df_RS_out %>% 
+  ggplot(aes(x = sum_ips,
+             y = anom_harvest )) +
+  geom_smooth() 
+
+
+# ips vs current years:
+# inspect extreme values? wind_beetle > 200 - pixels or ha??
+df_RS_out %>% 
+  filter(wind_beetle > 100)
+
+df_RS_out %>% 
+  ggplot(aes(x = sum_ips,
+             y = wind_beetle )) +
+  geom_smooth() +
+  geom_point()
+
+df_RS_out %>% 
+  ggplot(aes(x = sum_ips,
+             y = harvest )) +
+  geom_smooth() 
+
+
+# explore lagged values
+df_RS_out %>% 
+  ggplot(aes(x = sum_ips,
+             y = next1_RS_beetle )) +
+  geom_smooth() 
+
+df_RS_out %>% 
+  ggplot(aes(x = sum_ips,
+             y = next2_RS_beetle )) +
+  geom_smooth() 
+
+
+df_RS_out %>% 
+  ggplot(aes(x = sum_ips,
+             y = next1_RS_harvest )) +
+  geom_smooth() 
+
+df_RS_out %>% 
+  ggplot(aes(x = sum_ips,
+             y = next2_RS_harvest )) +
+  geom_smooth() 
+
+
+# get glm RS vs ips sums ----------------------------------------------------------------------
+mRS <- glm.nb(wind_beetle ~ sum_ips, df_RS_out)
+
+
+mRS.harv <- glm.nb(harvest ~ sum_ips, df_RS_out)
+
+# predict next year disturbances
+mRS.next <- glm.nb(next1_RS_beetle ~ poly(sum_ips,2), df_RS_out)
+
+mRS.poly <- glm.nb(wind_beetle ~ poly(sum_ips,2), df_RS_out)
+
+mRS1 <- glm.nb(wind_beetle ~ sum_ips_scaled, df_RS_scaled)
+mRS2 <- glm.nb(wind_beetle ~ poly(sum_ips_scaled,2), df_RS_scaled) # poly() doe snot seem that much better
+
+mRS3 <- glmer.nb(wind_beetle ~ poly(sum_ips_scaled,2) + (1 | location/trap_name), df_RS_scaled)
+
+# simplify random effects to avoid singularity issuea
+mRS4 <- glmer.nb(wind_beetle ~ poly(sum_ips_scaled,2) + (1 | location), df_RS_scaled)
+
+
+plot(allEffects(mRS.poly))
+plot(allEffects(mRS))
+plot(allEffects(mRS2))
+
+# to run it in the dredge set up: need to se y always as RS data, and lagged backwards beetle sums!
+
+
+
+summary(mRS.next)
+r2(mRS.harv)
+AIC(mRS1, mRS2, mRS3)
+simulationOutput <- simulateResiduals(fittedModel = mRS.harv, plot = T)
+
+
+
+
+
+
+# Predict beetle sums/year by environmental predictors -------------------------
 #
 
 # make glm - beetle sums by temp and spei
