@@ -43,9 +43,7 @@ library(data.table)
 library(tidyr)
 library(raster)
 library(rgdal)
-#library(tidyverse)
 library(lubridate)
-#library(patchwork)
 library(fasterize)
 library(ggpubr)
 library(terra)
@@ -89,36 +87,12 @@ crs(disturb_type)
 crs(disturb_type) <- crs(disturb_year)
 crs(spruce_cover) <- crs(disturb_year)
 
-#r_spruce <- tree_class
-
-
-#print(ext(tree_class_resm))
-#m <- c(1, 7.8, NA,
-#       7.9, 8.1, 8,
-#       8.9, 17, NA)
-#rclmat <- matrix(m, ncol=3, byrow=TRUE)
-#rc1 <- classify(r_spruce, rclmat, include.lowest=TRUE)
-
-#rc1_resampl <- resample(rc1, disturb_type)
-
-#writeRaster(rc1_resampl, 'C:/Users/ge45lep/Documents/2022_BarkBeetles_Bavaria/rawData/tree_species_map/spruce_bavaria_resampl30.tif', overwrite=FALSE)
-
-
-# Get beetle counts
-# dat      <- ips.year.sum #fread(paste(myPath, outFolder, "dat.csv", sep = "/"))
-
-# Get spatial data for each trap: each trap has to have only one location per one year! 
-# 158 traps in total (79*2), 7
-#xy      <- vect(paste(myPath, outFolder, "xy_3035.gpkg", sep = "/"), 
-#                   layer = 'xy_3035') # read watershed
+# get trap data
 xy_sf_all  # all XY traps
 xy_sf_fin  # selected traps with consistent monitoring , one trap have only one XY per all years (I neglected thet they moved over years)
 
 
-# Get climate data for traps:
-#xy_clim <- fread(paste(myPath, outTable, 'xy_clim.csv', sep = "/"))
-
-# Clean trap cooordinates ------------------------------------------
+# Clean & expand trap cooordinates ------------------------------------------
 # to do: get the shifting XY per trap to work with the disturbance map data!
 trap_names = unique(xy_sf_fin$falsto_name)
 
@@ -150,11 +124,15 @@ xy_sf_expand <-
   dplyr::select(-c(from_year, von_dat, bis_dat))
 
 
+xy_sf_expand$id <- 1:nrow(xy_sf_expand)
+
 # export XZ file with shifting traps
 xy_sf_expand %>%  
   st_write(paste(myPath, "outSpatial/xy_fin_years_3035.gpkg", sep = '/'), append=FALSE)
 
 
+# Alternatively, save only specific objects to the .Rdata file
+save(list=c("xy_sf_expand"), file="outData/spatial.Rdata")
 
 
 
@@ -201,7 +179,8 @@ buff_width = 1000  # 1 km
 # filter by spruce cover (30 m)
 extract_rst_val <- function(xy, ...) {
   
-   #xy<- xy_ls[[15]]
+  # xy<- xy_ls[[951]]
+  # xy<- xy_ls[[952]]
    id <- xy$id
    #print(id)
    
@@ -216,7 +195,7 @@ extract_rst_val <- function(xy, ...) {
    #print('2')
    
    
-   # disturbance type
+   # disturbance type: harvest, fire, beetle
    dist_type_crop <- crop(disturb_type, buff)
    dist_type_mask <- mask(dist_type_crop, buff)
    #print('3')
@@ -245,7 +224,8 @@ extract_rst_val <- function(xy, ...) {
   }
 
 
-# make a function to export df from each buffer: keep years, disturbance type and forest
+# make a function to export df from each buffer: keep years, disturbance type and forest;
+# this forest is from 1986, and include all species
 extract_forest <- function(xy, ...) {
  # xy1<- xy_ls[[8]]
   id <- xy$id
@@ -281,7 +261,7 @@ out_dist_ls <- lapply(xy_ls, extract_rst_val) #extract_rst_val(xy_ls[[10]])
 dist_df      <-do.call("rbind", out_dist_ls)
 
 
-# pre-process table
+# pre-process table, calculate individual pixels into categories
 dist_df_out <- 
   dist_df %>% 
   #mutate(year = as.numeric(as.character(year))) %>% # convert factor to numeric
@@ -305,14 +285,14 @@ names(dist_df_out) <- c("year" , "id",'wind_beetle', "harvest")
 
 
 
-# extract forest ------------------------------------------------
+# extract spruce cover per buffer  ------------------------------------------------
 out_forest_ls <- lapply(xy_ls, extract_forest ) #extract_rst_val(xy_ls[[10]])
 
 # merge partial tables into one df
 forest_df      <-do.call("rbind", out_forest_ls)
 
 spruce_df <- forest_df %>% 
-  dplyr::rename(spruce_freq =Freq) %>% 
+  dplyr::rename(spruce_1986 =Freq) %>% 
   dplyr::select(-val)
 
 
@@ -323,36 +303,62 @@ forest_df %>%
 
 
 #  Merge forest and yearly disturbances -----------------------------------
-# calculate remaining spruce forest
+# calculate remaining spruce forest, first need to expand to all years
 dist_df_exp <- 
   dist_df_out %>% 
   group_by(id) %>% 
-  complete(year = 1986:2021,  # expand to all years
+  complete(year = 1986:2020,  # expand to all years
            fill = list(id = id))  #%>%
 
-# this data is already clipped to the spruce 2017, but I can get a new ones from raw Coenrlius data?
-  # summarize(sm = mean(sm),
-  #           vpd = mean(vpd),
-  #           tmp = mean(tmp),
-  #           spei = mean(spei)) %>%
-  # group_by(ID) %>%
-  # mutate(sm_z = (sm - mean(sm[year %in% reference_period])) / sd(sm[year %in% reference_period]),
-  #        vpd_z = (vpd - mean(vpd[year %in% reference_period])) / sd(vpd[year %in% reference_period]),
-  #        tmp_z = (tmp - mean(tmp[year %in% reference_period])) / sd(tmp[year %in% reference_period]),
-  #        spei_z = (spei - mean(spei[year %in% reference_period])) / sd(spei[year %in% reference_period])) %>%
-  
+ 
 
-# calculate anomalies!!!
-  
-  
+# Merge disturance data with spruce per buffer, to know how much spruce I have left
 df_merge <- 
   dist_df_exp %>% 
   mutate(wind_beetle  = replace_na(wind_beetle , 0),
          harvest  = replace_na(harvest , 0)) %>% 
-    full_join(spruce_df, by = 'id') %>%
-    mutate(all_dist_sum = wind_beetle + harvest,
+  full_join(spruce_df, by = 'id') %>%
+  mutate(all_dist_sum        = wind_beetle + harvest,
            cum_removed       = cumsum(all_dist_sum),
-           remained_forest   = spruce_freq - cum_removed) # %>%
+           remained_spruce   = spruce_1986 - cum_removed,
+           beetle_rate       = wind_beetle/spruce_1986,
+           harvest_rate      = harvest/spruce_1986) #%>%
+
+summary(df_merge)
+
+# check how anomalies look like?
+ggplot(df_merge, aes(x = year,
+                    y = cum_removed)) +
+  # geom_smooth() +
+  geom_point()
+
+
+# calculate anomalies ----------------------------------------------------------
+reference_period <- 1986:2014
+
+df_anom <- 
+  df_merge %>% 
+    group_by(id) %>%
+  mutate(ref_all_dist       = mean(all_dist_sum[year %in% reference_period], na.rm = T),
+         anom_all_dist     = all_dist_sum / mean(all_dist_sum[year %in% reference_period], na.rm = TRUE) - 1,
+         ref_wind_beetle    = mean(wind_beetle [year %in% reference_period], na.rm = T),
+         anom_wind_beetle  = wind_beetle  / mean(wind_beetle [year %in% reference_period], na.rm = TRUE) - 1,
+         ref_harvest        = mean(harvest[year %in% reference_period], na.rm = T),
+         anom_harvest      = harvest / mean(harvest[year %in% reference_period], na.rm = TRUE) - 1) %>% 
+  dplyr::select(c(id, year, ref_all_dist,anom_all_dist,
+                  ref_wind_beetle,anom_wind_beetle,
+                  ref_harvest, anom_harvest))
+      
+
+# how to handle if I have the same trap (same position) recorded over multiple buffers? if I have a set of buffer 
+# per year? I think it is ok, as I will just merge it with beetle counts per year
+
+# check how anomalies look like?
+ggplot(df_anom, aes(x = year,
+                    y = wind_beetle_z)) +
+ # geom_smooth() +
+  geom_point()
+  
  
   #@filter(remained_forest< 0)
   
@@ -363,7 +369,7 @@ df_merge %>%
 
 
 
-# Merge ips counts per year withbuffer info  ---------------------------------------
+# Merge ips counts per year with buffer info  ---------------------------------------
 # use left_right join to merge individual shifting traps to the buffers! 
 
 
@@ -371,7 +377,8 @@ df_merge %>%
 df_RS_out <- 
   xy %>% 
   as.data.frame() %>%
-  left_join(df_merge, c('id', 'year')) %>% # filter disturbance years that corresponds to catch data
+  left_join(df_merge, c('id', 'year')) %>% # filter disturbance years that corresponds to trap data/year
+  left_join(df_anom, c('id', 'year')) %>% # filter disturbance years that corresponds to trap data/year
   right_join(ips.year.sum, by = c('falsto_name', 'year')) # %>%
  # group_by(falsto_name) %>%
  # mutate(lag1_dist_sum  = dplyr::lag(all_dist_sum, n=1),
@@ -381,11 +388,13 @@ df_RS_out <-
   #        lag2_beetles   = dplyr::lag(wind_beetle,      n=2)) 
 
 
+head(df_RS_out)
 
 
 save(spruce_df,         # spruce cover by id, from 2017
      dist_df_out,       # disturbances by year
-     df_RS_out,            # final table with coordinates, counts and Rs disturbances and present forest per year
+     df_RS_out,            # final table with coordinates, counts and Rs disturbances and present spruce per year'
+     df_anom,           # get harvest and wind anomalies per buffer                   
      xy_sf_expand,      # all xy trap coordinates (shifted over years)
      file =  "outData/buffers.Rdata")
 
