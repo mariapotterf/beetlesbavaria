@@ -95,9 +95,9 @@ df <-
            c("var", "time_num", 'xx'), "_") %>% 
   dplyr::mutate(year  = lubridate::year(time), 
                 month = lubridate::month(time), 
-                day   = lubridate::day(time),
-                doy   =  lubridate::yday(time) + 1)  %>%  # as POXIT data has January 1st at 0
-  dplyr::select(-day)
+                #day   = lubridate::day(time),
+                doy   =  lubridate::yday(time) + 1) # %>%  # as POXIT data has January 1st at 0
+  #dplyr::select(-day)
 
 
 
@@ -119,9 +119,22 @@ df1 <-
     mutate(PET = thornthwaite(t2m, 48.7775),
            BAL = tp - PET) #%>%   # Längengrad Mitte Bayern
  
+# test SPEI if improved total precipitation - multiply by 30.41
+number_days <- 365/12
+df2 <-
+  df %>% 
+  dplyr::filter(var %in% SPEI_vars ) %>% # filter only soil water content
+  na.omit() %>% # remove duplicated values
+  dplyr::select(-c(time_num, xx)) %>% # remove unnecessary cols
+  spread(var, value) %>%
+  mutate(t2m = t2m - temp_convert,
+         tp  = tp*number_days*1000) %>% # convert to monthly sums and to mm from meters
+  mutate(PET = thornthwaite(t2m, 48.7775),
+         BAL = tp - PET) #%>%   # Längengrad Mitte Bayern
+
   
 # calculate SPEI for each XY location:
-df_ls <- df1 %>%
+df_ls <- df2 %>%
     group_split(ID)
 
 
@@ -136,7 +149,7 @@ get_SPEI <- function(df, ...){
     ts(df, start = c(1980, 01), end=c(2021,12), frequency=12) 
   
   # Calculate spei or different time intervals:
-  my_scales = c(1) # 3,6,12
+  my_scales = c(6) # 3,6,12
   spei_ls <- lapply(my_scales, function(s) {
     
     # extract just values from SPEI object:
@@ -219,7 +232,7 @@ df_soil <-
 
 
 
-# Water pressure deficit data --------------------------------------------------
+# Vapour pressure deficit data --------------------------------------------------
 # combine soil moisture data: sum the 4 layers:
 
 
@@ -251,8 +264,22 @@ df_temp <-
   na.omit() %>% 
   dplyr::select(-c(time_num,time, xx)) %>% # remove unnecessary cols
   spread(var, value) %>% 
-  dplyr::rename(tmp = t2m ) 
-  #mutate(tmp = vpd_calc(t = t2m, td = d2m))
+  dplyr::rename(tmp = t2m ) %>% 
+  mutate(tmp = tmp - temp_convert)  # convert to celsius
+
+
+
+# Prec -------------------------------------------------------------------------
+df_prcp <-
+  df %>% 
+  dplyr::filter(var %in% c('tp') ) %>% # total precipitation - here, in one day of a months!
+  na.omit() %>% 
+  dplyr::select(-c(time_num,time, xx)) %>% # remove unnecessary cols
+  spread(var, value) %>% 
+  dplyr::rename(prcp = tp )  %>% 
+  mutate(prcp = prcp*number_days*1000)  # convert to monthly sums in mm
+#mutate(tmp = vpd_calc(t = t2m, td = d2m))
+
 
 
 
@@ -264,18 +291,21 @@ df_anom <-
   df_soil %>% 
   left_join(df_vpd) %>% 
   left_join(df_temp) %>% 
+  left_join(df_prcp) %>% 
   left_join(df_spei_year) %>%
  # filter(month %in% veg.period) %>% # filter chunk of veg period
   group_by(year, ID) %>%
   summarize(sm = mean(sm),
             vpd = mean(vpd),
             tmp = mean(tmp),
+            prcp = mean(prcp),
             spei = mean(spei)) %>%
   group_by(ID) %>%
-  mutate(sm_z = (sm - mean(sm[year %in% reference_period])) / sd(sm[year %in% reference_period]),
-         vpd_z = (vpd - mean(vpd[year %in% reference_period])) / sd(vpd[year %in% reference_period]),
-         tmp_z = (tmp - mean(tmp[year %in% reference_period])) / sd(tmp[year %in% reference_period]),
-         spei_z = (spei - mean(spei[year %in% reference_period])) / sd(spei[year %in% reference_period])) %>%
+  mutate(sm_z   = (sm - mean(sm[year %in% reference_period])) / sd(sm[year %in% reference_period]),
+         vpd_z  = (vpd - mean(vpd[year %in% reference_period])) / sd(vpd[year %in% reference_period]),
+         tmp_z  = (tmp - mean(tmp[year %in% reference_period])) / sd(tmp[year %in% reference_period]),
+         prcp_z = (prcp - mean(prcp[year %in% reference_period])) / sd(prcp[year %in% reference_period]),
+         spei_z = (spei - mean(spei[year %in% reference_period], na.rm = T)) / sd(spei[year %in% reference_period], na.rm = T)) %>%
   ungroup() %>% 
   left_join(xy_names, by = join_by(ID))
 
@@ -284,19 +314,32 @@ df_anom <-
 # check some plots
 p1 <-ggplot(df_anom, aes(x = year,
                     y = spei_z)) +
-  geom_point()
+  geom_point()+
+  geom_smooth() 
 
 p2<-ggplot(df_anom, aes(x = year,
                     y = vpd_z)) +
-  geom_point()
+  geom_point()+
+  geom_smooth() 
 
 
 p3<-ggplot(df_anom, aes(x = year,
                     y = tmp_z)) +
-  geom_point()
+  geom_point()+
+  geom_smooth() 
 
 
-ggarrange(p1, p2, p3, nrow = 3)
+p4<-ggplot(df_anom, aes(x = year,
+                        y = tmp)) +
+  geom_point() +
+  geom_smooth()
+
+p5<-ggplot(df_anom, aes(x = year,
+                        y = prcp)) +
+  geom_point() +
+  geom_smooth() 
+
+ggarrange(p1, p2, p3, p4, p5, nrow = 3, ncol = 2)
 
 
 
