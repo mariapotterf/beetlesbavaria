@@ -149,7 +149,7 @@ get_SPEI <- function(df, ...){
     ts(df, start = c(1980, 01), end=c(2021,12), frequency=12) 
   
   # Calculate spei or different time intervals:
-  my_scales = c(6) # 3,6,12
+  my_scales = c(12) # 3,6,12
   spei_ls <- lapply(my_scales, function(s) {
     
     # extract just values from SPEI object:
@@ -299,16 +299,17 @@ df_anom_year <-
 
 table(df_anom_year$year, df_anom_year$ID)
 
-df_anom <- df_anom_year %>% 
+df_anom <- 
+  df_anom_year %>% 
   group_by(ID) %>%
   mutate(sm_z   = (sm - mean(sm[year %in% reference_period])) / sd(sm[year %in% reference_period]),
          vpd_z  = (vpd - mean(vpd[year %in% reference_period])) / sd(vpd[year %in% reference_period]),
          tmp_z  = (tmp - mean(tmp[year %in% reference_period])) / sd(tmp[year %in% reference_period]),
          prcp_z = (prcp - mean(prcp[year %in% reference_period])) / sd(prcp[year %in% reference_period]),
          spei_z = (spei - mean(spei[year %in% reference_period], na.rm = T)) / sd(spei[year %in% reference_period], na.rm = T)) %>%
-  ungroup() %>% 
-  left_join(xy_names, by = join_by(ID)) %>% 
-  filter(year %in% 2015:2021)
+  ungroup(.) %>% 
+  left_join(xy_names, by = join_by(ID, year)) %>% 
+  filter(year %in% c(2015:2021))
 
 length(unique(df_anom_year$ID))  # 1106
 length(unique(df_anom_year$year))  # 7 - 1980-2023
