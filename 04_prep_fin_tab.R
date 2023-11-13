@@ -26,31 +26,26 @@ library(ggpubr)
 library(ggpmisc)  # add equation to plots smooth 
 
 # Stats
-library('here')
-library('mgcv')
-library('gratia')
-library('gamair')
-library('purrr')
-library('mvnfast')
-library("tibble")
-library('gganimate')
-library('cowplot')
-library('tidyr')
-library("knitr")
-library("viridis")
-library('readr')
-library('itsadug')
-library(DHARMa)
-library(MASS)
-library(car)     # for VIF
+# library('here')
+# library('mgcv')
+# library('gratia')
+# library('gamair')
+# library('purrr')
+# library('mvnfast')
+# library("tibble")
+# library('gganimate')
+# library('cowplot')
+# library('tidyr')
+# library("knitr")
+# library("viridis")
+# library('readr')
+# library('itsadug')
+# library(DHARMa)
+# library(MASS)
+# library(car)     # for VIF
 
 # colors
 library(RColorBrewer)
-
-
-# for anomalies: 
-reference_period = 1986:2010
-
 
 
 # load cleaned data
@@ -66,22 +61,24 @@ load("outData/spatial.Rdata")
  
 # Spatial data: 
 # - xy_sf_fin  # XY as sf data, filtered to have only one globalid per trap
+# - xy_sf_expand  # XY as sf data, one point for trap per every year, 1106 rows
 
 # Get SPEI and clim data: they are for whole year! check only veg season?
 #df_spei       <- fread(paste(myPath, outTable, 'xy_spei.csv', sep = '/'))
-df_prec       <- fread(paste(myPath, outTable, 'xy_precip.csv', sep = '/'))  # from DWD, 1 km res
-df_temp       <- fread(paste(myPath, outTable, 'xy_temp.csv', sep = '/'))    # from DWD, 1 km res
+#df_prec       <- fread(paste(myPath, outTable, 'xy_precip.csv', sep = '/'))  # from DWD, 1 km res, only from 2000
+#df_temp       <- fread(paste(myPath, outTable, 'xy_temp.csv', sep = '/'))    # from DWD, 1 km res, only from 2000
 #df_clim_ERA   <- fread(paste(myPath, outTable, 'xy_clim.csv', sep = '/')) # need to filter soils volume content index!
-df_clim_ERA_ID<- fread(paste(myPath, outTable, 'xy_clim_IDs.csv', sep = '/'), encoding = 'Latin-1') # get the ID to join falsto_name
+#df_clim_ERA_ID<- fread(paste(myPath, outTable, 'xy_clim_IDs.csv', sep = '/'), encoding = 'Latin-1') # get the ID to join falsto_name
 df_anom       <- fread(paste(myPath, outTable, 'xy_anom.csv', sep = '/')) # from ERA, 10 km res, temp,. prec, soils water, spei,
+  # new values oon 11/09/2023: spei6, prcp is corrected to mothly sums
 
 # set correct encoding for german characters
 Encoding(df_anom$falsto_name)        <-  "UTF-8"
-Encoding(df_clim_ERA_ID$falsto_name) <-  "UTF-8"
+#Encoding(df_clim_ERA_ID$falsto_name) <-  "UTF-8"
 
 # Get coniferous cover data: coniferous == 2! 
 # spruce: share of spruce
-df_tree   <- fread(paste(myPath, outTable, 'xy_treeComp.csv', sep = '/'))
+#df_tree   <- fread(paste(myPath, outTable, 'xy_treeComp.csv', sep = '/'))
 #df_spruce <- fread(paste(myPath, outTable, 'xy_spruce.csv', sep = '/'))  # is this spruce of coniferous???
 
 # Get geo data: elevation, slope, roughness...
@@ -90,44 +87,49 @@ xy_topo      <- vect(paste(myPath, outFolder, "xy_3035_topo.gpkg", sep = "/"),
 
 
 # Get climate data for traps: --------------------------------------------------
-xy_df <- data.frame(x = sf::st_coordinates(xy_sf_fin)[,"X"],
-                    y = sf::st_coordinates(xy_sf_fin)[,"Y"],
-                    falsto_name = xy_sf_fin$falsto_name,
-                    globalid =    xy_sf_fin$globalid)
+xy_df <- data.frame(x = sf::st_coordinates(xy_sf_expand)[,"X"],
+                    y = sf::st_coordinates(xy_sf_expand)[,"Y"],
+                    falsto_name = xy_sf_expand$falsto_name,
+                    globalid =    xy_sf_expand$globalid)
+
+dim(xy_topo)
+dim(xy_df)
 
 # get the final subset of globalids
-trap_globid <- unique(xy_df$globalid)  # 158, selected
-
+trap_globid <- unique(xy_df$globalid)  # 313, selected
+(trap_globid)
 
 # convert to DF
 df_topo <- as.data.frame(xy_topo)
+
+dim(df_topo)
 df_topo <- df_topo %>% 
   filter(globalid %in% trap_globid) %>% 
-  dplyr::select(c('globalid', 'elev','slope', 'aspect')) %>% 
+  dplyr::select(c('globalid', 'elev'
+                  #,'slope', 'aspect'
+                  )) %>% 
   full_join(xy_df %>% dplyr::select(falsto_name, globalid))
 #dplyr::select(globalid:roughness)
 
 
 # Process predictors  data ------------------------------------
 
-# select only coniferous: == 2, 0 is no forest (eg. covers the whole 500 m buffer)
-df_conif <- df_tree %>% 
-  filter(species == 2 ) %>% # 2 = conifers, can be spruce and pine
-  filter(globalid %in% trap_globid) %>% 
-  dplyr::select(-c(species_n, species)) %>%
-  dplyr::rename(conif_prop = freq) %>% 
-  full_join(xy_df %>% dplyr::select(falsto_name, globalid))
 
-  
+# remove duplicates for proper merging
+xy_df <- unique(xy_df)
+df_topo <- unique(df_topo) 
+
+dim(xy_df)
+dim(df_topo)
+
 # whole year
 df_predictors <- 
   df_anom %>% 
-    filter(year %in% 2015:2021) %>%
-    left_join(xy_df, by = c('falsto_name')) %>%
+    left_join(xy_df, by = c('falsto_name', 'globalid')) %>% # add XY coordinates for each trap 
     left_join(df_topo, by = c("falsto_name", 'globalid')) %>%
-    left_join(df_conif, by = c("falsto_name", 'globalid')) %>%
-    dplyr::select(-c(OBJECTID, globalid, ID))
+    dplyr::select(-c(globalid))
  
+
 
 # Clean up dependent variables------------------------------
 
@@ -154,19 +156,20 @@ ips.year.avg <- ips.year.avg %>%
 # make a final table with all Ys, and all Xs to see a correlation matrix. reduce predictors to keep meaningful ones.----------
 dat_fin <- df_predictors %>% 
   right_join(ips.year.sum) %>%
-  #right_join(ips.year.avg) %>%
   right_join(max.diff.doy) %>%
   left_join(ips.aggreg) %>%
   dplyr::select(c(falsto_name,
                   year,
-                 # prec,temp, 
+                  prcp,
+                  #temp, 
                  # swvl, 
-                 conif_prop,
+                 #conif_prop,
                  elev,
                   x, y,
                   sm, vpd, 
                   sm_z, vpd_z,
-                  tmp, tmp_z,
+                  tmp, 
+                 tmp_z,
                   spei, spei_z,
                  # avg_beetles_trap,
                   sum_ips, 
@@ -174,8 +177,7 @@ dat_fin <- df_predictors %>%
                   peak_diff, #, 
                   agg_doy
                  )) %>% 
-  mutate(location = gsub('.{2}$', '', falsto_name),
-         tmp      = tmp - 273.15) %>% # convert Kelvin to Celsius
+  mutate(location = gsub('.{2}$', '', falsto_name)) %>% # convert Kelvin to Celsius
   dplyr::rename(trap_name = falsto_name) %>% 
   mutate(location = factor(location),
          trap_name = factor(trap_name))

@@ -32,8 +32,7 @@ library(lubridate)
 
 
 # Get spatial data for each trap
-xy        <- vect(paste(myPath, outFolder, "xy_fin_3035.gpkg", sep = "/"), 
-                layer = 'xy_fin_3035') # read trap location
+xy        <- vect(paste(myPath, outFolder, "xy_fin_years_3035.gpkg", sep = "/")) # read trap location
 xy_latlng <- terra::project(xy, 
                           "+proj=longlat +datum=WGS84 +ellps=WGS84 +towgs84=0,0,0")
 
@@ -41,8 +40,6 @@ xy_latlng <- terra::project(xy,
 # Starting from netCFD: 
 # https://cran.r-project.org/web/packages/futureheatwaves/vignettes/starting_from_netcdf.html
 # Packages for climate variables:
-library(ncdf4)
-library(ncdf4.helpers)
 library(PCICt)
 library(zoo)                # for as.Date() specification
 
@@ -61,7 +58,9 @@ dat_ext_df <- terra::extract(dat_ras, xy_latlng)
 xy_latlng$ID = 1:nrow(xy_latlng)
 
 xy_names <- data.frame(ID = xy_latlng$ID, 
-                       falsto_name = xy_latlng$falsto_name)
+                       falsto_name = xy_latlng$falsto_name,
+                       globalid = xy_latlng$globalid,
+                       year = xy_latlng$year)
 
 
 # Check the variables of interest:
@@ -94,9 +93,10 @@ df <-
   separate(variable, 
            c("var", "time_num", 'xx'), "_") %>% 
   dplyr::mutate(year  = lubridate::year(time), 
-                month = lubridate::month(time), 
+                month = lubridate::month(time)#, 
                 #day   = lubridate::day(time),
-                doy   =  lubridate::yday(time) + 1) # %>%  # as POXIT data has January 1st at 0
+                #doy   =  lubridate::yday(time) + 1
+                ) # %>%  # as POXIT data has January 1st at 0
   #dplyr::select(-day)
 
 
@@ -108,7 +108,7 @@ SPEI_vars <- c("t2m", "tp")
 temp_convert = 273.15  # convert temperature from Kelvin to Celsius
 
 
-# For soil water content: need to get sums of swvl1:swvl4
+#Get values for SPEI
 df1 <-
   df %>% 
   dplyr::filter(var %in% SPEI_vars ) %>% # filter only soil water content
@@ -182,27 +182,21 @@ df_ls2<- lapply(df_ls, get_SPEI)
 # merge into one file:
 df_spei_ID <- do.call('rbind', df_ls2)
 
-
-## check the SPEI per single location -------------------------------------
-df_spei_ID %>% 
-  filter(ID == 10)%>%
-  # ts(start = c(1980, 01), end=c(2021,12), frequency=12) #%>% 
-  ggplot(aes(x = zoo::as.Date(date),
-             y = spei)) + 
-  geom_point()
-
-
-
+# summarize spei per year - one SPEI value per year and ID! 
+df_spei_ID <-  df_spei_ID %>% 
+  dplyr::mutate(year  = lubridate::year(date),
+                month = lubridate::month(date)) %>%  
+  dplyr::select(-c(scale, date))
 
 # export file:
 #fwrite(out.df, paste(myPath, outTable, 'xy_spei.csv', sep = "/"))
 
+# spei does only up to 2021
 df_spei_year <- 
   df_spei_ID %>% 
-    dplyr::mutate(year  = lubridate::year(date), 
-                  month = lubridate::month(date)) %>% 
+   ungroup(.) %>% 
     group_by(ID, year) %>% 
-  summarise(spei = median(spei))
+  summarise(spei = mean(spei)) 
   
 
   
@@ -233,7 +227,6 @@ df_soil <-
 
 
 # Vapour pressure deficit data --------------------------------------------------
-# combine soil moisture data: sum the 4 layers:
 
 
 # Formula from https://journals.ametsoc.org/view/journals/apme/54/6/jamc-d-14-0321.1.xml?tab_body=pdf
@@ -287,19 +280,26 @@ df_prcp <-
 reference_period <- 1980:2010
 veg.period <- 4:6
 
-df_anom <- 
+df_anom_year <- 
   df_soil %>% 
   left_join(df_vpd) %>% 
   left_join(df_temp) %>% 
   left_join(df_prcp) %>% 
-  left_join(df_spei_year) %>%
+  left_join(df_spei_ID) %>%
  # filter(month %in% veg.period) %>% # filter chunk of veg period
+  ungroup(.) %>% 
   group_by(year, ID) %>%
   summarize(sm = mean(sm),
             vpd = mean(vpd),
             tmp = mean(tmp),
-            prcp = mean(prcp),
+            prcp = sum(prcp),  # sum precipitation per year
             spei = mean(spei)) %>%
+  ungroup()
+  
+
+table(df_anom_year$year, df_anom_year$ID)
+
+df_anom <- df_anom_year %>% 
   group_by(ID) %>%
   mutate(sm_z   = (sm - mean(sm[year %in% reference_period])) / sd(sm[year %in% reference_period]),
          vpd_z  = (vpd - mean(vpd[year %in% reference_period])) / sd(vpd[year %in% reference_period]),
@@ -307,11 +307,24 @@ df_anom <-
          prcp_z = (prcp - mean(prcp[year %in% reference_period])) / sd(prcp[year %in% reference_period]),
          spei_z = (spei - mean(spei[year %in% reference_period], na.rm = T)) / sd(spei[year %in% reference_period], na.rm = T)) %>%
   ungroup() %>% 
-  left_join(xy_names, by = join_by(ID))
+  left_join(xy_names, by = join_by(ID)) %>% 
+  filter(year %in% 2015:2021)
+
+length(unique(df_anom_year$ID))  # 1106
+length(unique(df_anom_year$year))  # 7 - 1980-2023
+range(unique(df_anom$year))  # 2015:2021
+length(unique(df_anom$falsto_name))  # 158
+length(unique(df_anom$prcp))  # 158
+length(unique(df_anom$spei))
+length(unique(df_anom$spei_z))
+
+# check some plots---------------------------------------------------------------
+p0 <-ggplot(df_anom, aes(x = year,
+                         y = spei)) +
+  geom_point()+
+  geom_smooth() 
 
 
-
-# check some plots
 p1 <-ggplot(df_anom, aes(x = year,
                     y = spei_z)) +
   geom_point()+
@@ -339,26 +352,32 @@ p5<-ggplot(df_anom, aes(x = year,
   geom_point() +
   geom_smooth() 
 
-ggarrange(p1, p2, p3, p4, p5, nrow = 3, ncol = 2)
+ggarrange(p0, p1, p2, p3, p4, p5, nrow = 3, ncol = 2)
 
 
 
 
-
+# add naming to ID and filter data to have only one row per ID ----------------
+# set correct encoding for german characters
+Encoding(df_anom$falsto_name)        <-  "UTF-8"
+Encoding(xy_names$falsto_name) <-  "UTF-8"
 
 
 # Merge the df_soil and df_vars onto single file
-df_out <- rbind(df_soil, df_vars)
+#df_out <- rbind(df_soil, df_vars)
+df_anom_named <- df_anom %>% 
+  right_join(xy_names, by = join_by(ID, falsto_name, globalid, year)) %>% 
+  dplyr::select(-ID)# %>% 
+ # unique()
 
-
-
+View(df_anom_named)
 # Export the final table:
 
 # data.table::fwrite(df_out, 
 #                    paste(myPath, outTable, 'xy_clim.csv', sep = "/"))
 data.table::fwrite(xy_names, 
                    paste(myPath, outTable, 'xy_clim_IDs.csv', sep = "/"))
-data.table::fwrite(df_anom, 
+data.table::fwrite(df_anom_named, 
                    paste(myPath, outTable, 'xy_anom.csv', sep = "/"))
 
 
@@ -367,69 +386,3 @@ data.table::fwrite(df_anom,
 
 
 
-# Check data attribution: -----------------------------------------------------
-
-
-
-
-
-
-
-
-
-
-# check temperatures: if seems correct
-df %>% 
-  filter(var %in% soil_vars)  %>%  # temperature
-  ggplot(aes(x = time,
-             y = value,
-             group = as.factor(year)
-             )) +
-  geom_point() +
-  geom_smooth() +
-  facet_grid(var ~ .)
-
-
-# Add horizontal ine for means:
-X.mean <- df %>%
-  filter(var %in% soil_vars)  %>%  
-#  group_by(grp) %>%
-  summarize(y = mean(value))
-
-df %>% 
-  filter(var %in% soil_vars)  %>%  # temperature
-  ggplot(aes(x = as.factor(year),
-             y = value,
-             fill = var)) +
-  geom_boxplot(outlier.colour = NA ) +
-  geom_hline(data = X.mean, aes(yintercept = y), col = 'red', linetype = 'dashed') 
-
-
-  
-
-# Check per individual months:
-df %>% 
-  filter(var %in% soil_vars)  %>%  # temperature
-  ggplot(aes(x = as.factor(month),
-             y = value,
-             fill = var)) +
- # stat_summary(fun.data = "mean_cl_boot",  size = 0.5) +
-  geom_boxplot(outlier.colour = NA ) +
-  #geom_hline(data = X.mean, aes(yintercept = y), col = 'red', linetype = 'dashed')  +
-  facet_grid(.~factor(year))
-
-
-
-df %>% 
-  filter(var %in% soil_vars)  %>%  # temperature
-  ggplot(aes(x = as.factor(month),
-             y = value,
-             fill = var)) +
-  stat_summary(fun.data = "mean_cl_boot",  size = 0.5, aes(group = var,col = var)) +
- # geom_boxplot(outlier.colour = NA ) +
-  #geom_hline(data = X.mean, aes(yintercept = y), col = 'red', linetype = 'dashed')  +
-  facet_grid(.~factor(year)) +
-  stat_summary(fun = median,
-               geom = "line",
-               aes(group = var,col = var)) + 
-  theme(legend.position = 'bottom')
