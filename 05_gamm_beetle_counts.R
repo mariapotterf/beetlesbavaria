@@ -127,28 +127,6 @@ dat_lag <-   dat_fin %>%
 
 
 
-# split df into individual files: predist ips_sum, DOY agg, doy _peak, 
-# predict RS damage
-
-# [1] "trap_name"         "year"              "conif_prop"        "elev"              "x"                
-# [6] "y"                 "sm"                "vpd"               "sm_z"              "vpd_z"            
-# [11] "tmp"               "tmp_z"             "spei"              "spei_z"            "sum_ips"          
-# [16] "peak_doy"          "peak_diff"         "agg_doy"           "location"          "previous_sum_ips" 
-# [21] "previous_tmp"      "previous_spei"     "population_growth" "wind_beetle"       "harvest"          
-# [26] "spruce_1986"       "all_dist_sum"      "cum_removed"       "remained_spruce"   "next1_RS_beetle"  
-# [31] "next1_RS_harvest"  "next2_RS_beetle"   "next2_RS_harvest" 
-
-# predict aggregation date: 
-df_fin_agg <- dat_lag %>% 
-  dplyr::select(-c("wind_beetle",       "harvest",          
-                     "all_dist_sum",      "cum_removed",       "remained_spruce" ,  "next1_RS_beetle" , 
-                   "next1_RS_harvest",  "next2_RS_beetle",   "next2_RS_harvest" ))
-
-df_fin_peak <- dat_lag %>% 
-  dplyr::select(-c("wind_beetle",       "harvest",          
-                   "all_dist_sum",      "cum_removed",       "remained_spruce" ,  "next1_RS_beetle" , 
-                   "next1_RS_harvest",  "next2_RS_beetle",   "next2_RS_harvest" ))
-
 
 
 ## Scale predictors ================================================================================
@@ -191,105 +169,11 @@ dat_lag_scaled <- dat_lag_scaled %>%
 
 # consider year as random factor - non linear relationship betweeen years
 
-# how to improve model:
-# capp values:
-
-cap_at_percentiles <- function(x, lower = 0.01, upper = 0.99) {
-  bounds <- quantile(x, c(lower, upper))
-  pmin(pmax(x, bounds[1]), bounds[2])
-}
-
-# Apply to  data
-dat_lag_scaled$capped_sum_ips <- cap_at_percentiles(dat_lag_scaled$sum_ips)
-
-
 
 # RS:  Link beetle data with observed RS damage ------------------------------------------------------------------------
 # remove 0 wind-beetle damage 
 # run analyses with only stable traps over time?? - split df
 
-
-###### [1] Only stable traps : Beetle damage  ---------------------------------------
-dat_lag_stable <- dat_lag %>% 
-  filter(trap_name %in% stable_traps) #
-
-dat_lag_stable %>% 
-  filter(wind_beetle > 0) %>% 
-  ggplot(aes(x = sum_ips, 
-             y = wind_beetle)) +
-  geom_point() +
-  geom_smooth() + ggtitle('Current year')
-
-dat_lag_stable %>% 
-  filter(next1_RS_beetle > 0) %>% 
-  ggplot(aes(x = sum_ips, 
-             y = next1_RS_beetle)) +
-  geom_point() +
-  geom_smooth() + ggtitle('Next year')
-
-dat_lag_stable %>% 
-  filter(next2_RS_beetle > 0) %>% 
-  ggplot(aes(x = sum_ips, 
-             y = next2_RS_beetle)) +
-  geom_point() +
-  geom_smooth() + ggtitle('Next 2 years')
-
-
-##### [2] Only stable traps : Harvest  ------------------------------------------
-p_harv1 <- dat_lag_stable %>% 
-  filter(harvest > 0) %>% 
-  ggplot(aes(x = sum_ips, 
-             y = harvest)) +
-  geom_point() +
-  geom_smooth() + ggtitle('Current year')
-
-p_harv2 <- dat_lag_stable %>% 
-  filter(next1_RS_harvest > 0) %>% 
-  ggplot(aes(x = sum_ips, 
-             y = next1_RS_harvest)) +
-  geom_point() +
-  geom_smooth() + ggtitle('Next year')
-
-p_harv3 <- dat_lag_stable %>% 
-  filter(next2_RS_harvest > 0) %>% 
-  ggplot(aes(x = sum_ips, 
-             y = next2_RS_harvest)) +
-  geom_point() +
-  geom_smooth() + ggtitle('Next 2 years')
-
-ggarrange(p_harv1, p_harv2, p_harv3)
-
-# !!!
-
-pairs(next1_RS_beetle ~  previous_sum_ips+ sum_ips+ population_growth + tmp + previous_tmp + previous_spei , dat_lag_stable, panel = panel.smooth)
-
-pairs(next1_RS_beetle ~ previous_sum_ips+ sum_ips +population_growth + population_growth2, #+
-      #  tmp + previous_tmp + previous_spei , 
-      dat_lag_stable, panel = panel.smooth)
-
-
-
-# explore beetle counts and RS -------------------------------------------------
-df_RS_out <- df_RS_out %>% 
-  dplyr::mutate(trap_name = as.factor(trap_name)) %>% 
-  dplyr::mutate(next1_RS_beetle  = dplyr::lag(wind_beetle, n = 1, order_by = year),
-                next1_RS_harvest = dplyr::lag(harvest,     n = 1, order_by = year),
-                next2_RS_beetle  = dplyr::lag(wind_beetle, n = 2, order_by = year),
-                next2_RS_harvest = dplyr::lag(harvest,     n = 2, order_by = year)) %>%
-  mutate(location = gsub('.{2}$', '', trap_name)) %>% 
-  dplyr::mutate(location = as.factor(location)) 
-
-
-# scale RS data
-df_RS_scaled <- df_RS_out
-
-
-df_RS_scaled$sum_ips_scaled <- scale(df_RS_scaled$sum_ips)
-
-
-# check which values are inf???, if ref was 0 - no beetle damage during ref period
-df_RS_out %>%
-  filter(if_any(.cols = everything(), is.infinite))
 
 
 # does beetle sums corresponds to beetle anomaly? YES! if I am using only smooths, not points... ---------
@@ -391,7 +275,7 @@ RS_global_model2 <- glm.nb(wind_beetle ~ #sum_ips_scaled     +
                           #, na.action = "na.omit"  "na.fail"
 )
 
-# further narror model down to only beetle pop and environm variables
+# further narrow model down to only beetle pop and environm variables
 RS_global_model3 <- glm.nb(wind_beetle ~ #sum_ips_scaled     + 
                              previous_sum_ips + 
                              #previous_sum_ips2 + 
