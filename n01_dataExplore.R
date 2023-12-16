@@ -49,7 +49,7 @@ load(paste(path, 'BoMo_2015_2021_Rohdaten.RData', sep = "/"))
 
 
 # Vars
-doy.start  =  91 # April 1st
+doy.start  =  60  # March 1st, 91 # April 1st
 doy.end    = 304 # Oct 30
 veg.period = doy.start:doy.end
 
@@ -295,7 +295,7 @@ low_visit_id <-
   dplyr::distinct(falsto_name) %>% 
   pull()
 
-
+(low_visit_id)
 
 # does the average number of beetles per trap differ between locations?
 # between years?
