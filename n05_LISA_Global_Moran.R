@@ -69,13 +69,16 @@ n_neighbors = 10      # number of nearest neighbors
 
 # Spatial data: 
 # should have 158 regions (trap pairs)
-sort(unique(xy_sf_fin$falsto_name))
+sort(unique(xy_sf_expand$falsto_name))
 
 
 # get coordinates from sf object
-xy_df <- data.frame(x = sf::st_coordinates(xy_sf_fin)[,"X"],
-                    y = sf::st_coordinates(xy_sf_fin)[,"Y"],
-                    falsto_name = xy_sf_fin$falsto_name)
+xy_df <- data.frame(x = sf::st_coordinates(xy_sf_expand)[,"X"],
+                    y = sf::st_coordinates(xy_sf_expand)[,"Y"],
+                    year = xy_sf_expand$year,
+                    falsto_name = xy_sf_expand$falsto_name)
+
+xy_df <- distinct(xy_df)
 
 
 # Get sums of IPS beetle per year/trap: April 31 to October 30
@@ -83,7 +86,7 @@ ips_sum <-
   dat.ips.clean %>% 
   group_by(year,falsto_name) %>% 
   dplyr::summarize(sum_beetle = sum(fangmenge, na.rm = T)) %>% 
-  left_join(xy_df, by = c("falsto_name")) # df_xy3035
+  left_join(xy_df, by = c("falsto_name", 'year')) # df_xy3035
 
 
 nrow(ips_sum)
@@ -93,6 +96,7 @@ years <- 2015:2021
 
 get_lisa <- function(i, ...) {
  
+  #i = 2015
   #  # Slice specific year
   ips_sum_sub <-ips_sum %>%
     filter(year == i)
@@ -126,6 +130,69 @@ lisa_out <- lapply(years, get_lisa )
 lisa_merged <- dplyr::bind_rows(lisa_out)
 
 
+
+
+# START sensitivity to number of neighbors ------------------------------------------
+
+#  # Slice specific year
+i = 2017
+
+ips_sum_sub <-ips_sum %>%
+  filter(year == i)
+#
+#  # Local variation analysis (LISA) per year:
+#  # Create a spatial points data frame
+coordinates(ips_sum_sub) <- ~ x + y
+#
+#  # Create queen contiguity neighbors object
+nb <- knn2nb(knearneigh(coordinates(ips_sum_sub),
+                        k = n_neighbors),  # nearest neighbor
+             sym = TRUE)
+
+
+# Define a function to calculate LISA for a given number of neighbors
+calculate_lisa_for_neighbors <- function(data, num_neighbors) {
+  lisa_results <- list()
+  
+  for (k in 1:num_neighbors) {
+    # Create a spatial weights matrix with k neighbors
+    nb <- knn2nb(knearneigh(data))
+    
+    # Calculate Moran's I and LISA statistics
+    moran_obj <- moran.test(data$sum_beetle, listw = nb)
+    lisa_obj <- localmoran(data$sum_beetle, listw = nb)
+    
+    # Store results in a list
+    lisa_results[[paste("Neighbors =", k)]] <- list(Moran_I = moran_obj$estimate,
+                                                    LISA = lisa_obj$localmoran)
+  }
+  
+  return(lisa_results)
+}
+
+# Specify the number of neighbors to consider (1 to 10 in this example)
+num_neighbors <- 10
+
+# Calculate LISA statistics for different numbers of neighbors
+lisa_results <- calculate_lisa_for_neighbors(ips_sum_sub, num_neighbors)
+
+# Access the results for a specific number of neighbors (e.g., 5 neighbors)
+results_for_5_neighbors <- lisa_results[["Neighbors = 5"]]
+
+
+
+ ##############END
+
+
+# can MoransI explain beetle counts??? - not a meaningful predictors for beetles counts
+lisa_merged %>% 
+  as.data.frame() %>% 
+  ggplot(aes(x = Morans_I ,
+             y = sum_beetle)) +
+  geom_point()
+
+m1<-glm.nb(sum_beetle~Morans_I, lisa_merged)
+plot(m1)
 #st_crs(lisa_merged) <- crs(bav_sf)
 #lisa_merged_proj <- st_crs(crs(bav_sf))
 #  st_transform(lisa_merged, projection(bav_sf))
@@ -155,8 +222,71 @@ p_lisa_all <- ggplot() +
   ggtitle('LISA: Moran I')
 
 
+# improve plotting: cap values 
+
+# Cap values greater than 5 to 5
+
+hist(lisa_merged$Morans_I_capped)
+range(hist(lisa_merged$Morans_I))
+lisa_merged$Morans_I_capped <- pmin(lisa_merged$Morans_I, 1)
+lisa_merged$Morans_I_capped <- pmax(lisa_merged$Morans_I_capped, -1)
+
+# Define a color palette for the divergence scale
+color_palette <- c("blue", "white", "red")
+
+# Calculate the minimum and maximum Moran's I values
+min_moran <- min(lisa_merged$Morans_I_capped)
+max_moran <- max(lisa_merged$Morans_I_capped)
+
+
+lisa_merged %>% 
+  ggplot(aes(x = year,
+             y = Morans_I)) +
+  #geom_bar() +
+  geom_bar(fun = "mean", stat = "summary")
+
+# how can I see from this plot the my spatial synchonization is increasing ???
+p_lisa_Morans <- ggplot() +
+  geom_sf(data = lisa_merged,
+          aes(color = Morans_I)) +
+  # scale_color_gradientn(colors = color_palette,
+  #                       values = scales::rescale(c(min_moran, 0, max_moran), c(0, 0.5, 1)),
+  #                       breaks = c(min_moran, 0, max_moran),
+  #                       labels = c("Low-Low", "No Spatial Autocorrelation", "High-High"),
+  #                       limits = c(min_moran, max_moran)) +
+  geom_point() +
+  scale_color_gradient2(low = "blue", mid = "white", high = "red",
+                        midpoint = 0, 
+                        breaks = c(min_moran,0, max_moran),
+                        labels = c("Low-Low", "No Spatial Autocorrelation", "High-High"),
+                        limits = c(min_moran, max_moran)) +
+  
+    facet_wrap(year ~ .) +
+  theme_void() +
+  ggtitle('LISA: Moran I')
+
+windows()
+(p_lisa_Morans)
+
 # convert to df 
 lisa_merged_df <- as.data.frame(lisa_merged)
+
+
+# get LISA distribution
+lisa_merged %>% 
+  ggplot(aes(Morans_I,
+             group = year)) + 
+  geom_density() 
+  
+
+
+lisa_merged %>% 
+  ggplot(aes(y = sum_beetle ,
+             x = Morans_I  ,
+             color = year)) + 
+  geom_point() + 
+  geom_smooth()
+
 
 
 p_lisa_freq <- 
@@ -471,7 +601,8 @@ plot(variogram(log(zinc)~1, meuse))
 
 
 
-save(p_lisa_sub, 
+save(lisa_merged_df,
+  p_lisa_sub, 
      p_lisa_all,
      p_lisa_freq,
      glob_merged,
