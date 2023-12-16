@@ -64,6 +64,7 @@ library(RColorBrewer)
 
 load(file=   "outData/final.Rdata")
 load(file =  "outData/buffers.Rdata")  # df_RS_out
+load(file =  "outData/lisa.Rdata")     # read LISA Moran's I stats
 
 # get unique falsto_names of traps that remained stable (only one globalid)
 # over time
@@ -85,48 +86,47 @@ df_RS_out <- df_RS_out %>%
   dplyr::select(-c(globalid, id)) %>% 
   dplyr::rename(trap_name = falsto_name)
 
+# change column names
+lisa_merged_df <- lisa_merged_df %>% 
+  dplyr::rename(trap_name = falsto_name,
+                sum_ips = sum_beetle) %>% 
+  dplyr::select(c(year, trap_name, sum_ips, Morans_I))
+
 # add lag: previous year counts, previous year temperature
 dat_lag <-   dat_fin %>%
     ungroup(.) %>% 
    group_by(trap_name) %>%
     dplyr::mutate(previous_sum_ips =  dplyr::lag(sum_ips, order_by = year),
                   previous_sum_ips2 =  dplyr::lag(sum_ips, order_by = year, n = 2),
-                  previous_agg1 =  dplyr::lag(agg_doy , order_by = year, n = 1), #complete!
-                  previous_agg2 =  dplyr::lag(agg_doy , order_by = year, n = 2), #complete!
+                  previous_agg1 =  dplyr::lag(agg_doy , order_by = year, n = 1), 
+                  previous_agg2 =  dplyr::lag(agg_doy , order_by = year, n = 2), 
+                  previous_peak_diff1 =  dplyr::lag(peak_diff , order_by = year, n = 1), 
+                  previous_peak_diff2 =  dplyr::lag(peak_diff , order_by = year, n = 2),
                   previous_tmp     =  dplyr::lag(tmp, order_by = year),
                   previous_prcp     =  dplyr::lag(prcp, order_by = year),
                   previous_spei     =  dplyr::lag(spei, order_by = year)) %>% 
   dplyr::mutate(population_growth = (sum_ips - previous_sum_ips) / previous_sum_ips * 100,
                 population_growth2 = dplyr::lag(population_growth, order_by = year)) %>%  # lag population growth by one more year
   left_join(df_RS_out, 
-            by = join_by(trap_name, year, sum_ips)) %>% 
+            by = join_by(trap_name, year, sum_ips)) %>%
+  left_join(lisa_merged_df, 
+            by = join_by(trap_name, year, sum_ips)) %>%
+  dplyr::mutate(previous_Moran =  dplyr::lag(Morans_I , order_by = year),
+                previous_Moran2 =  dplyr::lag(Morans_I , order_by = year, n = 2),
+                ) %>% 
   dplyr::mutate(trap_name = as.factor(trap_name)) #%>% 
-#  dplyr::mutate(next1_RS_beetle  = dplyr::lag(wind_beetle, n = 1, order_by = year),
-#                next1_RS_harvest = dplyr::lag(harvest,     n = 1, order_by = year),
-#                next2_RS_beetle  = dplyr::lag(wind_beetle, n = 2, order_by = year),
-#                next2_RS_harvest = dplyr::lag(harvest,     n = 2, order_by = year)) #%>%
-  #dplyr::mutate(temp_fact = case_when(year== 2018 ~ 'extreme',
-   #                                   year %in% c(2015,2019, 2020) ~ 'high',
-   #                                   year %in% c(2016,2017) ~ 'moderate',
-   #                                   year== 2021 ~ 'low'),
-    #            temp_fact = as.factor(temp_fact)) 
-  
-  
-    #dplyr::select(c(year, trap_name, 
-    #                previous_tmp, tmp,
-    #                next2_RS_harvest, harvest )) #%>% 
-  
+
+
 # check if results are correct
-# dat_lag %>%
-#   filter(trap_name== 'Zusmarshausen_1') %>%
-#   dplyr::select(c(trap_name, year, sum_ips, previous_sum_ips,previous_sum_ips2, 
-#                   tmp,
-#                   #population_growth, population_growth2,
-#                   previous_tmp)) #%>%
-#   #View()
-
-
-
+dat_lag %>%
+  filter(trap_name== 'Zusmarshausen_1') %>%
+  dplyr::select(c(trap_name, year, sum_ips, previous_sum_ips,previous_sum_ips2,
+                  tmp,
+                  previous_Moran,previous_Moran2,
+                  Morans_I,
+                  population_growth, population_growth2,
+                  previous_tmp)) #%>%
+  #View()
 
 
 ## Scale predictors ================================================================================
@@ -146,13 +146,23 @@ dat_lag_scaled <- dat_lag #%>%
  dat_lag_scaled$tmp            <- scale(dat_lag_scaled$tmp)
  dat_lag_scaled$prcp           <- scale(dat_lag_scaled$prcp)
  dat_lag_scaled$vpd            <- scale(dat_lag_scaled$vpd)
+ dat_lag_scaled$population_growth            <- scale(dat_lag_scaled$population_growth)
+ dat_lag_scaled$population_growth2            <- scale(dat_lag_scaled$population_growth2)
  #dat_lag_scaled$spei           <- scale(dat_lag_scaled$spei) # already scaled
  dat_lag_scaled$previous_sum_ips   <- scale(dat_lag_scaled$previous_sum_ips)
+ dat_lag_scaled$previous_sum_ips2   <- scale(dat_lag_scaled$previous_sum_ips2)
+ 
  dat_lag_scaled$previous_prcp   <- scale(dat_lag_scaled$previous_prcp)
  dat_lag_scaled$previous_tmp    <- scale(dat_lag_scaled$previous_tmp)
  #dat_lag_scaled$previous_spei   <- scale(dat_lag_scaled$previous_spei)
  # dat_lag_scaled$spruce_1986    <- scale(dat_lag_scaled$spruce_1986)
-dat_lag_scaled$remained_spruce<- scale(dat_lag_scaled$remained_spruce)
+dat_lag_scaled$previous_agg1     <- scale(dat_lag_scaled$previous_agg1)
+dat_lag_scaled$previous_agg2      <- scale(dat_lag_scaled$previous_agg2)
+dat_lag_scaled$previous_peak_diff1  <- scale(dat_lag_scaled$previous_peak_diff1)
+dat_lag_scaled$previous_peak_diff2 <- scale(dat_lag_scaled$previous_peak_diff2)
+dat_lag_scaled$remained_spruce     <- scale(dat_lag_scaled$remained_spruce)
+
+
 # dat_lag_scaled$elev           <- scale(dat_lag_scaled$elev)
 # dat_lag_scaled$sm             <- scale(dat_lag_scaled$sm)
 # code 'year' as numeric to account for temp autocorrelation
@@ -169,6 +179,218 @@ dat_lag_scaled <- dat_lag_scaled %>%
 
 # consider year as random factor - non linear relationship betweeen years
 
+# remove additionsl NAs
+dat_lag_scaled_complete <- dat_lag_scaled %>%
+  na.omit()
+#  filter(across(everything(), ~ !is.na(.)))
+
+
+
+# spatial synchronization with tmp? ---------------------------------------
+
+hist(dat_lag_scaled$Morans_I)
+
+pairs(Morans_I ~  previous_tmp + previous_sum_ips + spei, dat_lag_scaled)
+
+p.temp <- dat_lag %>% 
+  ggplot(aes(x = tmp,
+             y = Morans_I)) +
+  geom_smooth() +
+  theme_bw()
+
+
+p.previous.temp <- dat_lag %>% 
+  ggplot(aes(x = previous_tmp,
+             y = Morans_I)) +
+  geom_smooth()+
+  theme_bw()
+
+
+dat_lag %>% 
+  ggplot(aes(x = prcp,
+             y = Morans_I)) +
+  geom_point()
+
+
+p.ips_sum <- dat_lag %>% 
+  ggplot(aes(x = sum_ips/10000,
+             y = Morans_I)) +
+  geom_smooth()+
+  theme_bw()
+
+dat_lag %>% 
+  ggplot(aes(x = year,
+             y = Morans_I)) +
+  geom_point()
+
+p.spei <- dat_lag %>% 
+  ggplot(aes(x = spei,
+             y = Morans_I)) +
+  geom_smooth() +
+  theme_bw()
+
+
+ggarrange(p.temp, p.previous.temp, p.spei, p.ips_sum)
+
+# Fit a linear regression model to explain Moran's I
+m_moran1 <- lm(Morans_I ~ poly(tmp,2) + previous_sum_ips + poly(spei,2), data = dat_lag_scaled_complete)
+
+plot(allEffects(m_moran1))
+
+summary(m_moran1)
+r2(m_moran1)
+# lmer: account for the random effect of teh trap: the effect of the trap can vary between years
+m_moran2 <- lmer(Morans_I ~ tmp + prcp + (1|trap_name), data = dat_lag_scaled)
+
+# remove prec as it is correlated with tmp
+m_moran3 <- lmer(Morans_I ~ tmp + (1|trap_name), data = dat_lag_scaled)
+
+#add location as random
+m_moran4 <- lmer(Morans_I ~ tmp + (1|location), data = dat_lag_scaled)
+
+# if temp and prec are correlated, maybe there is an interaction effect?
+m_moran5 <- lmer(Morans_I ~ tmp * prcp + (1 | trap_name), data = dat_lag_scaled)
+
+
+# try different family: tweedie, gaussian and linear model does not work well
+
+m_moran6 <- glmmTMB(Morans_I ~ tmp + prcp,# + #(1 | trap_name), 
+                 data = dat_lag_scaled, 
+                 family = tweedie)
+
+# add randm effect
+m_moran7 <- glmmTMB(Morans_I ~ tmp + prcp+ (1 | location), 
+                    data = dat_lag_scaled, 
+                    family = tweedie)
+
+m_moran8 <- glmmTMB(Morans_I ~ tmp + prcp+ (1 | year), 
+                    data = dat_lag_scaled, 
+                    family = tweedie)
+
+# add previous year
+m_moran9 <- glmmTMB(Morans_I ~ previous_tmp + prcp+ (1 | year), 
+                    data = dat_lag_scaled, 
+                    family = tweedie)
+
+
+# remove random effects 
+m_moran10 <- glmmTMB(Morans_I ~ previous_tmp + prcp, #+ (1 | year), 
+                    data = dat_lag_scaled, 
+                    family = tweedie)
+
+
+# remove random effects 
+m_moran11 <- glmmTMB(Morans_I ~ previous_tmp, # + prcp, #+ (1 | year), 
+                     data = dat_lag_scaled, 
+                     family = tweedie)
+
+
+# gaussian with poly link
+m_moran12 <- glmmTMB(Morans_I ~ poly(previous_tmp,2), # + prcp, #+ (1 | year), 
+                     data = dat_lag_scaled_complete)
+
+
+# gaussian with poly link
+m_moran13 <- glmmTMB(Morans_I ~ poly(previous_tmp,3), # + prcp, #+ (1 | year), 
+                     data = dat_lag_scaled_complete)
+
+
+# remove poly 
+m_moran14 <- glmmTMB(Morans_I ~ previous_tmp, # + prcp, #+ (1 | year), 
+                     data = dat_lag_scaled_complete)
+
+
+# null model 
+m_moran15 <- glmmTMB(Morans_I ~ 1, # + prcp, #+ (1 | year), 
+                     data = dat_lag_scaled_complete)
+
+# add current year beetle counts 
+m_moran16 <- glmmTMB(Morans_I ~ previous_tmp + sum_ips_scaled, # + prcp, #+ (1 | year), 
+                     data = dat_lag_scaled_complete)
+
+
+# add previous year beetle counts 
+m_moran17 <- glmmTMB(Morans_I ~ previous_tmp + sum_ips_scaled + 
+                       previous_sum_ips + (1 | year), 
+                     data = dat_lag_scaled_complete,
+                     family = tweedie)
+
+
+# add lagged Morans vals 
+m_moran18 <- glmmTMB(Morans_I ~ previous_tmp + sum_ips_scaled + 
+                       previous_sum_ips + previous_Moran, # + (1 | year), 
+                     data = dat_lag_scaled_complete,
+                     family = tweedie)
+
+
+# add lagged Morans vals 
+m_moran19 <- glmmTMB(Morans_I ~ previous_tmp + sum_ips_scaled + 
+                       previous_sum_ips + previous_Moran + previous_Moran2, # + (1 | year), 
+                     data = dat_lag_scaled_complete,
+                     family = tweedie)
+
+
+# add lagged Morans vals 
+m_moran20 <- glmmTMB(Morans_I ~ previous_tmp + #sum_ips_scaled + 
+                       #previous_sum_ips + 
+                       spei, #+
+                       #previous_Moran + previous_Moran2, # + (1 | year), 
+                     data = dat_lag_scaled_complete,
+                     family = tweedie)
+
+
+# add lagged Morans vals 
+m_moran21 <- glmmTMB(Morans_I ~ previous_tmp + #sum_ips_scaled + 
+                       #previous_sum_ips + 
+                       spei, #+
+                     #previous_Moran + previous_Moran2, # + (1 | year), 
+                     data = dat_lag_scaled_complete)
+
+
+# add lagged Morans vals 
+m_moran22 <- glm(Morans_I ~ previous_tmp + #sum_ips_scaled + 
+                       #previous_sum_ips + 
+                       spei, #+
+                     #previous_Moran + previous_Moran2, # + (1 | year), 
+                     data = dat_lag_scaled_complete)
+
+
+m_moran22 <- glm(Morans_I ~ spei, 
+                 #previous_Moran + previous_Moran2, # + (1 | year), 
+                 data = dat_lag_scaled_complete)
+
+
+
+
+
+plot(allEffects(m_moran22))
+
+r2(m_moran22)
+cor(dat_lag_scaled_complete$previous_tmp,dat_lag_scaled_complete$spei )
+cor(dat_lag_scaled_complete$previous_prcp,dat_lag_scaled_complete$spei )
+
+
+write.csv(dat_lag_scaled_complete, 'test.csv')
+
+
+
+# Linear Regression Model
+model <- lm(Morans_I ~ tmp + prcp + spei, data = dat_lag_scaled_complete)
+summary(model)
+
+# Diagnostic Plots
+par(mfrow = c(2, 2))
+plot(m_moran20)
+
+
+
+AIC(m_moran13, m_moran12,m_moran14,m_moran15, m_moran16 , m_moran18, m_moran19) # for tweedie
+AICc(m_moran6, m_moran7, m_moran8, m_moran9, m_moran11) # for gaussian
+summary(m_moran21)
+plot(allEffects(m_moran21))
+r2(m_moran21)
+
+resid_outpu <- simulateResiduals(m_moran21, plot = T)
 
 # RS:  Link beetle data with observed RS damage ------------------------------------------------------------------------
 # remove 0 wind-beetle damage 
@@ -178,7 +400,7 @@ dat_lag_scaled <- dat_lag_scaled %>%
 
 # does beetle sums corresponds to beetle anomaly? YES! if I am using only smooths, not points... ---------
 
-## PLOT anomalies ---------------
+## PLOT counts and RS anomalies ---------------
 
 dat_lag_scaled %>% 
   ggplot(aes(x = sum_ips,
@@ -220,35 +442,189 @@ pairs(wind_beetle ~ sum_ips + previous_sum_ips + previous_sum_ips2 + previous_ag
 
 # keep only complete cases - can alter this to keep more rows? can remove unnecessary columns
 # remove unnecessare predictors, also lag values only by 1 year
-col_remove <- c( "x",  "y", "sm" ,"vpd", "sm_z","vpd_z", "previous_sum_ips2","previous_agg2", "population_growth2" )
+#col_remove <- c( "x",  "y", "sm" ,"vpd", "sm_z","vpd_z", "previous_sum_ips2","previous_agg2", "population_growth2" )
 
-# remove extra columns
-dat_lag_scaled <- dat_lag_scaled %>%
-  dplyr::select(-all_of(col_remove)) #%>% 
+# remove extra columns !!!! - not necessary to remove those columns, as those are complete!
+#dat_lag_scaled <- dat_lag_scaled %>%
+#  dplyr::select(-all_of(col_remove)) #%>% 
  # filter_all(all_vars(!is.na(.))) %>% 
 #  filter(across(everything(), ~ !is.na(.)))
 
-# remove additionsl NAs
-dat_lag_scaled_complete <- dat_lag_scaled %>%
-  na.omit()
-#  filter(across(everything(), ~ !is.na(.)))
+### get RS with beetle population predictors: ----------------------------------
+# Fit a global model with all beetle dynamic predictors---------------------------------
+# add predictors one by one
+simple_model <- glm.nb(wind_beetle ~ previous_sum_ips +
+                         previous_sum_ips2 +
+                         # agg_doy +
+                         previous_agg1 + 
+                         #previous_agg2 +
+                         previous_peak_diff1 + 
+                         # previous_peak_diff2 +
+                         previous_Moran +
+                         # Morans_I +
+                         population_growth2,
+                       na.action = 'na.fail',
+                       data = dat_lag_scaled_complete)
 
 
 
-# Fit a global model with all potential predictors---------------------------------
+
+
+
+
+# get a vector of vif values
+(vif_model_ips <- car::vif(simple_model))
+
+
+# Run dredge on the global model
+model_set <- dredge(simple_model)
+
+# Sort by AIC
+model_set_sorted <- model_set[order(model_set$AIC),]
+
+# View the top models with the lowest AIC
+model_set_sorted[1:30]
+
+# the most important: 
+
+
+# Model selection table 
+# (Int)       ppl_gr2   prv_ag1 prv_Mrn prv_pek_df1 prv_sum_ips prv_sum_ip2 df   logLik   AICc delta weight
+# 17 1.855                                               0.3648              3 -757.416 1520.9  0.00  0.124
+# 18 1.901 -0.0009242                                    0.4377              4 -756.940 1522.0  1.08  0.072
+# 1  1.940                                                                   2 -759.002 1522.0  1.15  0.070
+# 25 1.839                                  -0.3625      0.6019              4 -757.027 1522.1  1.25  0.066
+# 49 2.140                                               0.4307  -1.516e-05  4 -757.155 1522.4  1.51  0.058
+# 50 2.374 -0.0009695                                    0.5638  -2.558e-05  5 -756.273 1522.7  1.79  0.051
+# 19 1.850            -0.050400                          0.3435              4 -757.401 1522.9  2.00  0.045
+
+## Manually create models -------------------------------------------------------
+
+m1 <- glm.nb(wind_beetle ~ previous_sum_ips,
+                       na.action = 'na.fail',
+                       data = dat_lag_scaled_complete)
+
+m2 <- glm.nb(wind_beetle ~ previous_sum_ips +
+               population_growth2,
+             na.action = 'na.fail',
+             data = dat_lag_scaled_complete)
+
+m3 <- glm.nb(wind_beetle ~ 1,
+             na.action = 'na.fail',
+             data = dat_lag_scaled_complete)
+
+
+m4 <- glm.nb(wind_beetle ~ previous_sum_ips +
+               #population_growth2 +
+               previous_peak_diff1,
+             na.action = 'na.fail',
+             data = dat_lag_scaled_complete)
+
+
+m5 <- glm.nb(wind_beetle ~ previous_sum_ips +
+               previous_sum_ips2 ,
+             na.action = 'na.fail',
+             data = dat_lag_scaled_complete)
+
+m6 <- glm.nb(wind_beetle ~ previous_sum_ips +
+               population_growth2 +
+               previous_sum_ips2,
+             na.action = 'na.fail',
+             data = dat_lag_scaled_complete)
+
+m7 <- glm.nb(wind_beetle ~ previous_sum_ips +
+               previous_agg1 ,
+             na.action = 'na.fail',
+             data = dat_lag_scaled_complete)
+
+simulationOutput <- simulateResiduals(fittedModel = m0, plot = T) # residuals are bnetter for m_beetle6
+AIC(m1, m2, m3, m4, m5, m6, m7)
+
+r2(m1)
+r2(m2)
+r2(m3)
+r2(m4)
+r2(m5)
+r2(m6)
+r2(m7)
+
+plot(allEffects(m6))
+
+
+
+
+
+
+# RS harvest =================================================================
+### get RS with beetle population predictors: ----------------------------------
+# Fit a global model with all beetle dynamic predictors---------------------------------
+# add predictors one by one
+simple_model <- glm.nb(harvest ~ previous_sum_ips +
+                         previous_sum_ips2 +
+                         # agg_doy +
+                         previous_agg1 + 
+                         #previous_agg2 +
+                         previous_peak_diff1 + 
+                         # previous_peak_diff2 +
+                         previous_Moran +
+                         # Morans_I +
+                         population_growth2,
+                       na.action = 'na.fail',
+                       data = dat_lag_scaled_complete)
+
+# get a vector of vif values
+(vif_model_ips <- car::vif(simple_model))
+
+
+# Run dredge on the global model
+model_set <- dredge(simple_model)
+
+# Sort by AIC
+model_set_sorted <- model_set[order(model_set$AIC),]
+
+# View the top models with the lowest AIC
+model_set_sorted[1:30]
+
+
+simulationOutput <- simulateResiduals(fittedModel = simple_model  , plot = T) # m3.7.1.aut2
+
+r2(simple_model)
+
+m1 <-  glm.nb(harvest ~ #previous_sum_ips +
+                previous_sum_ips2 +
+                previous_Moran +
+                # Morans_I +
+                population_growth2,
+              na.action = 'na.fail',
+              data = dat_lag_scaled_complete)
+
+summary(m1)
+plot(allEffects(m1))
+
+
+
+# RS explore both climatic and beetles  variables -----------------------------------------------------
+
+
+
 RS_global_model1 <- glm.nb(wind_beetle ~ sum_ips_scaled     + 
                            previous_sum_ips + 
-                          # previous_sum_ips2 + 
-                            peak_diff +
-                           previous_agg1 + 
-                           #previous_agg2 +
-                            prcp +
-                            tmp +
-                            spei +
-                            remained_spruce +
+                           previous_sum_ips2 + 
+                             agg_doy +
+                             previous_agg1 + 
+                             previous_agg2 +
+                               peak_doy +
+                             peak_diff +
+                             previous_peak_diff1 +
+                             previous_peak_diff2 +
+                            Morans_I+
+                             previous_Moran +
+                             previous_Moran2 +
+                             population_growth +
                            population_growth2, #+ (1 | location/trap_name), 
                       data = dat_lag_scaled_complete,
-                      na.action = 'na.fail'#,
+                      na.action = 'na.fail',
+                      start = start_values#,
                      # family = negative.binomial(2.8588)
                       #, na.action = "na.omit"  "na.fail"
 )
@@ -297,23 +673,6 @@ RS_global_model3 <- glm.nb(wind_beetle ~ #sum_ips_scaled     +
                            # family = negative.binomial(2.8588)
                            #, na.action = "na.omit"  "na.fail"
 )
-
-# get a vector of vif values
-(vif_model_ips <- car::vif(RS_global_model3))
-
-
-# Run dredge on the global model
-model_set <- dredge(RS_global_model3)
-
-# Sort by AIC
-model_set_sorted <- model_set[order(model_set$AIC),]
-
-# View the top models with the lowest AIC
-model_set_sorted[1:30]
-
-
-# select variables for further examination
-# select: prcp, temp, previous_sum beetles, spei
 
 
 
@@ -730,6 +1089,10 @@ m3.7.1.aut5 <- glm.nb(sum_ips ~ poly(tmp, 2) + previous_sum_ips + prcp + remaine
 m3.7.1.aut6 <- glm.nb(sum_ips ~ poly(tmp, 2) + previous_sum_ips + prcp + remained_spruce + previous_tmp + poly(spei,2),  #+ (1 | location/trap_name)
                       data = dat_lag_scaled_complete)
 
+m3.7.1.aut6.1 <- glm.nb(sum_ips ~ previous_sum_ips + poly(previous_tmp,2) + poly(spei,2),  #+ (1 | location/trap_name)
+                      data = dat_lag_scaled_complete)
+
+
 # remove previous temp as highly correlared
 m3.7.1.aut6.2 <- glm.nb(sum_ips ~ poly(tmp, 2) + previous_sum_ips + prcp + remained_spruce + poly(spei,2),  #+ (1 | location/trap_name)
                       data = dat_lag_scaled_complete)
@@ -803,10 +1166,10 @@ m3.7.1.aut7 <- glm.nb(sum_ips ~ poly(tmp, 2) + previous_sum_ips + prcp + remaine
 
 
 AIC(m3.7.1.aut6, m3.7.1.aut6.3, m3.7.1.aut6.4, m3.7.1.aut6.5)  # the best: m3.7.1.aut6
-plot(allEffects(m3.7.1.aut6))
+plot(allEffects(m3.7.1.aut6.1))
 
-summary(m3.7.1.aut6)
-r2(m3.7.1.aut6.10)
+summary(m3.7.1.aut6.1)
+# r2(m3.7.1.aut6.10)
 
 dat_lag_scaled_complete %>% 
   ggplot(aes(x = tmp,
@@ -2027,17 +2390,21 @@ ggplot(df, aes(x = reorder(term, effect_size), y = effect_size)) +
 # 
 p_agg <- dat_lag_scaled %>% 
 ggplot(aes(x = tmp,
-           y = agg_doy,
-           color = temp_fact)) +
-  geom_smooth()
+           y = agg_doy)) +
+  geom_smooth(method = 'glm') +
+ # geom_point(alpha = 0.5) +
+  ylim(c(105, 190)) +
+  theme_bw()
 
 
 # peak 
 p_peak <- dat_lag_scaled %>% 
   ggplot(aes(x = tmp,
-             y = peak_doy,
-             color = temp_fact)) +
-  geom_smooth()
+             y = peak_doy)) +
+  geom_smooth(method = 'glm') +
+  #geom_point(alpha = 0.5) +
+  ylim(c(105, 190)) +
+  theme_bw()
 
 library(ggpubr)
 ggarrange(p_agg, p_peak, common.legend = TRUE, legend="bottom", ncol = 2)
@@ -2047,6 +2414,7 @@ hist(dat_lag_scaled_complete$agg_doy)
 # try modelsL # if bounded values, skewed: potentially beta regression with tranformation
 # Transform your response variable to fit within 0 to 1
 dat_lag_scaled_complete$transformed_agg_doy <- (dat_lag_scaled_complete$agg_doy - 92) / (300 - 92)
+dat_lag_scaled_complete$tr_peak_doy <- (dat_lag_scaled_complete$peak_doy - 92) / (300 - 92)
 
 # Fit a beta regression model
 
@@ -2054,9 +2422,10 @@ library(glmmTMB)
 
 # Ensure that the transformed variable is strictly between 0 and 1, not 0 or 1
 dat_lag_scaled_complete$transformed_agg_doy <- pmin(pmax(dat_lag_scaled_complete$transformed_agg_doy, 1e-4), 1 - 1e-4)
+dat_lag_scaled_complete$tr_peak_doy <- pmin(pmax(dat_lag_scaled_complete$tr_peak_doy, 1e-4), 1 - 1e-4)
 
 
-# try GLM:  -----------------
+# try GLM aggregation  -----------------
 
 # add random effects
 m.agg4 <- glmmTMB(transformed_agg_doy ~ tmp + previous_sum_ips + (1 | location),
@@ -2077,25 +2446,84 @@ m.agg7 <- glmmTMB(transformed_agg_doy ~ tmp + previous_sum_ips + spei +(1 | loca
                   family = beta_family(link = "logit"),
                   data = dat_lag_scaled_complete)
 
-acf(m.agg5)
 
-AIC(m.agg4, m.agg5, m.agg6, m.agg7)
-simulationOutput <- DHARMa::simulateResiduals(fittedModel = m.agg7, 
+# add previous temperature
+m.agg8 <- glmmTMB(transformed_agg_doy ~ tmp + previous_tmp + previous_sum_ips + spei +(1 | location),
+                  family = beta_family(link = "logit"),
+                  data = dat_lag_scaled_complete)
+
+
+# remove current temp
+m.agg9 <- glmmTMB(transformed_agg_doy ~  previous_tmp + previous_sum_ips + spei +(1 | location),
+                  family = beta_family(link = "logit"),
+                  data = dat_lag_scaled_complete)
+
+AIC(m.agg4, m.agg5, m.agg6, m.agg7, m.agg8, m.agg9)
+simulationOutput <- DHARMa::simulateResiduals(fittedModel = m.agg9, 
                                               plot = T)
 
 
 windows()
-plot(allEffects(m.agg4))
+plot(allEffects(m.agg8 ))
+r2(m.agg8)
 
 
 
 
 
+### test fr peak population ----------------------------------------------------
+# add previous temperature
 
-m.agg1 <- gam(agg_doy  ~ s(tmp, by=temp_fact), 
-               family = betar(link = "logit"),  # Choosing beta family with logit link
-               data = dat_lag_scaled)
+# add random effects
+m.peak4 <- glmmTMB(tr_peak_doy ~ tmp + previous_sum_ips + (1 | location),
+                  family = beta_family(link = "logit"),
+                  data = dat_lag_scaled_complete)
 
+m.peak5 <- glmmTMB(tr_peak_doy ~ poly(tmp,2) + previous_sum_ips + (1 | location),
+                  family = beta_family(link = "logit"),
+                  data = dat_lag_scaled_complete)
+
+# add nested trap within location - does not improve model
+m.peak6 <- glmmTMB(tr_peak_doy ~ poly(tmp,2) + previous_sum_ips + (1 | location/trap_name),
+                  family = beta_family(link = "logit"),
+                  data = dat_lag_scaled_complete)
+
+# add spei
+m.peak7 <- glmmTMB(tr_peak_doy ~ tmp + previous_sum_ips + spei +(1 | location),
+                  family = beta_family(link = "logit"),
+                  data = dat_lag_scaled_complete)
+
+
+# add previous temperature
+m.peak8 <- glmmTMB(tr_peak_doy ~ tmp + previous_tmp + previous_sum_ips + spei +(1 | location),
+                  family = beta_family(link = "logit"),
+                  data = dat_lag_scaled_complete)
+
+
+# remove current temp
+m.peak9 <- glmmTMB(tr_peak_doy ~  previous_tmp + previous_sum_ips + spei +(1 | location),
+                  family = beta_family(link = "logit"),
+                  data = dat_lag_scaled_complete)
+
+AIC(m.peak4, m.peak5, m.peak6, m.peak7, m.peak8, m.peak9)
+simulationOutput <- DHARMa::simulateResiduals(fittedModel = m.peak8, 
+                                              plot = T)
+
+
+windows()
+plot(allEffects(m.peak8 ))
+r2(m.peak8)
+
+
+summary(m.peak8)
+
+
+# what is whatL example for agg and peak:
+
+dat_lag_scaled_complete %>% 
+  dplyr::select(c(agg_doy, transformed_agg_doy, peak_doy, tr_peak_doy )) %>% 
+  arrange(agg_doy) %>% 
+  View()
 
 
 
