@@ -149,7 +149,7 @@ get_SPEI <- function(df, ...){
     ts(df, start = c(1980, 01), end=c(2021,12), frequency=12) 
   
   # Calculate spei or different time intervals:
-  my_scales = c(12) # 3,6,12
+  my_scales = c(1,3,6,12) # 3,6,12
   spei_ls <- lapply(my_scales, function(s) {
     
     # extract just values from SPEI object:
@@ -377,9 +377,9 @@ View(df_anom_named)
 # data.table::fwrite(df_out, 
 #                    paste(myPath, outTable, 'xy_clim.csv', sep = "/"))
 data.table::fwrite(xy_names, 
-                   paste(myPath, outTable, 'xy_clim_IDs.csv', sep = "/"))
+                   paste(myPath, outTable, 'xy_clim_IDs_ERA.csv', sep = "/"))
 data.table::fwrite(df_anom_named, 
-                   paste(myPath, outTable, 'xy_anom.csv', sep = "/"))
+                   paste(myPath, outTable, 'xy_anom_ERA.csv', sep = "/"))
 
 
 
