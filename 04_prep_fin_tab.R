@@ -25,25 +25,6 @@ library(ggplot2)
 library(ggpubr)
 library(ggpmisc)  # add equation to plots smooth 
 
-# Stats
-# library('here')
-# library('mgcv')
-# library('gratia')
-# library('gamair')
-# library('purrr')
-# library('mvnfast')
-# library("tibble")
-# library('gganimate')
-# library('cowplot')
-# library('tidyr')
-# library("knitr")
-# library("viridis")
-# library('readr')
-# library('itsadug')
-# library(DHARMa)
-# library(MASS)
-# library(car)     # for VIF
-
 # colors
 library(RColorBrewer)
 
@@ -63,7 +44,10 @@ load("outData/spatial.Rdata")
 # - xy_sf_fin  # XY as sf data, filtered to have only one globalid per trap
 # - xy_sf_expand  # XY as sf data, one point for trap per every year, 1106 rows
 
-# Get SPEI and clim data: they are for whole year! check only veg season?
+# Get SPEI and clim data: they are for whole year! check only veg season? now 3-10 (includes march)
+df_clim <- fread('outTable/xy_clim_DWD.csv')
+df_spei <- fread('outTable/xy_spei_DWD.csv')
+
 #df_spei       <- fread(paste(myPath, outTable, 'xy_spei.csv', sep = '/'))
 #df_prec       <- fread(paste(myPath, outTable, 'xy_precip.csv', sep = '/'))  # from DWD, 1 km res, only from 2000
 #df_temp       <- fread(paste(myPath, outTable, 'xy_temp.csv', sep = '/'))    # from DWD, 1 km res, only from 2000
