@@ -913,7 +913,7 @@ save(trap_names,                 # vector of final trap names (79*2)
     p_ips.year.sum,              # plot: sum beetles barplot per year
     
     p_lm_traps,                  # plot: linear regression between trap pairs
-     file="outData/ips.Rdata")
+     file="outData/ips_counts.Rdata")
 
 
 # Spatial data for maps:
