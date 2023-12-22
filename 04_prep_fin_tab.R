@@ -221,7 +221,7 @@ p6 <- create_plot(dat_fin, "veg_tmp", "peak_diff")
 p7 <- create_plot(dat_fin, "spring_tmp", "peak_doy")
 p8 <- create_plot(dat_fin, "spring_tmp", "agg_doy")
 
-
+windows()
 ggarrange(p1, p2, p3, p4, 
           p5, p6, p7, p8, ncol = 4, nrow = 2, common.legend = TRUE)
 
@@ -230,71 +230,6 @@ ggarrange(p1, p2, p3, p4,
 
 
 # plots Spei ------------------------------------------------------------
-
-p1<- dat_fin %>% 
-  ggplot(aes(x = spei1,   # temp is in Kelvin ->convert to C by substrating 273.15, https://cds.climate.copernicus.eu/cdsapp#!/dataset/reanalysis-era5-land-monthly-means?tab=overview
-             y = sum_ips,
-             color= factor(year))) +
-  geom_point(alpha = 0.5) +
-  geom_smooth(aes(x = spei1,   # temp is in Kelvin ->convert to C by substrating 273.15, https://cds.climate.copernicus.eu/cdsapp#!/dataset/reanalysis-era5-land-monthly-means?tab=overview
-                  y = sum_ips,
-                  color= NULL),
-              color = 'black')
-
-
-p2<- 
-  dat_fin %>% 
-  ggplot(aes(x = spei1,
-             y = peak_doy,
-             color= factor(year))) +
-  geom_point(alpha = 0.5) +
-  geom_smooth(aes(x = spei1,
-                  y = peak_doy,
-                  color = NULL),
-              color = 'black')
-
-p3<- dat_fin %>% 
-  ggplot(aes(x = spei1,
-             y = agg_doy,
-             color= factor(year))) +
-  geom_point(alpha = 0.5) +
-  geom_smooth(aes(x = spei1,
-                  y = agg_doy,
-                  color= NULL),
-              color = 'black')
-
-
-p4<- dat_fin %>% 
-  ggplot(aes(x = spei12,   # temp is in Kelvin ->convert to C by substrating 273.15, https://cds.climate.copernicus.eu/cdsapp#!/dataset/reanalysis-era5-land-monthly-means?tab=overview
-             y = sum_ips,
-             color= factor(year))) +
-  geom_point(alpha = 0.5) +
-  geom_smooth(aes(x = spei12,   # temp is in Kelvin ->convert to C by substrating 273.15, https://cds.climate.copernicus.eu/cdsapp#!/dataset/reanalysis-era5-land-monthly-means?tab=overview
-                  y = sum_ips,
-                  color= NULL),
-              color = 'black')
-
-
-p5<- 
-  dat_fin %>% 
-  ggplot(aes(x = spei12,
-             y = peak_doy,
-             color= factor(year))) +
-  geom_point(alpha = 0.5) +
-  geom_smooth(aes(x = spei12,
-                  y = peak_doy,
-                  color = NULL),
-              color = 'black')
-
-p6<- dat_fin %>% 
-  ggplot(aes(x = spei12,
-             y = agg_doy,
-             color= factor(year))) +
-  geom_point(alpha = 0.5) +
-  geom_smooth(aes(x = spei12,
-                  y = agg_doy,
-                  color= NULL),
-              color = 'black')
 
 
 
@@ -312,26 +247,30 @@ create_spei_plot <- function(data, spei_col, y_var, y_label) {
 
 # Using the function to create plots
 p1 <- create_spei_plot(dat_fin, "spei1", "sum_ips", "Sum IPS")
-p2 <- create_spei_plot(dat_fin, "spei1", "peak_doy", "Peak DOY")
-p3 <- create_spei_plot(dat_fin, "spei1", "agg_doy", "Aggregate DOY")
-p4 <- create_spei_plot(dat_fin, "spei3", "sum_ips", "Sum IPS")
-p5 <- create_spei_plot(dat_fin, "spei3", "peak_doy", "Peak DOY")
-p6 <- create_spei_plot(dat_fin, "spei3", "agg_doy", "Aggregate DOY")
-p7 <- create_spei_plot(dat_fin, "spei12", "sum_ips", "Sum IPS")
-p8 <- create_spei_plot(dat_fin, "spei12", "peak_doy", "Peak DOY")
-p9 <- create_spei_plot(dat_fin, "spei12", "agg_doy", "Aggregate DOY")
-p10 <- create_spei_plot(dat_fin, "spei24", "sum_ips", "Sum IPS")
-p11 <- create_spei_plot(dat_fin, "spei24", "peak_doy", "Peak DOY")
-p12 <- create_spei_plot(dat_fin, "spei24", "agg_doy", "Aggregate DOY")
+p2 <- create_spei_plot(dat_fin, "spei1", "peak_diff", "Peak diff")
+p3 <- create_spei_plot(dat_fin, "spei1", "peak_doy", "Peak DOY")
+p4 <- create_spei_plot(dat_fin, "spei1", "agg_doy", "Aggregate DOY")
+p5 <- create_spei_plot(dat_fin, "spei3", "sum_ips", "Sum IPS")
+p6 <- create_spei_plot(dat_fin, "spei3", "peak_diff", "Peak diff")
+p7 <- create_spei_plot(dat_fin, "spei3", "peak_doy", "Peak DOY")
+p8 <- create_spei_plot(dat_fin, "spei3", "agg_doy", "Aggregate DOY")
+p9 <- create_spei_plot(dat_fin, "spei12", "sum_ips", "Sum IPS")
+p10 <- create_spei_plot(dat_fin, "spei12", "peak_diff", "Peak diff")
+p11 <- create_spei_plot(dat_fin, "spei12", "peak_doy", "Peak DOY")
+p12 <- create_spei_plot(dat_fin, "spei12", "agg_doy", "Aggregate DOY")
+p13 <- create_spei_plot(dat_fin, "spei24", "sum_ips", "Sum IPS")
+p14 <- create_spei_plot(dat_fin, "spei24", "peak_diff", "Peak diff")
+p15 <- create_spei_plot(dat_fin, "spei24", "peak_doy", "Peak DOY")
+p16 <- create_spei_plot(dat_fin, "spei24", "agg_doy", "Aggregate DOY")
 
 
 
 
 
-ggarrange(p1, p2, p3, 
-          p4, p5, p6,
-          p7, p8, p9,
-          p10, p11, p12,
+ggarrange(p1, p2, p3,p4,  
+          p5, p6, p7, p8, 
+          p9, p10, p11, p12,
+          p13, p14, p15, p16,
           ncol = 3, nrow = 4,
           common.legend = TRUE)
 
