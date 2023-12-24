@@ -49,21 +49,43 @@ load("outData/spatial.Rdata")
 # Get SPEI and clim data: they are for whole year! check only veg season? now 3-10 (includes march)
 df_clim <- fread('outTable/xy_clim_DWD.csv')
 df_spei <- fread('outTable/xy_spei_veg_season_DWD.csv')
+df_spei_months <- fread('outTable/xy_spei_all_DWD.csv')
 
-#df_spei       <- fread(paste(myPath, outTable, 'xy_spei.csv', sep = '/'))
-#df_prec       <- fread(paste(myPath, outTable, 'xy_precip.csv', sep = '/'))  # from DWD, 1 km res, only from 2000
-#df_temp       <- fread(paste(myPath, outTable, 'xy_temp.csv', sep = '/'))    # from DWD, 1 km res, only from 2000
-#df_clim_ERA   <- fread(paste(myPath, outTable, 'xy_clim.csv', sep = '/')) # need to filter soils volume content index!
-#df_clim_ERA_ID<- fread(paste(myPath, outTable, 'xy_clim_IDs.csv', sep = '/'), encoding = 'Latin-1') # get the ID to join falsto_name
-#df_anom       <- fread('outTable/xy_anom.csv') # from ERA, 10 km res, temp,. prec, soils water, spei,
-  # new values oon 11/09/2023: spei6, prcp is corrected to mothly sums
+
+# make a plot with speis
+df_spei_months <- df_spei_months %>% 
+  mutate(date = as.Date(paste(year, month, "01", sep = "-")))
+
+
+# Calculate median SPEI for each scale
+median_spei <- 
+  df_spei_months %>%
+  group_by(scale, date) %>%
+  summarise(median_spei = median(spei), .groups = 'drop') %>% 
+  mutate(sign = case_when(median_spei >=0 ~ 'pos',
+                          median_spei < 0 ~ 'neg')) %>% 
+  pivot_wider(values_from = median_spei, names_from = sign) %>% 
+    replace(is.na(.), 0)
+
+
+# plot SPEI over different scales
+ggplot2::ggplot(median_spei) + 
+  geom_area(aes(x = date, y = pos), fill = "blue", col = "grey8") +
+  geom_area(aes(x = date, y = neg), fill = "red",  col = "grey8") +
+   ylab("SPEI") + ggtitle("SPEI") +
+  facet_grid(scale~.) +
+  theme_bw() + theme(plot.title = element_text(hjust = 0.5))
+
+
+
+
+
+
+  
 
 # set correct encoding for german characters
-#Encoding(df_anom$falsto_name)        <-  "UTF-8"
 Encoding(df_clim$falsto_name)        <-  "UTF-8"
 Encoding(df_spei$falsto_name)        <-  "UTF-8"
-#Encoding(df_clim_ERA_ID$falsto_name) <-  "UTF-8"
-
 
 # Get geo data: elevation, slope, roughness...
 xy_topo      <- vect(paste(myPath, outFolder, "xy_3035_topo.gpkg", sep = "/"), 
@@ -77,8 +99,6 @@ xy_df <- data.frame(x = sf::st_coordinates(xy_sf_expand)[,"X"],
                     globalid =    xy_sf_expand$globalid,
                     year =    xy_sf_expand$year)
 
-dim(xy_topo)
-dim(xy_df)
 
 # get the final subset of globalids
 trap_globid <- unique(xy_df$globalid)  # 313, selected
@@ -91,7 +111,6 @@ dim(df_topo)
 df_topo <- df_topo %>% 
   filter(globalid %in% trap_globid) %>% 
   dplyr::select(c('globalid', 'elev'
-                  #,'slope', 'aspect'
                   )) %>% 
   full_join(xy_df %>% dplyr::select(falsto_name, globalid))
 #dplyr::select(globalid:roughness)
@@ -103,19 +122,19 @@ df_topo <- df_topo %>%
 # spring temperature
 df_temp_spring = df_clim %>% 
   filter(year %in% 2015:2021 & month %in% spring.months) %>%
-  group_by(year, globalid, falsto_name) %>% 
+  group_by(year, falsto_name) %>% 
   summarise(spring_tmp = mean(tmp))
   
 # temperature over vegetation season
 df_temp_veg_season = df_clim %>% 
   filter(year %in% 2015:2021 & month %in% veg.months) %>%
-  group_by(year, globalid, falsto_name) %>% 
+  group_by(year, falsto_name) %>% 
   summarise(veg_tmp = mean(tmp))
 
 # precipitation
 df_prcp_veg_season = df_clim %>% 
   filter(year %in% 2015:2021 & month %in% veg.months) %>%
-  group_by(year, globalid, falsto_name) %>% 
+  group_by(year, falsto_name) %>% 
   summarise(veg_prcp = mean(prcp))
 
 head(df_spei)#SPEI is already filtered over years and to vegetation season, just needs to be converted to wide format to havendle two types of SPEI1, 12
@@ -149,11 +168,11 @@ dim(df_topo)
 # whole year
 df_predictors <- 
   df_temp_spring %>%  
-  right_join(df_temp_veg_season, by = c("falsto_name", 'globalid', 'year')) %>%
-  right_join(df_prcp_veg_season, by = c("falsto_name", 'globalid', 'year')) %>%
+  right_join(df_temp_veg_season, by = c("falsto_name", 'year')) %>%
+  right_join(df_prcp_veg_season, by = c("falsto_name",  'year')) %>%
   right_join(df_spei_wide, by = c("falsto_name", 'year')) %>%
    # View()
-    right_join(xy_df, by = c('falsto_name', 'globalid', 'year')) %>% # add XY coordinates for each trap  and filter the data
+    right_join(xy_df, by = c('falsto_name', 'year')) %>% # add XY coordinates for each trap  and filter the data
     right_join(df_topo, by = c("falsto_name", 'globalid')) %>%
   ungroup(.) %>% 
     dplyr::select(-c(globalid))
@@ -200,7 +219,7 @@ dat_fin <-
 
 theme_set(theme_classic())
 
-theme_update(aspect.ratio = 1, 
+theme_update(#aspect.ratio = 1, 
                 panel.background = element_rect(fill = "white", colour = "black"))
 
 # Function to create a plot
@@ -217,7 +236,7 @@ p2 <- create_plot(dat_fin, "veg_tmp", "peak_diff")
 p3 <- create_plot(dat_fin, "veg_tmp", "peak_doy")
 p4 <- create_plot(dat_fin, "veg_tmp", "agg_doy")
 p5 <- create_plot(dat_fin, "spring_tmp", "sum_ips")
-p6 <- create_plot(dat_fin, "veg_tmp", "peak_diff")
+p6 <- create_plot(dat_fin, "spring_tmp", "peak_diff")
 p7 <- create_plot(dat_fin, "spring_tmp", "peak_doy")
 p8 <- create_plot(dat_fin, "spring_tmp", "agg_doy")
 
@@ -241,6 +260,7 @@ create_spei_plot <- function(data, spei_col, y_var, y_label) {
   
   ggplot(data, aes(!!spei_col_sym, !!y_var_sym, color = factor(year))) +
     geom_point(alpha = 0.5) +
+    xlim(-2.5, 1) +
     geom_smooth(aes(!!spei_col_sym, !!y_var_sym, color = NULL), color = 'black') +
     labs(x = spei_col, y = y_label)
 }
@@ -271,12 +291,12 @@ ggarrange(p1, p2, p3,p4,
           p5, p6, p7, p8, 
           p9, p10, p11, p12,
           p13, p14, p15, p16,
-          ncol = 3, nrow = 4,
+          ncol = 4, nrow = 4,
           common.legend = TRUE)
 
 
 
-# get plots for climatic predictors:
+# get plots for climatic predictors: -------------------------------
 df_clim %>% 
   ggplot(aes(x = year,
              y = tmp,
@@ -295,6 +315,8 @@ df_clim %>%
     width = .2) #+
 
 
+
+# plots spei over years
 df_clim %>% 
   filter(month %in% veg.months) %>% 
   ggplot(aes(x = year,
@@ -317,10 +339,20 @@ df_clim %>%
 
 # SPEI1
 df_spei %>% 
-  filter(scale == 12) %>% 
+  filter(scale == 24) %>% 
   ggplot(aes(x = year,
              y = spei,
-             group = year)) +
+             group = falsto_name)) +
+  geom_line(alpha = 0.4)
+
+
+
+# SPEI1
+df_spei %>% 
+ # filter(scale == 12) %>% 
+  ggplot(aes(x = year,
+             y = spei,
+             group = scale)) +
   stat_summary(fun = "median", 
                geom = "bar", 
                alpha = .7) +
@@ -332,7 +364,8 @@ df_spei %>%
     fun.max = function(z) { quantile(z,0.75) },
     fun = median,
     geom  = 'errorbar',
-    width = .2) #+
+    width = .2) +
+ facet_grid(.~scale)
 
 
 
