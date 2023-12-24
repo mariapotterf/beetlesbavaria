@@ -78,9 +78,52 @@ ggplot2::ggplot(median_spei) +
 
 
 
+# plot barplot of spei - veg season vs no veg season, temperature and precipitation
+df_spei_months <- df_spei_months %>% 
+  mutate(season = case_when(month %in% 3:10 ~ 'veg_season',
+                            month %in% c(1,2,11,12) ~ 'winter'))# %>% 
 
+#p.spei <- 
+  df_spei_months %>%
+    filter(year %in% 2015:2021) %>% 
+ # group_by(season, year, scale) %>% 
+   # summarize(med = median(spei)) %>% 
+ ggplot(aes(x = as.factor(year), 
+             y = spei,
+            fill = season)) +
+    geom_hline(yintercept = 0, lty = 'dashed', col = "grey10") +
+    geom_boxplot() +
+    xlab('') +
+    theme(axis.text=element_text(angle = 90, vjust = 0, hjust = 0.5)) + #, hjust=0.5
+    facet_grid(.~scale)
 
-
+  
+  mean.prcp = mean(df_clim[,year %in% 1980:2015]$prcp)
+  mean.tmp = mean(df_clim$tmp)
+  
+  p.prcp <- df_clim %>%
+    filter(year %in% 2015:2021) %>% 
+    ggplot(aes(x = as.factor(year), 
+               y = prcp)) +
+    geom_boxplot() +
+    xlab('') +
+    ylab('Monthly precipitation [mm]') + 
+    theme(axis.text=element_text(angle = 90, vjust = 0, hjust = 0.5)) +
+    geom_hline(yintercept = mean.prcp, lty = 'dashed', col = "grey10" ) 
+ 
+  
+  p.tmp <- df_clim %>%
+    filter(year %in% 2015:2021) %>% 
+    ggplot(aes(x = as.factor(year), 
+               y = tmp)) +
+    geom_boxplot() +
+    xlab('') +
+    ylab('Monthly temperature [C]') + 
+    theme(axis.text=element_text(angle = 90, vjust = 0, hjust = 0.5)) +
+    geom_hline(yintercept = mean.tmp, lty = 'dashed', col = "grey10" ) 
+  
+ ggarrange(p.prcp, p.tmp) 
+  
   
 
 # set correct encoding for german characters
