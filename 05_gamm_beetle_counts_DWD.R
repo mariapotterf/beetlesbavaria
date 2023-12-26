@@ -133,6 +133,135 @@ dat_lag %>%
   #View()
 
 
+# Spearman - select SPEI --------------------------------------------------
+keep_speis <- c(#'sum_ips', 
+                "spei1"  ,            
+               "spei3",  "spei12",  "spei24", "annual_spei1","annual_spei3",
+                "annual_spei12" ,  
+                "annual_spei24"  )
+  
+
+### IPS separmans -----------  
+df_spearman_spei <- dat_lag %>% 
+  ungroup(.) %>% 
+  dplyr::select(all_of(c('sum_ips', keep_speis)))
+
+
+spearman_correlation_matrix <- cor(df_spearman_spei, method = "spearman", use = "complete.obs")
+
+# Print the correlation matrix
+print(spearman_correlation_matrix)
+
+# Extract and sort correlations of sum_ips with SPEI variables
+cor_with_sum_ips <- spearman_correlation_matrix["sum_ips", -1]  # Exclude the first column (self-correlation)
+sorted_correlations <- sort(cor_with_sum_ips, decreasing = TRUE)
+
+# Print the sorted correlations
+print(sorted_correlations)
+
+library(knitr)
+
+# Assuming spearman_correlation_matrix is your correlation matrix
+formatted_table <- kable(spearman_correlation_matrix, format = "pipe", digits = 2)
+
+# Print the formatted table
+cat(formatted_table)
+
+# th3e best is SPEI3, veg season!! for beetle sums!
+
+
+
+### DOY aggregation separmans -----------  
+df_spearman_spei <- dat_lag %>% 
+  ungroup(.) %>% 
+  dplyr::select(all_of(c('agg_doy', keep_speis)))
+
+
+spearman_correlation_matrix <- cor(df_spearman_spei, method = "spearman", use = "complete.obs")
+
+# Print the correlation matrix
+print(spearman_correlation_matrix)
+
+# Extract and sort correlations of sum_ips with SPEI variables
+cor_with_y <- spearman_correlation_matrix["agg_doy", -1]  # Exclude the first column (self-correlation)
+sorted_correlations <- sort(cor_with_y, decreasing = TRUE)
+
+# Print the sorted correlations
+print(sorted_correlations)
+
+# Assuming spearman_correlation_matrix is your correlation matrix
+formatted_table <- kable(spearman_correlation_matrix, format = "pipe", digits = 2)
+
+# Print the formatted table
+cat(formatted_table)
+
+# th3e best is annula SPEI1 for beetle aggregation date
+
+
+
+### DOY peak Spearmans -----------  
+df_spearman_spei <- dat_lag %>% 
+  ungroup(.) %>% 
+  dplyr::select(all_of(c('peak_doy', keep_speis)))
+
+
+spearman_correlation_matrix <- cor(df_spearman_spei, method = "spearman", use = "complete.obs")
+
+# Print the correlation matrix
+print(spearman_correlation_matrix)
+
+# Extract and sort correlations of sum_ips with SPEI variables
+cor_with_y <- spearman_correlation_matrix["peak_doy", -1]  # Exclude the first column (self-correlation)
+sorted_correlations <- sort(cor_with_y, decreasing = TRUE)
+
+# Print the sorted correlations
+print(sorted_correlations)
+
+# Assuming spearman_correlation_matrix is your correlation matrix
+formatted_table <- kable(spearman_correlation_matrix, format = "pipe", digits = 2)
+
+# Print the formatted table
+cat(formatted_table)
+
+# th3e best is annula SPEI1 for beetle peak culmination date
+
+
+
+### DOY peak difference Spearmans -----------  
+df_spearman_spei <- dat_lag %>% 
+  ungroup(.) %>% 
+  dplyr::select(all_of(c('peak_diff', keep_speis)))
+
+
+spearman_correlation_matrix <- cor(df_spearman_spei, method = "spearman", use = "complete.obs")
+
+# Print the correlation matrix
+print(spearman_correlation_matrix)
+
+# Extract and sort correlations of sum_ips with SPEI variables
+cor_with_y <- spearman_correlation_matrix["peak_diff", -1]  # Exclude the first column (self-correlation)
+sorted_correlations <- sort(cor_with_y, decreasing = TRUE)
+
+# Print the sorted correlations
+print(sorted_correlations)
+
+# Assuming spearman_correlation_matrix is your correlation matrix
+formatted_table <- kable(spearman_correlation_matrix, format = "pipe", digits = 2)
+
+# Print the formatted table
+cat(formatted_table)
+
+#print(sorted_correlations)
+#spei3       annual_spei3 annual_spei12        spei24 annual_spei24         spei1  annual_spei1        spei12 
+#0.16242658    0.12496749    0.11062137    0.10555342    0.10437572    0.09894845    0.08677761    0.06891847 
+
+
+
+
+
+
+
+
 ## Scale predictors ================================================================================
 
 # skip columns if not for scaling
@@ -780,7 +909,7 @@ r2(m_beetle_interaction1.1)
 
 windows()
 
-pairs(sum_ips ~ veg_tmp + veg_prcp + spei3 + vpd, dat_lag, panel = panel.smooth)
+pairs(sum_ips ~ veg_tmp + veg_prcp + spei3 + spei1 + spei12 + spei24, dat_lag, panel = panel.smooth)
 
 pairs(sum_ips ~ veg_tmp + spei3 + vpd + elev + spruce_1986 + previous_sum_ips+population_growth, dat_lag, panel = panel.smooth)
 
