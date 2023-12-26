@@ -136,7 +136,8 @@ dat_lag %>%
 # Spearman - select SPEI --------------------------------------------------
 keep_speis <- c(#'sum_ips', 
                 "spei1"  ,            
-               "spei3",  "spei12",  "spei24", "annual_spei1","annual_spei3",
+               "spei3", 'spei6',  "spei12",  "spei24", "annual_spei1","annual_spei3",
+               'annual_spei6',
                 "annual_spei12" ,  
                 "annual_spei24"  )
   
@@ -171,7 +172,7 @@ cat(formatted_table)
 
 
 
-### DOY aggregation separmans -----------  
+### DOY aggregation Spearman -----------  
 df_spearman_spei <- dat_lag %>% 
   ungroup(.) %>% 
   dplyr::select(all_of(c('agg_doy', keep_speis)))
