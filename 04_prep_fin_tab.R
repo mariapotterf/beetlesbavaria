@@ -180,6 +180,19 @@ df_prcp_veg_season = df_clim %>%
   group_by(year, falsto_name) %>% 
   summarise(veg_prcp = mean(prcp))
 
+
+# get median spei for all months, for the spearmans correlations
+df_spei_year <- df_spei_months %>% 
+  group_by(falsto_name, year, scale) %>% 
+  summarise(spei = median(spei)) %>% 
+  pivot_wider(names_from = scale, values_from = spei) %>% 
+  rename(
+    annual_spei1 = `1`, 
+    annual_spei3 = `3`, 
+    annual_spei12 = `12`, 
+    annual_spei24 = `24`
+  )
+
 head(df_spei)#SPEI is already filtered over years and to vegetation season, just needs to be converted to wide format to havendle two types of SPEI1, 12
 # convert to wide format
 df_spei_wide <- 
@@ -214,6 +227,7 @@ df_predictors <-
   right_join(df_temp_veg_season, by = c("falsto_name", 'year')) %>%
   right_join(df_prcp_veg_season, by = c("falsto_name",  'year')) %>%
   right_join(df_spei_wide, by = c("falsto_name", 'year')) %>%
+  right_join(df_spei_year, by = c("falsto_name", 'year')) %>%
    # View()
     right_join(xy_df, by = c('falsto_name', 'year')) %>% # add XY coordinates for each trap  and filter the data
     right_join(df_topo, by = c("falsto_name", 'globalid')) %>%
