@@ -103,8 +103,8 @@ dat_lag <-   dat_fin %>%
                   previous_peak_diff1 =  dplyr::lag(peak_diff , order_by = year, n = 1), 
                   previous_peak_diff2 =  dplyr::lag(peak_diff , order_by = year, n = 2),
                   previous_veg_tmp    =  dplyr::lag(veg_tmp,    order_by = year),
-                  previous_spring_veg_tmp =  dplyr::lag(spring_veg_tmp, order_by = year),
-                  previous_veg_veg_prcp   =  dplyr::lag(veg_veg_prcp,   order_by = year),
+                  previous_spring_tmp =  dplyr::lag(spring_tmp, order_by = year),
+                  previous_veg_prcp   =  dplyr::lag(veg_prcp,   order_by = year),
                   previous_spei1      =  dplyr::lag(spei1,      order_by = year),
                   previous_spei3      =  dplyr::lag(spei3,      order_by = year),
                   previous_spei12     =  dplyr::lag(spei12,     order_by = year),
@@ -135,9 +135,6 @@ dat_lag %>%
 
 ## Scale predictors ================================================================================
 
-
-dat_lag_scaled <- dat_lag #%>%
- 
 # skip columns if not for scaling
 skip_col <- c('trapID', 'pairID', "x", "y", 'year', 'spei1','spei3','spei12','spei24','previous_spei1', 'previous_spei3', 'previous_spei12', 'previous_spei24' )
 
