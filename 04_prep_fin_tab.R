@@ -94,7 +94,8 @@ df_spei_months <- df_spei_months %>%
     geom_hline(yintercept = 0, lty = 'dashed', col = "grey10") +
     geom_boxplot() +
     xlab('') +
-    theme(axis.text=element_text(angle = 90, vjust = 0, hjust = 0.5)) + #, hjust=0.5
+    theme(axis.text=element_text(angle = 90, vjust = 0, hjust = 0.5),
+          legend.position = 'bottom') + #, hjust=0.5
     facet_grid(.~scale)
 
   
@@ -189,6 +190,7 @@ df_spei_year <- df_spei_months %>%
   rename(
     annual_spei1 = `1`, 
     annual_spei3 = `3`, 
+    annual_spei6 = `6`, 
     annual_spei12 = `12`, 
     annual_spei24 = `24`
   )
@@ -205,6 +207,7 @@ df_spei_wide <- df_spei_wide %>%
   rename(
     spei1 = `1`, 
     spei3 = `3`, 
+    spei6 = `6`, 
     spei12 = `12`, 
     spei24 = `24`
   )
