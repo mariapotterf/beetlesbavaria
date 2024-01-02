@@ -56,6 +56,8 @@ library(lmtest)
 # colors
 library(RColorBrewer)
 
+library(knitr)   # for table outputs
+
 
 
 
@@ -66,7 +68,7 @@ load(file=   "outData/final_table.Rdata")
 load(file =  "outData/buffers.Rdata")  # df_RS_out
 load(file =  "outData/lisa.Rdata")     # read LISA Moran's I stats
 
-# get unique falsto_names of traps that remained stable (only one globalid)
+# get unique trapIDs of traps that remained stable (only one globalid)
 # over time
 stable_traps <- 
   df_RS_out %>% 
@@ -81,7 +83,7 @@ stable_traps <-
 
 
 
-##### prepare data RS --------------------------------------------
+# prepare data RS --------------------------------------------
 df_RS_out <- df_RS_out %>% 
   dplyr::select(-c(globalid, id)) %>% 
   dplyr::rename(trapID = falsto_name)
@@ -92,7 +94,7 @@ lisa_merged_df <- lisa_merged_df %>%
                 sum_ips = sum_beetle) %>% 
   dplyr::select(c(year, trapID, sum_ips, Morans_I))
 
-# add lag: previous year counts, previous year temperature
+# add lag: previous year counts, previous year temperature ----------------------
 dat_lag <-   dat_fin %>%
     ungroup(.) %>% 
    group_by(trapID) %>%
@@ -133,7 +135,7 @@ dat_lag %>%
   #View()
 
 
-# Spearman - select SPEI --------------------------------------------------
+### Spearman - select SPEI --------------------------------------------------
 keep_speis <- c(#'sum_ips', 
                 "spei1"  ,            
                "spei3", 'spei6',  "spei12",  "spei24", "annual_spei1","annual_spei3",
@@ -142,7 +144,7 @@ keep_speis <- c(#'sum_ips',
                 "annual_spei24"  )
   
 
-### IPS separmans -----------  
+##### IPS separmans -----------  
 df_spearman_spei <- dat_lag %>% 
   ungroup(.) %>% 
   dplyr::select(all_of(c('sum_ips', keep_speis)))
@@ -160,7 +162,7 @@ sorted_correlations <- sort(cor_with_sum_ips, decreasing = TRUE)
 # Print the sorted correlations
 print(sorted_correlations)
 
-library(knitr)
+
 
 # Assuming spearman_correlation_matrix is your correlation matrix
 formatted_table <- kable(spearman_correlation_matrix, format = "pipe", digits = 2)
@@ -172,7 +174,7 @@ cat(formatted_table)
 
 
 
-### DOY aggregation Spearman -----------  
+##### DOY aggregation Spearman -----------  
 df_spearman_spei <- dat_lag %>% 
   ungroup(.) %>% 
   dplyr::select(all_of(c('agg_doy', keep_speis)))
@@ -200,7 +202,7 @@ cat(formatted_table)
 
 
 
-### DOY peak Spearmans -----------  
+##### DOY peak Spearmans -----------  
 df_spearman_spei <- dat_lag %>% 
   ungroup(.) %>% 
   dplyr::select(all_of(c('peak_doy', keep_speis)))
@@ -228,7 +230,7 @@ cat(formatted_table)
 
 
 
-### DOY peak difference Spearmans -----------  
+##### DOY peak difference Spearmans -----------  
 df_spearman_spei <- dat_lag %>% 
   ungroup(.) %>% 
   dplyr::select(all_of(c('peak_diff', keep_speis)))
@@ -246,19 +248,111 @@ sorted_correlations <- sort(cor_with_y, decreasing = TRUE)
 # Print the sorted correlations
 print(sorted_correlations)
 
-# Assuming spearman_correlation_matrix is your correlation matrix
-formatted_table <- kable(spearman_correlation_matrix, format = "pipe", digits = 2)
-
-# Print the formatted table
-cat(formatted_table)
-
-#print(sorted_correlations)
-#spei3       annual_spei3 annual_spei12        spei24 annual_spei24         spei1  annual_spei1        spei12 
-#0.16242658    0.12496749    0.11062137    0.10555342    0.10437572    0.09894845    0.08677761    0.06891847 
 
 
+### Spearman - select spring vs veg temperature ------------------------------------------------------
+
+keep_temps <- c( 
+  "spring_tmp", "veg_tmp",
+  "previous_veg_tmp",    "previous_spring_tmp",
+  "previous_veg_prcp")
 
 
+##### IPS separmans -----------  
+df_spearman_temps <- dat_lag %>% 
+  ungroup(.) %>% 
+  dplyr::select(all_of(c('sum_ips', keep_temps)))
+
+
+spearman_correlation_matrix <- cor(df_spearman_temps, method = "spearman", use = "complete.obs")
+
+# Print the correlation matrix
+print(spearman_correlation_matrix)
+
+# Extract and sort correlations of sum_ips with SPEI variables
+cor_with_sum_ips <- spearman_correlation_matrix["sum_ips", -1]  # Exclude the first column (self-correlation)
+sorted_correlations <- sort(cor_with_sum_ips, decreasing = TRUE)
+
+# Print the sorted correlations
+print(sorted_correlations)
+
+
+# previous_veg_tmp             veg_tmp          spring_tmp previous_spring_tmp 
+# 0.08339555          0.07393616          0.07088885          0.05713606 
+# previous_veg_prcp 
+# -0.04463953 
+
+
+
+
+##### DOY aggregation Spearman -----------  
+df_spearman_temps <- dat_lag %>% 
+  ungroup(.) %>% 
+  dplyr::select(all_of(c('agg_doy', keep_temps)))
+
+
+spearman_correlation_matrix <- cor(df_spearman_temps, method = "spearman", use = "complete.obs")
+
+# Print the correlation matrix
+print(spearman_correlation_matrix)
+
+# Extract and sort correlations of sum_ips with SPEI variables
+cor_with_sum_ips <- spearman_correlation_matrix["agg_doy", -1]  # Exclude the first column (self-correlation)
+sorted_correlations <- sort(cor_with_sum_ips, decreasing = F)
+
+# Print the sorted correlations
+print(sorted_correlations)
+
+# best: spring temp, veg_temp
+
+
+
+##### DOY peak Spearmans -----------  
+df_spearman_temps <- dat_lag %>% 
+  ungroup(.) %>% 
+  dplyr::select(all_of(c('peak_doy', keep_temps)))
+
+
+spearman_correlation_matrix <- cor(df_spearman_temps, method = "spearman", use = "complete.obs")
+
+# Print the correlation matrix
+print(spearman_correlation_matrix)
+
+# Extract and sort correlations
+cor_with_sum_ips <- spearman_correlation_matrix["peak_doy", -1]  # Exclude the first column (self-correlation)
+sorted_correlations <- sort(cor_with_sum_ips, decreasing = F)
+
+# Print the sorted correlations
+print(sorted_correlations)
+
+print(sorted_correlations)
+# spring_tmp             veg_tmp previous_spring_tmp    previous_veg_tmp 
+# -0.21839001         -0.20928259         -0.15303943         -0.13813963 
+# previous_veg_prcp 
+# -0.06085891 
+
+##### DOY peak difference Spearmans -----------  
+df_spearman_temps <- dat_lag %>% 
+  ungroup(.) %>% 
+  dplyr::select(all_of(c('peak_diff', keep_temps)))
+
+
+spearman_correlation_matrix <- cor(df_spearman_temps, method = "spearman", use = "complete.obs")
+
+# Print the correlation matrix
+print(spearman_correlation_matrix)
+
+# Extract and sort correlations
+cor_with_sum_ips <- spearman_correlation_matrix["peak_diff", -1]  # Exclude the first column (self-correlation)
+sorted_correlations <- sort(cor_with_sum_ips, decreasing = F)
+
+# Print the sorted correlations
+print(sorted_correlations)
+
+# previous_spring_tmp    previous_veg_tmp   previous_veg_prcp             veg_tmp 
+# -0.01454686         -0.01821267         -0.06324645         -0.09972453 
+# spring_tmp 
+# -0.11110834 
 
 
 
@@ -266,16 +360,17 @@ cat(formatted_table)
 ## Scale predictors ================================================================================
 
 # skip columns if not for scaling
-skip_col <- c('trapID', 'pairID', "x", "y", 'year', 'spei1','spei3','spei12','spei24','previous_spei1', 'previous_spei3', 'previous_spei12', 'previous_spei24' )
+skip_col <- c('trapID', 'pairID', "x", "y", 'year', 'spei1','spei3','spei6', 'spei12','spei24',
+              'annual_spei1','annual_spei3','annual_spei6','annual_spei12','annual_spei24',
+              'previous_spei1', 'previous_spei3', 'previous_spei12', 'previous_spei24' )
 
+# export new df
 dat_lag_scaled <-
   dat_lag %>%
   ungroup(.) %>% 
-  # Select columns to scale, skipping trapID and year
   dplyr::select(-all_of(skip_col )) %>%
   # Apply the scale function
   scale(center = TRUE, scale = TRUE) %>%
-  # Convert back to a data frame
   as.data.frame() %>%
   # Bind the unscaled columns back
   bind_cols(dat_lag %>% dplyr::select(all_of(skip_col)), .)
@@ -285,7 +380,6 @@ dat_lag_scaled <- dat_lag_scaled %>%
   ungroup(.) %>% 
   dplyr::mutate(across(where(~is.numeric(.) && is.matrix(.)), as.vector))
 
-# consider year as random factor - non linear relationship betweeen years
 
 # remove additionsl NAs
 dat_lag_scaled_complete <- dat_lag_scaled %>%
@@ -295,7 +389,37 @@ dat_lag_scaled_complete <- dat_lag_scaled %>%
 
 
 
-# spatial synchronization with veg_tmp? ---------------------------------------
+# Analyses =====================================================================
+
+# beetle population sum vs climate drivers
+# DOY aggregation vs climate drivers
+# DOY peak vs climate drivers
+# peak difference vs climate drivers
+
+#### prepare individual tables for each analyses -----------------------------------------------------
+cols_beetle_population <- c("trapID" , "pairID","x"  ,  "y" , "year", 
+                            "annual_spei6"  ,   "spring_tmp" ,         "veg_tmp" ,
+                            "sum_ips",
+                            "previous_sum_ips" , "previous_sum_ips2",  "previous_peak_diff1", "previous_peak_diff2", "previous_veg_tmp",
+                            "previous_spring_tmp",
+                            "previous_veg_prcp",   "population_growth",   "population_growth2" )
+cols_doy_aggregation <- c('agg_doy', "trapID" , "pairID","x"  ,  "y" , "year", 
+                          "annual_spei6"  ,   "spring_tmp" ,         "veg_tmp" , "veg_prcp" ,           "elev",                "sum_ips",
+                          "previous_sum_ips" , "previous_sum_ips2",  "previous_peak_diff1", "previous_peak_diff2", "previous_veg_tmp",
+                          "previous_spring_tmp",
+                          "previous_veg_prcp",   "population_growth",   "population_growth2" )
+
+
+cols_doy_peak <- c('peak_diff', "trapID" , "pairID","x"  ,  "y" , "year", 
+                          "annual_spei1"  ,   "spring_tmp" ,         "veg_tmp" , "veg_prcp" ,           "elev",                "sum_ips",
+                          "previous_sum_ips" , "previous_sum_ips2",  "previous_peak_diff1", "previous_peak_diff2", "previous_veg_tmp",
+                          "previous_spring_tmp",
+                          "previous_veg_prcp",   "population_growth",   "population_growth2" )
+
+
+
+
+#### spatial synchronization with veg_tmp? ---------------------------------------
 
 hist(dat_lag_scaled$Morans_I)
 
@@ -502,13 +626,7 @@ r2(m_moran21)
 
 resid_outpu <- simulateResiduals(m_moran21, plot = T)
 
-# RS:  Link beetle data with observed RS damage ------------------------------------------------------------------------
-# remove 0 wind-beetle damage 
-# run analyses with only stable traps over time?? - split df
-
-
-
-# does beetle sums corresponds to beetle anomaly? YES! if I am using only smooths, not points... ---------
+### RS:  Link beetle data with observed RS damage ------------------------------------------------------------------------
 
 
 # ips vs current years:
@@ -535,7 +653,7 @@ pairs(wind_beetle ~ sum_ips + previous_sum_ips + previous_sum_ips2 + previous_ag
 
 
 
-# get glm RS vs ips sums: DREDGE  ----------------------------------------------------------------------
+###### get glm RS vs ips sums: DREDGE  ----------------------------------------------------------------------
 # investigate all variables & dredge
 
 # keep only complete cases - can alter this to keep more rows? can remove unnecessary columns
@@ -548,8 +666,7 @@ pairs(wind_beetle ~ sum_ips + previous_sum_ips + previous_sum_ips2 + previous_ag
  # filter_all(all_vars(!is.na(.))) %>% 
 #  filter(across(everything(), ~ !is.na(.)))
 
-### get RS with beetle population predictors: ----------------------------------
-# Fit a global model with all beetle dynamic predictors---------------------------------
+###### get RS with beetle population predictors: ----------------------------------
 # add predictors one by one
 simple_model <- glm.nb(wind_beetle ~ previous_sum_ips +
                          previous_sum_ips2 +
@@ -596,7 +713,7 @@ model_set_sorted[1:30]
 # 50 2.374 -0.0009695                                    0.5638  -2.558e-05  5 -756.273 1522.7  1.79  0.051
 # 19 1.850            -0.050400                          0.3435              4 -757.401 1522.9  2.00  0.045
 
-## Manually create models -------------------------------------------------------
+###### Manually create models -------------------------------------------------------
 
 m1 <- glm.nb(wind_beetle ~ previous_sum_ips,
                        na.action = 'na.fail',
@@ -653,9 +770,7 @@ plot(allEffects(m6))
 
 
 
-# RS harvest =================================================================
-### get RS with beetle population predictors: ----------------------------------
-# Fit a global model with all beetle dynamic predictors---------------------------------
+######  RS harvest =================================================================
 # add predictors one by one
 simple_model <- glm.nb(harvest ~ previous_sum_ips +
                          previous_sum_ips2 +
@@ -701,7 +816,7 @@ plot(allEffects(m1))
 
 
 
-# RS explore both climatic and beetles  variables -----------------------------------------------------
+######  RS explore both climatic and beetles  variables -----------------------------------------------------
 
 
 
@@ -775,7 +890,7 @@ RS_global_model3 <- glm.nb(wind_beetle ~ #sum_ips_scaled     +
 
 
 
-# examine best models from dredge -----------------------------------------------
+###### ## examine best models from dredge -----------------------------------------------
 
 # Assuming you want to examine model 207 from your model set
 i = 2
@@ -910,17 +1025,8 @@ r2(m_beetle_interaction1.1)
 
 windows()
 
-pairs(sum_ips ~ veg_tmp + veg_prcp + spei3 + spei1 + spei12 + spei24, dat_lag, panel = panel.smooth)
+pairs(sum_ips ~ veg_tmp  + annual_spei6, dat_lag, panel = panel.smooth)
 
-pairs(sum_ips ~ veg_tmp + spei3 + vpd + elev + spruce_1986 + previous_sum_ips+population_growth, dat_lag, panel = panel.smooth)
-
-pairs(sum_ips ~ previous_sum_ips+population_growth + veg_tmp + previous_veg_tmp , dat_lag, panel = panel.smooth)
-
-pairs(sum_ips ~ previous_sum_ips+ population_growth + veg_tmp + previous_veg_tmp + previous_spei3 , dat_lag, panel = panel.smooth)
-
-pairs(sum_ips ~ previous_sum_ips+ population_growth + veg_tmp + previous_veg_tmp + population_growth2, dat_lag, panel = panel.smooth)
-
-hist(dat_lag$population_growth)
 
 
 # make glm - beetle sums by temp and spei
@@ -934,76 +1040,24 @@ ggplot(aes(x = veg_tmp,
   geom_smooth()
 
 p.sm <- dat_lag_scaled %>% 
-  ggplot(aes(x = sm,
+  ggplot(aes(x = annual_spei6,
              y = sum_ips)) +
   geom_point()  +
   geom_smooth()
 
 
-p.vpd <-dat_lag_scaled %>% 
-  ggplot(aes(x = vpd,
-             y = sum_ips)) +
-  geom_point()  +
-  geom_smooth()
 
 
-ggarrange(p.sm, p.veg_tmp, p.vpd, nrow = 1)
+ggarrange(p.sm, p.veg_tmp, nrow = 1)
 
 ## test GLM (no random effects) on raw data ---------------------------------------------------------------------
-m1.poly <- glm(sum_ips ~ I(veg_tmp^15), dat_lag, family = 'poisson')
-m1.exp <- glm(sum_ips ~ log(veg_tmp), dat_lag, family = 'poisson')
-
-
-
-# see in plot
-# New data for prediction
-newdata_poly <- data.frame(veg_tmp = seq(min(dat_lag$veg_tmp), max(dat_lag$veg_tmp), length.out = 100))
-newdata_poly$predicted <- predict(m1.poly, newdata = newdata_poly, type = "response")
-
-
-ggplot(dat_lag, aes(x = veg_tmp, y = sum_ips)) +
-  geom_point() +
-  geom_line(data = newdata_poly, aes(x = veg_tmp, y = predicted), color = "red",  lwd = 1.5) +
-  geom_line(data = newdata_exp, aes(x = veg_tmp, y = predicted), color = "green", lwd = 1.5) +
-  geom_smooth()
-
-
-
-# New data for prediction: exponential
-newdata_exp <- data.frame(veg_tmp = seq(min(dat_lag$veg_tmp), max(dat_lag$veg_tmp), length.out = 100))
-
-# Generate predictions
-newdata_exp$predicted <- predict(m1.exp, newdata = newdata_exp, type = "response")
-ggplot(dat_lag, aes(x = veg_tmp, y = sum_ips)) +
-  geom_point() +
-  geom_line(data = newdata_exp, aes(x = veg_tmp, y = predicted), color = "red")
-
 
 ## Fit the GLMM with negative binomial distribution & random effects ------------
+m0     <- glm.nb(sum_ips ~ 1, data = dat_lag, link = log)
 m1.exp <- glm.nb(sum_ips ~ veg_tmp, data = dat_lag, link = log)
-newdata_exp <- data.frame(veg_tmp = seq(min(dat_lag$veg_tmp), max(dat_lag$veg_tmp), length.out = 100))
-newdata_exp$predicted <- predict(m1.exp, newdata = newdata_exp, type = "response")
-
-ggplot(dat_lag, aes(x = veg_tmp, y = sum_ips)) +
-  geom_point() +
-  geom_line(data = newdata_exp, aes(x = veg_tmp, y = predicted), color = "red")
-
-
 m1.poly2 <- glm.nb(sum_ips ~ poly(veg_tmp, 2), data = dat_lag)
-newdata_poly <- data.frame(veg_tmp = seq(min(dat_lag$veg_tmp), max(dat_lag$veg_tmp), length.out = 100))
-newdata_poly$predicted <- predict(m1.poly, newdata = newdata_poly, type = "response")
-
-
 m1.poly3 <- glm.nb(sum_ips ~ poly(veg_tmp, 3), data = dat_lag)
 m1.sc.poly2 <- glm.nb(adjusted_variable  ~ poly(veg_tmp, 2), data = dat_lag_scaled)
-newdata_poly <- data.frame(veg_tmp = seq(min(dat_lag_scaled$veg_tmp), max(dat_lag_scaled$veg_tmp), length.out = 100))
-newdata_poly$predicted <- predict(m1.sc.poly2, newdata = newdata_poly, type = "response")
-
-
-ggplot(dat_lag_scaled, aes(x = veg_tmp, y = adjusted_variable)) +
-  geom_point() +
-  geom_line(data = newdata_poly, aes(x = veg_tmp, y = predicted), color = "blue")
-
 
 AIC(m1, m1.exp, m1.poly2, m1.poly3)
 simulationOutput <- simulateResiduals(fittedModel = m1.sc.poly2, plot = T)
@@ -1033,15 +1087,6 @@ plot(m4, page = 1)
 # elev                   4.470761  1        2.114417
 # remained_spruce       12.135460  1        3.483599
 
-test <- lm(elev ~ poly(veg_tmp,3), dat_lag_scaled_complete)
-plot(allEffects(test))
-
-plot(elev ~ veg_tmp, dat_lag_scaled_complete)
-
-t1 <- lm(elev ~ veg_tmp, dat_lag_scaled_complete)
-t2 <- lm(elev ~ poly(veg_tmp,2), dat_lag_scaled_complete)
-t3 <- lm(elev ~ poly(veg_tmp,3), dat_lag_scaled_complete)
-
 
 # Adjusted R-squared
 summary(t1)$adj.r.squared
@@ -1066,14 +1111,11 @@ dat_lag_scaled_complete <- dat_lag_scaled %>%
 
 
 # Fit a global model with all potential predictors
-global_model <- glmer(sum_ips ~ poly(veg_tmp,2) + veg_prcp + spei + sm + 
-                         #vpd + 
+global_model <- glmer(sum_ips ~ poly(veg_tmp,2) + annual_spei6 + 
                          previous_sum_ips + 
-                         #spruce_1986 + 
-                         elev + remained_spruce + (1 | pairID/trapID), 
+                         (1 | pairID/trapID), 
                       data = dat_lag_scaled_complete,
                       na.action = 'na.fail',
-                    
                       family = negative.binomial(2.8588)
                       #, na.action = "na.omit"  "na.fail"
                       )
@@ -2846,1307 +2888,6 @@ vif_model_peak <- lm(peak_doy ~ conif_prop + elev +
 # get a vector of vif values
 (vif_model_peak <- car::vif(vif_model_peak))
 
-
-
-# find distribution:-Negative binomial -----------------------------------------
-
-
-# Families in bam: --------------------------------------------------------------
-# ocat for ordered categorical data.
-# tw for Tweedie distributed data, when the power parameter relating the variance to the mean is to be estimated.
-# nb for negative binomial data when the theta parameter is to be estimated.
-# betar for proportions data on (0,1) when the binomial is not appropriate.
-# scat scaled t for heavy tailed data that would otherwise be modelled as Gaussian.
-# ziP for zero inflated Poisson data, when the zero inflation rate depends simply on the Poisson mean.
-m <- gam(sum_ips ~ 1,dat_fin, family = nb )  
-appraise(m)
-
-# m <- gam(sum_ips ~ 1,dat_fin, family = nb(link = 'log' ))  
-# appraise(m)
-# 
- m <- gam(sum_ips ~ 1,dat_fin, family = nb(link = 'log', theta = 1.82 ))  
- appraise(m)
-
- 
- m <- gam(sum_ips ~ 1,dat_fin, family = nb(link = 'log', theta = NULL ))  
- appraise(m)
- 
- # tested several thetas, the 1.8 is teh best 
-
-
-
-
-
-
-# Do drivers importance change over time? --------------
-# ChatGPT: 
-# To test if the importance of drivers explaining variability changed over time: 
-# perform temporal interaction analysis - 
-# allows to assess whether the relationships between the drivers 
-# and the response variable differ across different time periods. 
-
-# check hist of conts
-windows()
-hist(dat_fin$sum_ips)
-median(dat_fin$sum_ips)
-mean(dat_fin$sum_ips)
-sd(dat_fin$sum_ips)
-
-
-ggplot(dat_fin, aes(x = sum_ips)) + 
-  geom_histogram(colour = 4, fill = "white", 
-                 bins = 2000)
-
-# check for 0
-dat_fin %>% 
-  filter(sum_ips == 0) %>% # 0 no!! 
-  distinct(falsto_name)
-# no 0
-
-fitdistr(dat_fin$sum_ips, 'Poisson')
-
-
-# poisson: mean and variance are equal
-# negative-binomial - allows for overdispersion (variance excees the mean) - not my case
-
-glm1 <- glm(sum_ips ~ conif_prop + elev + sm_z + veg_tmp_z +(1 | trapID),
-            data = dat_fin,
-            family = "poisson",
-            na.action = "na.fail")
-
-# Explore teh model summary:
-summary(glm1)
-anova(glm1)
-MuMIn::dredge(glm1)
-
-# explore residuals
-windows()
-simulationOutput <- DHARMa::simulateResiduals(fittedModel = glm1, 
-                                              plot = T)
-# Yay! the QQ plot shows that we have some issues, residuals are not independent
-
-# test if the residuals are the same as random?
-testDispersion(simulationOutput)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-# try the prediction using the raw data --------------------------------
-
-M <- list(c(1, 0.5), NA)
-m_counts <- bam(fangmenge ~
-                  s(spei1, k = 80)+ # + # drought
-                  s(TMED, k = 30) +  # temperature
-                  #s(veg_prcp, k = 20) +         # precip 
-                  s(freq, k = 50), #+         # spruce %
-                #s(month, k =7) +  # months
-                #s(year, k = 8) +  # year
-                #s(x, y, k = 10, bs = 'ds', m = c(1, 0.5)) + # 2D smooth
-                #ti(TMED, year, bs = c('cc', 'tp'), k = c(15, 6)) +
-                #ti(x, y, TMED, d = c(2,1), bs = c('ds','tp'), 
-                #   m = M, k = c(25, 10)) +
-                #ti(x, y, veg_prcp, d = c(2,1), bs = c('ds','tp'),
-                #  m = M, k = c(25, 15)) +
-                #ti(x, y, spei, d = c(2,1), bs = c('ds','tp'),
-                #  m = M, k = c(25, 15)),
-                data = ips_sum2, 
-                method = 'fREML',
-                #select = TRUE,
-                #family = Tweedie(p=1.1, link = power(0)),
-                tw(link = "log"),
-                # knots = knots,
-                nthreads = 4, 
-                discrete = TRUE)
-
-# check for k: edf and k should be balanced ~ 1
-m_counts
-summary(m_counts)
-k.check(m_counts)
-plot(m_counts, plot.all = T)
-
-
-windows()
-appraise(m_counts, method = 'simulate')
-plot(m5, page = 1, shade = T)
-
-gam.check(m5)
-k.check(m5)
-summary(m5)
-
-
-
-
-
-
-# Example Chat GPT: how to analyze data?
-
-
-dat_fin_sub <- dat_fin %>%
-  filter(pairID %in% c('Weismain','Pressig', 'Weidenberg' )) #%>% 
-
-
-
-dat_fin_sub %>%   print()
-  
-
-
-# Check correlation -------------------------------------------------------
-
-cor(dat_fin[,c('sm', 'vpd', 'veg_tmp', 'spei')], use = "complete.obs")
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-# Test XY relationship pattern: observed vs modelled data ------------------
-#
-
-
-# add temporal autocorrelation  
-dat_fin$AR.START <-dat_fin$year==2015
-
-
-# What distribution? ---------------------------------------------
-# https://towardsdatascience.com/insurance-risk-pricing-tweedie-approach-1d71207268fc
-# poisson - only for counts
-# gamma - does not take zero values
-# tweedie - can handle zeros values
-
-
-# useful to scale values?
-scale(c(1:5))
-
-
-
-# Get model with gam: ------------------------------------------------
-
-# get predictors following VIF:
-# > vif_model_ips
-# conif_prop       elev       sm_z      veg_tmp_z 
-# 1.117820   1.230662   3.025474   3.025275 
-
-
-M <- list(c(1, 0.5), NA)
-
-m0 <- gam(sum_ips ~ 1
-          ,
-          method = 'fREML',
-          data = dat_fin,
-          family = nb,
-          nthreads = 4
-)
-
-appraise(m0)
-
-
-dat_fin$sum_ips
-
-# Work on this one!!!!!
-
-# add predictors: counst from previous year
-
-m1 <- bam(sum_ips ~ s(year, k = 5) +
-            s(veg_tmp) +
-            te(year, veg_tmp),
-          data = dat_fin,
-          family = nb(theta = NULL))
-
-
-m2 <- bam(sum_ips ~ s(year, k = 5) +
-            s(veg_tmp),# +
-  #          te(year, veg_tmp),
-          data = dat_fin,
-          family = nb(theta = NULL))
-
-m3 <- bam(sum_ips ~ s(year, k = 5) +
-            s(veg_tmp) +
-          s(x, y),  
-          data = dat_fin,
-          family = nb(theta = NULL))
-
-m4 <- bam(sum_ips ~ s(year, k = 5) +
-            s(veg_tmp, k = 15) +
-            s(x, y),  
-          data = dat_fin,
-          family = nb(theta = NULL))
-
-m5 <- bam(sum_ips ~ s(year, k = 5) +
-            veg_tmp +
-            s(x, y),  
-          data = dat_fin,
-          family = nb(theta = NULL))
-
-m6 <- bam(sum_ips ~ s(year, k = 5) +
-            veg_tmp +
-            s(trapID, bs = 're') +  # account for how much individual trap contributes to the total variation
-            s(x, y),  
-          data = dat_fin,
-          family = nb(theta = 5))
-
-m7 <- bam(sum_ips ~ s(year, k = 5) +
-            veg_tmp +
-            s(trapID, bs = 're') +  # account for how much individual trap contributes to the total variation
-            s(pairID, bs = 're') +   # trap pair
-            s(x, y),  
-          data = dat_fin,
-          family = nb(theta = 3))
-
-m8 <- bam(sum_ips ~ s(year, k = 5) +
-            veg_tmp + 
-            s(elev) +
-            s(trapID, bs = 're') +  # account for how much individual trap contributes to the total variation
-            s(pairID, bs = 're') +   # trap pair
-            s(x, y),  
-          data = dat_fin,
-          family = nb(theta = 3))
-
-m9 <- bam(sum_ips ~ s(year, k = 5) +
-            veg_tmp + 
-            elev +
-            s(trapID, bs = 're') +  # random effect for individual traps, repeatedly measured
-            s(pairID, bs = 're') +   # random effect for trap pair 
-            s(x, y),  
-          data = dat_fin,
-          family = nb(theta = 3))
-
-m10 <- bam(sum_ips ~ s(year, k = 5) +
-            veg_tmp + 
-            elev +
-             spei +# spei does not improve the model
-            s(trapID, bs = 're') +  # random effect for individual traps, repeatedly measured
-            s(pairID, bs = 're') +   # random effect for trap pair 
-            s(x, y),  
-          data = dat_fin,
-          family = nb(theta = 3))
-
-m11 <- bam(sum_ips ~ s(year, k = 5) +
-             conif_prop +
-             veg_tmp + 
-             elev +
-             s(trapID, bs = 're') +  
-             s(pairID, bs = 're') +    
-             s(x, y),  
-           data = dat_fin,
-           family = nb(theta = 3))
-
-
-m12 <- bam(sum_ips ~ s(year, k = 5) +
-            s(conif_prop) +              # does not improve, neither as s(), or linear term
-             veg_tmp + 
-             elev +
-             s(trapID, bs = 're') +  
-             s(pairID, bs = 're') +   
-             s(x, y),  
-           data = dat_fin,
-           family = nb(theta = 3))
-
-m13 <- bam(sum_ips ~ s(year, k = 5) +
-             s(conif_prop) +              # does not improve, neither as s(), or linear term
-             veg_tmp +
-             s(veg_tmp, by = year, k = 7) +   # changes in temperature over year
-             elev +
-             s(trapID, bs = 're') +  
-             s(pairID, bs = 're') +   
-             s(x, y),  
-           data = dat_fin,
-           family = nb(theta = 3))
-
-
-m14 <- bam(sum_ips ~ s(year, k = 5) +
-             s(conif_prop) +              # does not improve, neither as s(), or linear term
-             veg_tmp +
-             s(year, by = veg_tmp, k = 7) +   # changes year over temperature 
-             elev +
-             s(trapID, bs = 're') +  
-             s(pairID, bs = 're') +   
-             s(x, y),  
-           data = dat_fin,
-           family = nb(theta = 3))
-
-
-
-appraise(m14)
-AIC(m1, m2, m3, m4, m5, m6, m7, m8, m9, m10, m11, m12, m13,m14)
-summary(m14)
-plot(m14, page = 1, shade= T)
-
-
-
-
-# cap outliers! ----------------------------------------------------------------
-lower_cap <- quantile(dat_fin$sum_ips, 0.01)
-upper_cap <- quantile(dat_fin$sum_ips, 0.99)
-
-
-dat_fin_cap <- dat_fin 
-
-dat_fin_cap$sum_ips <- ifelse(dat_fin_cap$sum_ips < lower_cap, lower_cap, 
-                   ifelse(dat_fin_cap$sum_ips > upper_cap, upper_cap, dat_fin_cap$sum_ips))
-
-
-hist(dat_fin_cap$sum_ips)
-hist(dat_fin$sum_ips)
-
-
-# try with capped values
-m1 <- bam(sum_ips ~ s(year, k = 7) +
-            veg_tmp + 
-            elev +
-            s(trapID, bs = 're') +  # random effect for individual traps, repeatedly measured
-            s(pairID, bs = 're') +   # random effect for trap pair 
-            s(x, y, k =120),  
-          data = dat_fin_cap,
-          family = nb(theta = 3))
-
-appraise(m1)
-summary(m1)
-k.check(m1)
-
-
-
-
-
-
-
-
-m1 <- bam(sum_ips ~ 
-           s(conif_prop, k = 9) +
-            s(elev, k = 9) +
-           
-            s(spei, k = 8) +
-            s(vpd, k = 8) +
-           # s(vpd_z, k = 8) +
-            s(spei_z, k = 8) +
-
-            s(veg_tmp_z, k = 8) +
-            s(veg_tmp, k = 8) +
-           # s(sm_z, k = 8) +
-            s(sm, k = 8) +
-            #s(veg_tmp, k = 20) +
-            s(year, k = 5) +
-
-            s(pairID, bs = "re") +
-            s(trapID, bs = "re") +
-            s(x,y, k = 20, bs = 'ds') +
-            ti(x,y, year, d = c(2,1), 
-               bs = c('ds','tp'), m = M,
-               k = c(20, 5)) +
-            ti(x,y, veg_tmp, d = c(2,1), 
-               bs = c('ds','tp'), m = M,
-               k = c(20, 5)),
-          method = 'fREML',
-          #AR.start=AR.START, 
-          #rho=0.15,
-         data = dat_fin,
-         family = nb(theta = NULL),  # mean = 22000, sd = 19000
-         nthreads = 4
-)
-appraise(m1)
-summary(m1)
-
-plot(m1, pages = 1, scheme = 2, shade = TRUE, scale = 0)
-
-
-
-# use step-wise model selection ------------------------------------------------
-library(MASS)
-
-dat.small <- droplevels(dat_fin[dat_fin$trapID %in% 
-                                  levels(dat_fin$trapID)[10:30],]) #len prvych par kombinacii site & zone
-
-
-full.model <- bam(sum_ips ~ 
-                          s(conif_prop, k = 9) +
-                          s(elev, k = 9) +
-                          
-                          s(sm, k = 8) +
-                          s(sm_z, k = 8),## +
-                          
-                  #  s(spei, k = 8) +
-                   # s(spei_z, k = 8) +
-                    
-                     #     s(vpd, k = 8) +
-                    #      s(vpd_z, k = 8) +
-                         
-                   #       s(veg_tmp, k = 8) +
-                   #       s(veg_tmp_z, k = 8) +
-                    
-                   #       s(year, k = 6) +
-                  
-                   #       s(pairID, bs = "re") +
-                   #       s(trapID, bs = "re") +
-                  #        s(x,y, k = 20, bs = 'ds') +
-                   #       ti(x,y, year, d = c(2,1), 
-                  #           bs = c('ds','tp'), m = M,
-                  #           k = c(20, 5))          ,
-                        method = 'fREML',
-                  AR.start=AR.START, 
-                  rho=0.15,
-                        data = dat.small,
-                        family = negative.binomial(theta = 1.8),  # mean = 22000, sd = 19000
-                        nthreads = 4
-)
-
-
-step.model <- stepAIC(full.model, 
-                      scope = list(upper = full.model, lower = ~1), 
-                      direction = "both", 
-                      trace = TRUE)
-
-
-
-
-
-
-
-
-
-
-# Example stacklk
-df <- data.frame(my_sum = rnbinom(24, 1, 0.1),
-                 pairID = rep(c('a','b', 'c', 'd'),each =6),
-                # trap_n = rep(c(1,2),12),
-                # trap_ID = paste(pairID, trap_n),
-                 year = 1:6,
-                 x = c(1, 9,110,119,210,219,310,319)*100,
-                 y = c(1,9,1,9,1,9,1,9)*100)
-
-traps <- matrix(c(
-  100, 100,
-  900, 900,
-  11000, 100,
-  11900, 900,
-  21000, 100,
-  21900, 900,
-  31000, 100,
-  31900, 900
-), ncol = 2, byrow = TRUE)
-(df)
-
-m1 <- gam(my_sum ~ s(vars1) + s(vars2) + 
-            s(year) +
-            s(pairID, bs = 're') +
-            s(pairID, trap_n, bs = 're'),
-            data = rats, method = 'REML')
-
-
-
-
-
-
-
-m3 <- bam(sum_ips ~ 
-            s(conif_prop, k = 9) +
-            s(elev, k = 9) +
-            s(sm, k = 8) +
-            s(spei, k = 8) +
-            s(trapID, bs = 're') +
-          
-            #s(trapID, pairID, bs = 're') +
-            #s(vpd, k = 8) +
-            # s(vpd_z, k = 8) +
-            # s(spei, k = 8) +
-            #s(veg_tmp_z, k = 8) +
-            # s(veg_tmp, k = 8) +
-            # s(sm_z, k = 8) +
-            #s(veg_tmp, k = 20) +
-            s(year, k = 5) +
-            s(x,y, k = 20, bs = 'ds') +
-            ti(x,y, year, d = c(2,1), 
-               bs = c('ds','tp'), m = M,
-               k = c(20, 5))
-          ,
-          AR.start=AR.START, 
-          rho=0.15,
-          method = 'fREML',
-          data = dat_fin,
-          family = nb,
-          nthreads = 4
-)
-
-
-
-
-
-
-interaction(c('a','b','d'), c('x', 'y', 'z'))
-
-
-
-
-
-
-
-m2 <- gam(sum_ips ~ 
-            s(conif_prop, k = 9) +
-            s(elev, k = 9),
-          data = dat_fin,
-          family = nb
-)
-
-m3 <- gam(sum_ips ~ 
-            s(conif_prop, k = 9) +
-            s(elev, k = 9) +
-            s(sm_z),
-          data = dat_fin,
-          family = nb
-)
-appraise(m1)
-gam.check(m3)
-AIC(m, m1)
-
-
-
-M <- list(c(1, 0.5), NA)
-m2 <- bam(
-  sum_ips ~ #spei_cat + s(year, by=spei_cat, k=6)  +
-    s(conif_prop       , k = 5) +
-    s(elev, k = 5) +  # elevation
-    s(sm_z, k = 5)  +         # soils moisture
-    s(veg_tmp_z, k = 5) +  # temperature
-    s(year, k = 5)+  # year
-    s(trapID, k = 5, bs = 're'),# + #random effect of trap
-    # s(pairID, k = 5, bs = 're') + #random effect of trap pairs
-    # s(
-    #   x,
-    #   y,
-    #   k = 5,
-    #   bs = 'ds',
-    #   m = c(1, 0.5)
-    # ) + # 2D smooth
-    # #ti(veg_tmp_z, year, bs = c('cc', 'tp'), k = c(15, 6)) +
-    # ti(
-    #   x,
-    #   y,
-    #   veg_tmp_z,
-    #   d = c(2, 1),
-    #   bs = c('ds', 'tp'),
-    #   m = M,
-    #   k = c(20, 10)
-    # ) +
-    # ti(
-    #   x,
-    #   y,
-    #   year,
-    #   d = c(2, 1),
-    #   bs = c('ds', 'tp'),
-    #   m = M,
-    #   k = c(20, 5)
-    # ),#  +
-  # ti(
-  #   x,
-  #   y,
-  #   spei1,
-  #   d = c(2, 1),
-  #   bs = c('ds', 'tp'),
-  #   m = M,
-  #   k = c(20, 15)
-  # )    ,
-  data = dat_fin,
-  AR.start=AR.START, 
-  rho=0.15,
-  method = 'fREML',
-  family = nb,
- # knots = knots_month ,
-  nthreads = 4,
-  discrete = TRUE
-)
-
-
-
-
-appraise(m2)
-
-
-
-
-
-
-
-
-
-
-
-
-
-# standardize teh data: Z score: mean = 0, sd = 1 ---------------
-# will ths lead to better fit? no!
-ips_standard <- ips_sum2 %>% 
-  mutate(ips_sum = as.vector(scale(ips_sum)),
-         veg_prcp = as.vector(scale(veg_prcp)),
-         TMED = as.vector(scale(TMED)),
-         spei1 = as.vector(scale(spei1)),
-         spei3 = as.vector(scale(spei3)),
-         spei6 = as.vector(scale(spei6)),
-         spei12 = as.vector(scale(spei12)),
-         freq = as.vector(scale(freq) )) # %>% 
-# filter(!is.na) %>% 
-#complete.cases(.) %>% 
-as.data.frame()
-
-
-
-# Test gams with standardized data: ----------------------
-m1 <- gam(ips_sum ~ s(spei3),
-          data = ips_standard,
-          family = tw(link = 'log') )
-
-### GAM standardized y value: -------------
-m1 <- gam(ips_sum_stan ~ s(spei3), 
-          data = ips_sum2)
-
-length(fitted(m1))
-length(ips_standard$spei3)
-
-appraise(m1)
-
-ggplot(ips_sum2, aes(x = spei3, y = ips_sum_stan)) +
-  geom_point(alpha=0.7)+
-  geom_line(colour = "red", size = 1.2,
-            aes(y = fitted(m1))) #+
-geom_line(colour = "blue", size = 1.2,
-          aes(y = fitted(m1))) +
-  theme_bw()
-
-
-# GAM: raw sums: monthly sums -------------------------------------------
-knots_month <- list(doy = c(4.2, 10.5))
-
-M <- list(c(1, 0.5), NA)
-m7 <- bam(
-  ips_sum ~ #spei_cat + s(year, by=spei_cat, k=6)  +
-    s(spei1, k = 5)  + # drought
-    s(spei3, k = 5) +
-    s(spei6, k = 5) +
-    s(spei12, k = 5) +
-    s(TMED, k = 5) +  # temperature
-    s(veg_prcp, k = 5)  +         # precip
-    s(freq, k = 5) +         # conif %
-    s(sp_prop) +             # spruce proportion
-    s(month, k = 7, bs = 'cc') +  # months
-    s(year, k = 5)+  # year
-    s(globalid, k = 5, bs = 're') + #random effect of trap
-    # s(monsto_name, k = 5, bs = 're') + #random effect of trap pairs
-    s(
-      x,
-      y,
-      k = 5,
-      bs = 'ds',
-      m = c(1, 0.5)
-    ) + # 2D smooth
-    ti(TMED, year, bs = c('cc', 'tp'), k = c(15, 6)) +
-    ti(
-      x,
-      y,
-      TMED,
-      d = c(2, 1),
-      bs = c('ds', 'tp'),
-      m = M,
-      k = c(20, 10)
-    ) +
-    ti(
-      x,
-      y,
-      year,
-      d = c(2, 1),
-      bs = c('ds', 'tp'),
-      m = M,
-      k = c(20, 5)
-    ),#  +
-  # ti(
-  #   x,
-  #   y,
-  #   spei1,
-  #   d = c(2, 1),
-  #   bs = c('ds', 'tp'),
-  #   m = M,
-  #   k = c(20, 15)
-  # )    ,
-  data = ips_sum2,
-  AR.start=AR.START, 
-  rho=0.15,
-  method = 'fREML',
-  family = tw(),
-  knots = knots_month ,
-  nthreads = 4,
-  discrete = TRUE
-)
-
-
-
-
-
-
-
-ips_sum2_sept <- filter(ips_sum2, month < 10)
-
-M <- list(c(1, 0.5), NA)
-m_rem10 <- bam(
-  ips_sum ~ #spei_cat + s(year, by=spei_cat, k=6)  +
-    s(spei1, k = 5)  + # drought
-    s(spei3, k = 5) +
-    s(spei6, k = 5) +
-    s(spei12, k = 5) +
-    s(TMED, k = 20) +  # temperature
-    s(veg_prcp, k = 20)  +         # precip
-    s(month, k = 6, bs = 'cc') +  # months
-    s(year, k = 5)+  # year
-    s(globalid, k = 5, bs = 're') + #random effect of trap
-    s(monsto_name, k = 5, bs = 're') + #random effect of trap pairs
-    s(freq, k = 5) +         # conif %
-    s(sp_prop) +             # spruce proportion
-    s(
-      x,
-      y,
-      k = 5,
-      bs = 'ds',
-      m = c(1, 0.5)
-    ) + # 2D smooth
-    ti(TMED, year, bs = c('cc', 'tp'), k = c(15, 6)) +
-    ti(
-      x,
-      y,
-      TMED,
-      d = c(2, 1),
-      bs = c('ds', 'tp'),
-      m = M,
-      k = c(20, 10)
-    ) +
-    ti(
-      x,
-      y,
-      year,
-      d = c(2, 1),
-      bs = c('ds', 'tp'),
-      m = M,
-      k = c(20, 5)
-    ),#  +
-  # ti(
-  #   x,
-  #   y,
-  #   spei1,
-  #   d = c(2, 1),
-  #   bs = c('ds', 'tp'),
-  #   m = M,
-  #   k = c(20, 15)
-  # )    ,
-  data = ips_sum2_sept,
-  AR.start=AR.START, 
-  rho=0.15,
-  method = 'fREML',
-  family = tw(),
-  knots = knots_month ,
-  nthreads = 4,
-  discrete = TRUE
-)
-
-
-plot(m_rem10, page = 1, scale = 0, shade = T)
-summary(m_rem10)
-appraise(m_rem10)
-
-draw(m_rem10, select = 13)  # xy
-
-
-
-# m7.noAR --------------------------------------------------------
-m7.noAR <- bam(
-  ips_sum ~ #spei_cat + s(year, by=spei_cat, k=6)  +
-    s(spei1, k = 5)  + # drought
-    s(spei3, k = 5) +
-    s(spei6, k = 5) +
-    s(spei12, k = 5) +
-    s(TMED, k = 5) +  # temperature
-    s(veg_prcp, k = 5)  +         # precip
-    s(freq, k = 5) +         # conif %
-    s(sp_prop) +             # spruce proportion
-    s(month, k = 7, bs = 'cc') +  # months
-    s(year, k = 5)+  # year
-    s(globalid, k = 5, bs = 're') + #random effect of trap
-    s(monsto_name, k = 5, bs = 're') + #random effect of trap pairs
-    s(
-      x,
-      y,
-      k = 5,
-      bs = 'ds',
-      m = c(1, 0.5)
-    ) + # 2D smooth
-    ti(TMED, year, bs = c('cc', 'tp'), k = c(15, 6)) +
-    ti(
-      x,
-      y,
-      TMED,
-      d = c(2, 1),
-      bs = c('ds', 'tp'),
-      m = M,
-      k = c(20, 10)
-    ) +
-    ti(
-      x,
-      y,
-      veg_prcp,
-      d = c(2, 1),
-      bs = c('ds', 'tp'),
-      m = M,
-      k = c(20, 15)
-    )  +
-    ti(
-      x,
-      y,
-      spei1,
-      d = c(2, 1),
-      bs = c('ds', 'tp'),
-      m = M,
-      k = c(20, 15)
-    ),
-  data = ips_sum2,
-  #AR.start=AR.START, 
-  # rho=0.15,
-  method = 'fREML',
-  family = tw(),
-  knots = knots_month ,
-  nthreads = 4,
-  discrete = TRUE
-)
-
-# AIC --------------------------------------------
-AIC(m7, m7.noAR )
-
-
-# m7.sub <- bam(
-#   ips_sum ~ #spei_cat + s(year, by=spei_cat, k=6)  +
-#     #s(spei1, k = 5)  + # drought
-#     s(spei3, k = 5) +
-#     s(spei6, k = 5) +
-#     s(spei12, k = 5) +
-#     s(TMED, k = 5) +  # temperature
-#     #s(veg_prcp, k = 5)  +         # precip
-#     s(freq, k = 5) +         # conif %
-#    # s(sp_prop) +             # spruce proportion
-#     s(month, k = 7, bs = 'cc') +  # months
-#     s(year, k = 5)+  # year
-#     s(globalid, k = 5, bs = 're') + #random effect of trap
-#     s(monsto_name, k = 5, bs = 're') + #random effect of trap pairs
-#     s(
-#       x,
-#       y,
-#       k = 5,
-#       bs = 'ds',
-#       m = c(1, 0.5)
-#     ) + # 2D smooth
-#     ti(TMED, year, bs = c('cc', 'tp'), k = c(15, 6)) +
-#     ti(
-#       x,
-#       y,
-#       TMED,
-#       d = c(2, 1),
-#       bs = c('ds', 'tp'),
-#       m = M,
-#       k = c(20, 10)
-#     ) +
-#     ti(
-#       x,
-#       y,
-#       veg_prcp,
-#       d = c(2, 1),
-#       bs = c('ds', 'tp'),
-#       m = M,
-#       k = c(20, 15)
-#     )  +
-#     ti(
-#       x,
-#       y,
-#       spei1,
-#       d = c(2, 1),
-#       bs = c('ds', 'tp'),
-#       m = M,
-#       k = c(20, 15)
-#     ) +
-#     ti(
-#       x,
-#       y,
-#       ,
-#       d = c(2, 1),
-#       bs = c('ds', 'tp'),
-#       m = M,
-#       k = c(20, 15)
-#     )
-#   data = ips_sum2,
-#   AR.start=AR.START, 
-#   rho=0.15,
-#   method = 'fREML',
-#   family = tw(),
-#   knots = knots_month ,
-#   nthreads = 4,
-#   discrete = TRUE
-# )
-# 
-# 
-# 
-
-
-
-# compare more complex with less complex model: which one is better?
-AIC(m7, m7.sub)
-
-
-windows()
-summary(m7)
-plot(m7, page = 1, shade = T, scale = 0)
-appraise(m7)
-gratia::draw(m7, select = 13)
-
-windows()
-gratia::draw(m7, select = 16)
-
-
-# Make some spatial predictions: !!! does not work!!!
-ips_sum3 <- ungroup(ips_sum2)
-exp_data <- with(ungroup(ips_sum3),
-                 expand.grid(month = 6,
-                             #DoY = 180,
-                             year = seq(min(year), max(year), by = 1),
-                             x  = seq(min(x), max(x), length = 100),
-                             y  = seq(min(y), max(y), length = 100)))
-head(exp_data)
-fit <- predict(m7, exp_data)
-
-hist(predict(m7$fitted.values))
-save.image("models.RData")
-
-
-
-
-# Test small model:
-m8 <- gam(ips_sum ~ 
-            s(month, k = 6) +
-            s(year, k = 7) + 
-            s(TMED) + 
-            s(x,y),
-          data = ips_sum2,
-          family = tw()
-)
-
-summary(m8)
-appraise(m8)
-
-
-m.logy <- bam(
-  log_sum  ~
-    s(month, k = 6, bs = 'cc') +
-    #s(year, k = 7) +
-    s(TMED, k = 80) +
-    s(veg_prcp, k = 10) +
-    s(spei1, k = 5)  + # drought
-    s(spei3, k = 5) +
-    s(spei6, k = 5) +
-    s(spei12, k = 5) +
-    s(freq, k = 5) +         # conif %
-    s(sp_prop) +             # spruce proportion
-    s(globalid, k = 5, bs = 're') + #random effect of trap
-    s(monsto_name, k = 5, bs = 're') + #random effect of trap pairs
-    s(x, y), # +
-  data = ips_sum2,
-  AR.start = AR.START,
-  rho = 0.15,
-  family = scat,
-  method = 'fREML',
-  knots = knots_month ,
-  nthreads = 4,
-  discrete = TRUE
-)
-
-appraise(m.logy)
-summary(m.logy)
-plot(m.logy, page = 1, )
-
-AIC(m7, m.logy)
-
-
-
-# 
-exp_data <- with(ips_sum2,
-                 expand.grid(month = 6,
-                             #DoY = 180,
-                             year = seq(min(year), max(year), by = 1),
-                             x  = seq(min(x), max(x), length = 100),
-                             y  = seq(min(y), max(y), length = 100)))
-
-exp_data<- exp_data %>% 
-  left_join(ips_sum2)
-
-
-exp_data %>% 
-  filter(!is.na(globalid))
-
-head(exp_data)
-fit <- predict(m8, exp_data)
-
-
-
-# with function -----------------------------------------------------
-str(mtcars)
-
-a2 <- with(mtcars, mpg[cyl == 8  &  disp > 350])
-
-
-
-
-# Make maps: --------------------------------------------------------------
-library(tidyverse)
-# ips_sum2 <- ips_sum2 %>% 
-#   mutate(x = as.numeric(round(x/100000, 2)),
-#          y = as.numeric(round(y/100000, 2)))#
-
-ips_sum2 <- ips_sum2  %>% 
-  mutate(across(c(x, y), round, digits = 4))
-
-
-ggplot(ips_sum2, 
-       aes(x = x, y = y)) +
-  geom_raster(aes(fill = ips_sum/10000))  + 
-  facet_wrap(~ year_month, ncol = 3) # +
-scale_fill_viridis(name = expression(degree*C), option = 'plasma',
-                   na.value = 'transparent') +
-  coord_quickmap() +
-  theme(legend.position = 'top', legend.key.width = unit(2, 'cm'))
-
-
-# Galveston
-ggplot(pred.g, 
-       aes(x = LONGITUDE, 
-           y = LATITUDE)) +
-  geom_raster(aes(fill = Fitted)) + facet_wrap(~ YEAR, ncol = 12) +
-  scale_fill_viridis(name = expression(degree*C), option = 'plasma',
-                     na.value = 'transparent') +
-  coord_quickmap() +
-  theme(legend.position = 'top', legend.key.width = unit(2, 'cm'))
-
-# test for Tweedie family ---------------------------- --------------------
-
-library(mgcv)
-set.seed(3)
-n<-400
-## Simulate data...
-dat <- gamSim(1,n=n,dist="poisson",scale=.2)
-dat$y <- rTweedie(exp(dat$f),p=1.3,phi=.5) ## Tweedie response
-
-## Fit a fixed p Tweedie, with wrong link ...
-b <- gam(y~s(x0)+s(x1)+s(x2)+s(x3),family=Tweedie(1.25,power(.1)),
-         data=dat)
-plot(b,pages=1)
-print(b)
-gam.check(b)
-gratia::appraise(b, method = 'simulate')
-
-## Same by approximate REML...
-b1 <- gam(y~s(x0)+s(x1)+s(x2)+s(x3),family=Tweedie(1.25,power(.1)),
-          data=dat,method="REML")
-plot(b1,pages=1)
-print(b1)
-gam.check(b1)
-gratia::appraise(b1, method = 'simulate')
-
-
-## estimate p as part of fitting
-
-b2 <- gam(y~s(x0)+s(x1)+s(x2)+s(x3),family=tw(),
-          data=dat,method="REML")
-plot(b2,pages=1)
-print(b2)
-
-gam.check(b2)
-gratia::appraise(b2, method = 'simulate')
-
-
-rm(dat)
-
-
-# check the k-values: bases functions:
-gam.check(m6)
-summary(m6)
-# plot to have all 4 plots on one page
-
-plot(m5, pages = 1, scheme = 2, shade = TRUE) # , scale = 0
-
-#summary(m4)
-gratia::appraise(m5, method = 'simulate')
-
-# check the k value:
-
-gratia::draw(m5, scales = 'free')
-
-plot(m5, pages = 1, scheme = 2, shade = TRUE)
-
-
-
-
-anova(m1, m2, m3)
-AIC(m1, m2, m3)
-
-
-
-
-# ---------------------------------------------------------
-# test gam models on full catch dataset 
-# --------------------------------------------------------
-
-m1 <- gam(fangmenge ~ s(doy, k = 100, bs = 'cc') +
-            s(year, k = 8), #+
-          #s(globalid, k = 300),
-          data = ips,
-          family = tw(),    #Tweedie(1.25,power(.1)),#nb, #twlss,
-          methods = 'REML')
-windows()
-plot(m1, shade = TRUE)
-
-# plot to have all 4 plots n one page
-gratia::appraise(m1, method = 'simulate')
-
-# check the k value:
-gam.check(m1)
-
-
-knots <- list(doy = c(0.5, 365.5))
-m2 <- bam(fangmenge ~ s(doy, k = 110, bs = 'cc') +
-            s(year, k = 8), # +
-          data = ips,
-          family = tw(),    #Tweedie(1.25,power(.1)),#nb, #twlss,
-          method = 'fREML', # fast REL 
-          knots = knots,    # start and end of the cyclic term 'cc'
-          nthreads = c(4, 1), 
-          discrete = TRUE)
-
-
-
-m3 <- bam(fangmenge ~ s(doy, k = 110, bs = 'cc') +
-            s(year, k = 8) +
-            s(globalid, bs = 're'),  # 're' = random effect
-          data = ips,
-          family = tw(),    #Tweedie(1.25,power(.1)),#nb, #twlss,
-          method = 'fREML', # fast REL 
-          knots = knots,    # start and end of the cyclic term 'cc'
-          nthreads = c(4, 1), 
-          discrete = TRUE)
-
-# plot to have all 4 plots n one page
-gratia::appraise(m3, method = 'simulate')
-
-# check the k value:
-gam.check(m3)
-plot(m3)
-gratia::draw(m3, scales = 'free')
-
-plot(m3, pages = 1, scheme = 2, shade = TRUE)
-
-anova(m1, m2, m3)
-AIC(m1, m2, m3)
-
-
-
-
-# GAM with medians counts per month ---------------------------------------
-
-# still have a lot of wiggliness over the ips catch data:
-# maybe I can use the monthly medians?
-# will fit with the temperature data as well
-
-# 
-ips_med <- ips %>% 
-  group_by(year, month, globalid) %>% 
-  summarize(fang_med = median(fangmenge, na.rm = T)) %>% 
-  filter(year> 2014) %>% 
-  as.data.frame()
-
-
-str(ips_med)
-
-# 
-knots_month <- list(doy = c(3.5, 10.5))
-m_med1 <- gam(fang_med ~ s(month, k = 7, bs = 'cc'),#+
-              # s(year, k = 7), #+
-              #s(globalid, k = 300),
-              knots = knots_month,    # start and end of the cyclic term 'cc'
-              data = ips_med,
-              family = tw(),    #Tweedie(1.25,power(.1)),#nb, #twlss,
-              methods = 'REML')
-
-gam.check(m_med1)
-
-
-
-
-windows()
-plot(m_med1, shade = TRUE)
-
-# plot to have all 4 plots n one page
-gratia::appraise(m_med1, method = 'simulate')
-
-# check the k value:
-gam.check(m_med1)
-
-
-
-m_med2 <- bam(fang_med ~ s(month, k = 7, bs = 'cc')+
-                s(year, k = 7), # +
-              data = ips_med,
-              family = tw(),    #Tweedie(1.25,power(.1)),#nb, #twlss,
-              method = 'fREML', # fast REL 
-              knots = knots_month,    # start and end of the cyclic term 'cc'
-              nthreads = c(4, 1), 
-              discrete = TRUE)
-
-
-
-m_med3 <- bam(fang_med ~ s(month, k = 7, bs = 'cc')+
-                s(year, k = 7) +
-                s(globalid, k = 500, bs = 're'),  # 're' = random effect
-              data = ips_med,
-              family = nb, #,nb,#tw(),    #Tweedie(1.25,power(.1)),#nb, #twlss,
-              method = 'fREML', # fast REL 
-              knots = knots_month,    # start and end of the cyclic term 'cc'
-              nthreads = c(4, 1), 
-              discrete = TRUE)
-
-# plot to have all 4 plots n one page
-gratia::appraise(m_med3, method = 'simulate')
-gam.check(m_med3, pages = 1)
-
-summary(m_med3)
-
-# check the k value:
-gratia::draw(m_med3, scales = 'free')
-
-plot(m3, pages = 1, scheme = 2, shade = TRUE)
-
-anova(m1, m2, m3)
-AIC(m1, m2, m3)
 
 
 
