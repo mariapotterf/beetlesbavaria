@@ -361,6 +361,7 @@ print(sorted_correlations)
 
 # skip columns if not for scaling
 skip_col <- c('trapID', 'pairID', "x", "y", 'year', 'spei1','spei3','spei6', 'spei12','spei24',
+              'sum_ips', 'previous_sum_ips', 'previous_sum_ips2',
               'annual_spei1','annual_spei3','annual_spei6','annual_spei12','annual_spei24',
               'previous_spei1', 'previous_spei3', 'previous_spei12', 'previous_spei24' )
 
@@ -386,6 +387,9 @@ dat_lag_scaled_complete <- dat_lag_scaled %>%
   dplyr::select(-anom_wind_beetle) %>% 
   na.omit()
 #  filter(across(everything(), ~ !is.na(.)))
+
+
+
 
 
 
@@ -415,6 +419,14 @@ cols_doy_peak <- c('peak_diff', "trapID" , "pairID","x"  ,  "y" , "year",
                           "previous_sum_ips" , "previous_sum_ips2",  "previous_peak_diff1", "previous_peak_diff2", "previous_veg_tmp",
                           "previous_spring_tmp",
                           "previous_veg_prcp",   "population_growth",   "population_growth2" )
+
+
+windows()
+hist(dat_lag_scaled)
+
+
+
+
 
 
 
@@ -1051,68 +1063,185 @@ p.sm <- dat_lag_scaled %>%
 ggarrange(p.sm, p.veg_tmp, nrow = 1)
 
 ## test GLM (no random effects) on raw data ---------------------------------------------------------------------
+# select only columns of interests, to not remove more data as necessary 
+# eg lagged values, that were NA
+dd <- dat_lag_scaled %>% 
+  dplyr::select(c(sum_ips, veg_tmp,annual_spei6, pairID, trapID, year))
+# althought, using 
 
 ## Fit the GLMM with negative binomial distribution & random effects ------------
-m0     <- glm.nb(sum_ips ~ 1, data = dat_lag, link = log)
-m1.exp <- glm.nb(sum_ips ~ veg_tmp, data = dat_lag, link = log)
-m1.poly2 <- glm.nb(sum_ips ~ poly(veg_tmp, 2), data = dat_lag)
-m1.poly3 <- glm.nb(sum_ips ~ poly(veg_tmp, 3), data = dat_lag)
-m1.sc.poly2 <- glm.nb(adjusted_variable  ~ poly(veg_tmp, 2), data = dat_lag_scaled)
+m1.null     <- glm.nb(sum_ips ~ 1, data = dd, link = log)
+m1 <- glm.nb(sum_ips ~ veg_tmp, data = dd, link = log)
+m1.poly2 <- glm.nb(sum_ips ~ poly(veg_tmp, 2), data = dat_lag_scaled_complete)
+m1.poly3 <- glm.nb(sum_ips ~ poly(veg_tmp, 3), data = dat_lag_scaled_complete)
+m1.sc.poly2 <- glm.nb(sum_ips  ~ poly(veg_tmp, 2), data = dat_lag_scaled_complete)
 
-AIC(m1, m1.exp, m1.poly2, m1.poly3)
-simulationOutput <- simulateResiduals(fittedModel = m1.sc.poly2, plot = T)
-testOutliers(m1.sc.poly2, type = 'bootstrap') 
+AICc(m1.null, m1,  m1.poly2, m1.poly3)
+simulationOutput <- simulateResiduals(fittedModel = m1, plot = T)
+testOutliers(m1.exp, type = 'bootstrap') 
+
+# always use complete observations! remove NAs
+m2 <- glm.nb(sum_ips ~ veg_tmp + annual_spei6, dat_lag_scaled_complete)
+m2.2 <- glm.nb(sum_ips ~ veg_tmp + poly(annual_spei6,2), dat_lag_scaled_complete)
+m3 <- glm.nb(sum_ips ~ poly(veg_tmp,2) + poly(annual_spei6,2), dat_lag_scaled_complete)
+#m4 <- glm.nb(sum_ips ~ I(veg_tmp) + previous_sum_ips   , dat_lag_scaled_complete)
+summary(m3)
+plot(m2, page = 1)
+
+AICc( m1, m2,m2.2, m3)
+BIC(  m1, m2,m2.2, m3)
+
+AIC(m2.complete, m2.missing)
+
+simulationOutput <- simulateResiduals(fittedModel = m2.2, plot = T)
+testOutliers(m2, type = 'bootstrap') 
 
 
-m2 <- glm.nb(sum_ips ~ veg_tmp + spei, dat_lag)
-m3 <- glm.nb(sum_ips ~ veg_tmp + veg_tmp_z, dat_lag)
-m4 <- glm.nb(sum_ips ~ I(veg_tmp) + previous_sum_ips   , dat_lag)
-summary(m4)
-plot(m4, page = 1)
+# Get the coefficients
+coef(m2)
+r2(m2)
+summary(m2)
+
+plot(allEffects(m2)) ## m2 is teh best!!! compare with glmer.nb
+
+
+
+
+
+
+
+m.glmer1 <- glmer(sum_ips ~ veg_tmp + annual_spei6 + 
+                                   (1 | pairID/trapID), 
+                                 data = dat_lag_scaled_complete,
+                                 na.action = 'na.fail',
+                                 family = negative.binomial(2.8588)
+)
+
+# simplify nesting design
+m.glmer2 <- glmer(sum_ips ~ veg_tmp + annual_spei6 + 
+                    (1 | pairID), 
+                  data = dat_lag_scaled_complete,
+                  na.action = 'na.fail',
+                  family = negative.binomial(2.8588))
+
+
+AICc(m2,m.glmer2)
+
+simulationOutput <- simulateResiduals(fittedModel = m.glmer2, plot = T)
+testOutliers(m.glmer2, type = 'bootstrap') 
+
+
+# Variance Inflation Factor for fixed effects
+vif_values <- vif(m.glmer2)
+
+(vif_values)
+
+# Autocorrelation check
+acf(residuals(m.glmer2))
+acf(residuals(m2))
+
+#$ homoscedascity check
+plot(fitted(m.glmer2), residuals(m.glmer2))
+abline(h = 0, col = "red")
+
+
+# normality of random effects
+qqnorm(ranef(m.glmer2)$pairID)
+qqline(ranef(m.glmer2)$pairID)
+
+# Get the coefficients
+coef(m2)
+r2(m2.2)
+summary(m2)
+
+plot(allEffects(m.glmer2)) ## m2 is teh best!!! compare with glmer.nb
+windows()
+plot(allEffects(m2))
+
+summary(m.glmer2)
+summary(m2)
+
+# compare models:
+summary(m2)
+
+anova(m2)
+
+
+
+# go for simpler model, as the m2 model do not violetae model assumptions
+
+
+# PLOT Prepare data for veg_tmp -----------------------
+dat_veg_tmp <- data.frame(veg_tmp = seq(min(dat_lag_scaled_complete$veg_tmp), max(dat_lag_scaled_complete$veg_tmp), length.out = 100),
+                          annual_spei6 = mean(dat_lag_scaled_complete$annual_spei6, na.rm = TRUE))
+
+# Predictions for veg_tmp
+dat_veg_tmp$predicted <- predict(m2, newdata = dat_veg_tmp, type = "response")
+ci_veg_tmp <- predict(m2, newdata = dat_veg_tmp, type = "response", se.fit = TRUE)
+dat_veg_tmp$upper <- ci_veg_tmp$fit + 1.96 * ci_veg_tmp$se.fit
+dat_veg_tmp$lower <- ci_veg_tmp$fit - 1.96 * ci_veg_tmp$se.fit
+
+# Prepare data for annual_spei6
+dat_annual_spei6 <- data.frame(annual_spei6 = seq(min(dat_lag_scaled_complete$annual_spei6), 
+                                                  max(dat_lag_scaled_complete$annual_spei6), length.out = 100),
+                               veg_tmp = mean(dat_lag_scaled_complete$veg_tmp, na.rm = TRUE))
+
+# Predictions for annual_spei6
+dat_annual_spei6$predicted <- predict(m2, newdata = dat_annual_spei6, type = "response")
+ci_annual_spei6 <- predict(m2, newdata = dat_annual_spei6, type = "response", se.fit = TRUE)
+dat_annual_spei6$upper <- ci_annual_spei6$fit + 1.96 * ci_annual_spei6$se.fit
+dat_annual_spei6$lower <- ci_annual_spei6$fit - 1.96 * ci_annual_spei6$se.fit
+
+# Plot for veg_tmp
+
+
+# Define a common theme
+common_theme <- theme_minimal(base_size = 11) +
+  theme(panel.background = element_blank(),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.border = element_rect(color = "black", fill = NA),
+        axis.text.x = element_text(color = "black"),
+        plot.margin = margin(5.5, 5.5, 5.5, 5.5))
+
+# Apply the common theme to the plots
+# Plot for veg_tmp with orange color
+p1 <- ggplot(dat_veg_tmp, aes(x = veg_tmp, y = predicted)) +
+  geom_line(color = "#E69F00") +
+  geom_ribbon(aes(ymin = lower, ymax = upper), fill = "#E69F00", alpha = 0.2) +
+  labs(title = "a)", x = "Temperature (veg_tmp)", y = "Sum Beetles/year") +
+  common_theme +
+  theme(aspect.ratio=1) +
+  #coord_fixed(ratio = 1) + # Set aspect ratio to 1
+  ylim(13000, 35000)
+
+# Plot for annual_spei6 with blue color
+p2 <- ggplot(dat_annual_spei6, aes(x = annual_spei6, y = predicted)) +
+  geom_line(color = "#0072B2") +
+  geom_ribbon(aes(ymin = lower, ymax = upper), fill = "#0072B2", alpha = 0.2) +
+  labs(title = "b)", x = "SPEI (annual_spei6)", y = " ") +
+  common_theme +
+  #coord_fixed(ratio = 1) + # Set aspect ratio to 1
+  theme(axis.text.y = element_blank(), axis.ticks.y = element_blank(),
+        aspect.ratio=1) +
+  ylim(13000, 35000)
+
+# Arrange the plots side by side
+ggarrange(p1, p2, ncol = 2, nrow = 1, widths = c(1, 1))
+
+
+summary(m2)
 
 
 
 
 # DREDGE Variable selection, IPS vs environment  ------------------------------------------------------
 
-# > (vif_model_ips <- car::vif(global_model))
-# GVIF Df GVIF^(1/(2*Df))
-# poly(veg_tmp, 2)          20.319964  2        2.123150
-# veg_prcp                   4.010201  1        2.002549
-# spei                   2.112911  1        1.453586
-# sm                     1.463907  1        1.209920
-# vpd                   16.692437  1        4.085638
-# previous_sum_ips  1.092418  1        1.045188
-# spruce_1986           13.205598  1        3.633951
-# elev                   4.470761  1        2.114417
-# remained_spruce       12.135460  1        3.483599
 
-
-# Adjusted R-squared
-summary(t1)$adj.r.squared
-summary(t2)$adj.r.squared
-summary(t3)$adj.r.squared
-
-# AIC and BIC
-AIC(t1, t2, t3)
-BIC(t1, t2, t3)
-
-# F-test for model comparison
-anova(t1, t2, t3)
-
-
-
-
-# keep only complete cases 
-dat_lag_scaled_complete <- dat_lag_scaled %>%
-  na.omit()
-  #filter_all(all_vars(!is.na(.)))
-  
 
 
 # Fit a global model with all potential predictors
 global_model <- glmer(sum_ips ~ poly(veg_tmp,2) + annual_spei6 + 
-                         previous_sum_ips + 
                          (1 | pairID/trapID), 
                       data = dat_lag_scaled_complete,
                       na.action = 'na.fail',
@@ -1171,8 +1300,9 @@ plot(allEffects(selected_model[[1]]))
 
 ### GLMM - ips counts with random effect and nb ----------------------------------------
 
+m3 <- glmer.nb(sum_ips ~ veg_tmp + annual_spei6 + (1|pairID) + (1|trapID), data = dat_lag_scaled)
 
-m3 <- glmer.nb(sum_ips ~ veg_tmp + spei + (1|pairID) + (1|trapID), data = dat_lag)
+m3.0 <- glmer.nb(sum_ips ~ annual_spei6  + (1|year), data = dat_lag_scaled)
 
 m3.1 <- glmer.nb(sum_ips ~ veg_tmp  + (1|trapID), data = dat_lag)
 
