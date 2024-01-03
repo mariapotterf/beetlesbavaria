@@ -51,6 +51,11 @@ df_clim <- fread('outTable/xy_clim_DWD.csv')
 df_spei <- fread('outTable/xy_spei_veg_season_DWD.csv')
 df_spei_months <- fread('outTable/xy_spei_all_DWD.csv')
 
+anyNA(df_spei_months)
+
+#df_clim$falsto_name <- iconv(df_clim$falsto_name, from = "UTF-8", to = "")
+
+#View(df_spei)
 
 # make a plot with speis
 df_spei_months <- df_spei_months %>% 
@@ -83,20 +88,6 @@ df_spei_months <- df_spei_months %>%
   mutate(season = case_when(month %in% 3:10 ~ 'veg_season',
                             month %in% c(1,2,11,12) ~ 'winter'))# %>% 
 
-#p.spei <- 
-  df_spei_months %>%
-    filter(year %in% 2015:2021) %>% 
- # group_by(season, year, scale) %>% 
-   # summarize(med = median(spei)) %>% 
- ggplot(aes(x = as.factor(year), 
-             y = spei,
-            fill = season)) +
-    geom_hline(yintercept = 0, lty = 'dashed', col = "grey10") +
-    geom_boxplot() +
-    xlab('') +
-    theme(axis.text=element_text(angle = 90, vjust = 0, hjust = 0.5),
-          legend.position = 'bottom') + #, hjust=0.5
-    facet_grid(.~scale)
 
   
   mean.prcp = mean(df_clim[,year %in% 1980:2015]$prcp)
@@ -127,9 +118,6 @@ df_spei_months <- df_spei_months %>%
   
   
 
-# set correct encoding for german characters
-Encoding(df_clim$falsto_name)        <-  "UTF-8"
-Encoding(df_spei$falsto_name)        <-  "UTF-8"
 
 # Get geo data: elevation, slope, roughness...
 xy_topo      <- vect(paste(myPath, outFolder, "xy_3035_topo.gpkg", sep = "/"), 
@@ -142,6 +130,10 @@ xy_df <- data.frame(x = sf::st_coordinates(xy_sf_expand)[,"X"],
                     falsto_name = xy_sf_expand$falsto_name,
                     globalid =    xy_sf_expand$globalid,
                     year =    xy_sf_expand$year)
+
+# remove special characters
+xy_df$falsto_name <- gsub("[^A-Za-z0-9_]", "", xy_df$falsto_name) # Remove all non-alphanumeric characters except underscore
+xy_topo$falsto_name <- gsub("[^A-Za-z0-9_]", "", xy_topo$falsto_name) # Remove all non-alphanumeric characters except underscore
 
 
 # get the final subset of globalids
@@ -238,25 +230,30 @@ df_predictors <-
     dplyr::select(-c(globalid))
  
 
-
+unique(df_predictors$falsto_name)
 # Clean up dependent variables------------------------------
 
 # add also my dependent variables: 
 # [1] sum beetles 
+ips.year.sum <- ips.year.sum %>% 
+  mutate(falsto_name = gsub("[^A-Za-z0-9_]", "", falsto_name)) 
 
 # [2] Max Diff DOY
 max.diff.doy <- max.diff.doy %>% 
+  mutate(falsto_name = gsub("[^A-Za-z0-9_]", "", falsto_name)) %>%  # Remove all non-alphanumeric characters except underscore
   dplyr::select(c(falsto_name, year, doy, diff)) %>% 
   dplyr::rename(peak_doy = doy,
                 peak_diff = diff)
 
 # [3] Agg DOY !!!!: only 1080 rows!!! some traps dis not reached the values in time; need to increase threshold or somehow account for this!
 ips.aggreg <- ips.aggreg %>% 
+  mutate(falsto_name = gsub("[^A-Za-z0-9_]", "", falsto_name)) %>% 
   dplyr::select(c(falsto_name, year, doy)) %>% 
   dplyr::rename(agg_doy = doy )
   
 # [4] avg number of beetles per trap/catch
 ips.year.avg <- ips.year.avg %>% 
+  mutate(falsto_name = gsub("[^A-Za-z0-9_]", "", falsto_name)) %>% 
   ungroup(.) %>% 
   dplyr::select(c(year, falsto_name, avg_beetles_trap))
 
@@ -272,7 +269,7 @@ dat_fin <-
   mutate(pairID = factor(pairID),
          trapID = factor(trapID))
 
-
+unique(dat_fin$trapID)
 
 # Plots -------------------------------------------------------------------
 
