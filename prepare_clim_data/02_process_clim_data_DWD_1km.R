@@ -48,8 +48,6 @@ my_spei_scales = c(1,3, 6, 12, 24) #c(3,12) # 3,6,12
 # filter through years: >1980 ------------------------
 # 
 pattern_years = "^19(8[0-9]|9[0-9])|^20(0[0-9]|1[0-9]|2[0-1]).*\\.gz$"
-pattern_2008 = "^20(0[8-9]|1[0-9]|2[0-1]).*\\.gz$"
-pattern_2020 = "^20(2[0-1]).*\\.gz$"
 
 
 
@@ -65,8 +63,15 @@ xy        <- vect(paste(myPath, outFolder, "xy_fin_3035.gpkg", sep = "/")) # rea
 xy2       <- terra::project(xy, "EPSG:31467")  # coordinate system from the DWD data: Germany
 xy_latlng <- terra::project(xy2, 
                             "+proj=longlat +datum=WGS84 +ellps=WGS84 +towgs84=0,0,0")
+unique(xy2$falsto_name)
 
-Encoding(xy2$falsto_name)        <-  "UTF-8"
+# remove all special characters
+xy2$falsto_name <- gsub("[^A-Za-z0-9_]", "", xy2$falsto_name) # Remove all non-alphanumeric characters except underscore
+xy_latlng$falsto_name <- gsub("[^A-Za-z0-9_]", "", xy_latlng$falsto_name) # Remove all non-alphanumeric characters except underscore
+
+length(unique(xy_latlng$falsto_name))
+
+#Encoding(xy2$falsto_name)        <-  "UTF-8"
 
 # get lat long values
 crds(xy_latlng)
@@ -148,29 +153,12 @@ for (i in vars){
 
 }
 
-
-# too high PRCP!!! check locations:
-# Lalling_2   
-# Blaichach_1
-#St.Martin_1
-
-
-
 # merge data together to calculate SPEI -----------------------------
 df_prec <- result_list$precip
 df_temp <- result_list$temp
 
 df_prec <- df_prec %>% 
   rename(prcp = vals)
-
-df_prec %>% 
-  filter(falsto_name == 'Blaichach_1') %>% 
-  group_by(year) %>% 
-  summarize(prcp = sum(prcp)) %>% 
-  #View()
-  ggplot(aes(y = prcp,
-             x = year)) +
-  geom_line()
 
 df_temp <- df_temp %>% 
   rename(tmp = vals) %>% 
@@ -181,26 +169,6 @@ hist(df_temp$tmp)
 hist(df_prec$prcp)
 
 
-
-df_temp %>% 
-  ggplot(aes(x = year ,
-             y = tmp)) +
-  geom_point(alpha = 0.5)
-  
-
-
-df_prec %>% 
-  ggplot(aes(x = year ,
-             y = prcp)) +
-  geom_point(alpha = 0.5)  +
-  geom_smooth(aes(x = year ,
-                  y = prcp),
-              color = 'black')
-
-
-nrow(df_temp)
-nrow(df_prec)
-
 # merge data
 df_clim <- df_prec %>% 
   left_join(df_temp, by = join_by(globalid, falsto_name, month, year, ID)) %>% 
@@ -210,6 +178,8 @@ df_clim <- df_prec %>%
 
 summary(df_clim)
 (df_clim)
+
+unique(df_clim$falsto_name)
 
 
 # get SPEI -----------------------------------------------------------
@@ -234,19 +204,6 @@ df1 <-
 df_ls <- df1 %>%
   #group_by(falsto_name, .add = TRUE) %>% 
   group_split(falsto_name)
-
-test <- df_ls[[102]]  # 102 Offenhausen_2    
-
-
-# convert df to time series
-df.ts <- test %>% 
-  arrange(year, month) %>% 
-  ts(df, start = c(1980, 01), end=c(2021,12), frequency=12) 
-
-# extract just values from SPEI object:
-dd = spei(df.ts[,'BAL'], scale = 12)$fitted
-dd2 = spei(df.ts[,'BAL'], scale = 12)
-plot(dd2)
 
 #df.ts$SPEI <- dd
 
