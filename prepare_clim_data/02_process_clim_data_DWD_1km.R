@@ -17,7 +17,7 @@
 
 # Beguería S. (2017) SPEIbase: R code used in generating the SPEI global database, doi:10.5281/zenodo.834462.
 
-
+gc()
 rm(list = ls())
 
 
@@ -34,7 +34,7 @@ library(data.table)
 library(tidyr)
 library(rgdal)
 library(raster)
-library(tidyverse)
+#library(tidyverse)
 library(lubridate)
 #library(patchwork)
 library(fasterize)
@@ -43,151 +43,118 @@ library(terra)
 library(R.utils)
 library(stringr)
 
-# Get spatial data for each trap
-xy        <- vect(paste(myPath, outFolder, "/xy_all_3035.gpkg", sep = "/"), 
-                  layer = 'xy_all_3035') # read trap location
-# Convert data to DWD coordinate system:
-xy2 <- terra::project(xy, "EPSG:31467")  # coordinate system from the DWD data: Germany
-
-
-# filter through years: >1970 ------------------------
+# SPEI scales:
+my_spei_scales = c(1,3, 6, 12, 24) #c(3,12) # 3,6,12
+# filter through years: >1980 ------------------------
 # 
 pattern_years = "^19(8[0-9]|9[0-9])|^20(0[0-9]|1[0-9]|2[0-1]).*\\.gz$"
-# List files: from 2000 onwards:
-i = 'temp'
-file_ls <- list.files(paste(myPath, "rawData/DeutschWetter", i, sep = "/"),
-                      #pattern = "^20.*\\.gz$",
-                     # pattern = "^20(1[3-9]|2[01]).*\\.gz$", # match 2013-2019, or 2020-2021
-                      pattern = pattern_years,#"^19(8[0-9]|9[0-9])|^20(0[0-9]|1[0-9]|2[01]).*\\.gz$",
-                      #pattern = "*\\.gz$",
-                      recursive=TRUE)
+pattern_2008 = "^20(0[8-9]|1[0-9]|2[0-1]).*\\.gz$"
+pattern_2020 = "^20(2[0-1]).*\\.gz$"
 
-(file_ls)
-# additional filtering to keep only files with '.gz' at the end
-file_ls_gz_only <- file_ls[grepl("\\.gz$", file_ls)]
-(file_ls_gz_only)
 
-s <- c("jan/193501asc.gz", "feb/188209asc.gz", "mar/197501asc.gz", "apr/202107asc.gz")
 
-f_1970 <- function(x, y = 1970) {
-  first4 <- substr(x, 8, 11)
-  print(first4)
-  #year <- as.numeric(first4)
- # year >= y
+# Get spatial data for each trap
+#xy        <- vect(paste(myPath, outFolder, "/xy_all_3035.gpkg", sep = "/"), 
+#                  layer = 'xy_all_3035') # read trap location
+# Convert data to DWD coordinate system:
+#xy2 <- terra::project(xy, "EPSG:31467")  # coordinate system from the DWD data: Germany
+ 
+
+# Get spatial data for each trap
+xy        <- vect(paste(myPath, outFolder, "xy_fin_3035.gpkg", sep = "/")) # read trap location
+xy2       <- terra::project(xy, "EPSG:31467")  # coordinate system from the DWD data: Germany
+xy_latlng <- terra::project(xy2, 
+                            "+proj=longlat +datum=WGS84 +ellps=WGS84 +towgs84=0,0,0")
+
+Encoding(xy2$falsto_name)        <-  "UTF-8"
+
+# get lat long values
+crds(xy_latlng)
+
+# keep only usnique localtions - 158 traps
+xy2 <- xy2[, !names(xy2) %in% c('year', 'id')] # remove columns
+xy2 <- unique(xy2)
+
+# get xy as wgs for teh SPEI
+xy2$x_wgs <- crds(xy_latlng)[,'x']
+xy2$y_wgs <- crds(xy_latlng)[,'y']
+
+# select just one location to inspect it for SPEI
+
+# Find rows where falsto_name is "Offenhausen_2"
+# Find rows where falsto_name is either "Offenhausen_2" or "Blaichach_1"
+#rows_to_keep <- which(xy2$falsto_name == "Offenhausen_2" | xy2$falsto_name == "Blaichach_1")
+
+# Subset those rows and keep only 'year' and 'id' columns
+#xy2 <- xy2[rows_to_keep, ]
+
+
+
+
+
+
+
+
+
+# stack rasters firsst??
+process_raster_file <- function(file, path_prefix, var) {
+  ras_path <- paste(path_prefix, var, file, sep = "/")
+  unzipped_path <- gsub(".gz$", "", ras_path)
+  
+  # Check if unzipped file already exists
+  if (!file.exists(unzipped_path)) {
+    R.utils::gunzip(ras_path, remove = FALSE, overwrite = TRUE)
+  }
+  
+  z <- rast(unzipped_path)
+  crs(z) <- "EPSG:31467"
+  return(z)
 }
 
-file_ls[f_1970(file_ls)]
-
-# List all files > than 2000
-# C:\Users\ge45lep\Documents\2022_BarkBeetles_Bavaria\rawData\DeutschWetter
-
-# Get vector of folders by climate variable
-vars <- c('temp', 'precip')
 
 result_list <- list()
+vars <- c("temp", "precip")  # Assuming these are your variables
 
 for (i in vars){
-  #print(i)
- # vars = 'temp'
-  
-  # List files: from 2000 onwards:
   file_ls <- list.files(paste(myPath, "rawData/DeutschWetter", i, sep = "/"),
-                            #pattern = "^20.*\\.gz$",
-                            #pattern = "^20(1[3-9]|2[01]).*\\.gz$",
-                        #pattern = "^19(8[0-9]|9[0-9])|^20(0[0-9]|1[0-9]|2[01]).*\\.gz$",
-                        pattern = pattern_years,
-                            recursive=TRUE)
+                        pattern = pattern_years,#"^19(8[0-9]|9[0-9])|^20(0[0-9]|1[0-9]|2[01]).*\\.gz$",
+                        recursive=TRUE)
   
+  #(file_ls)
+  # additional filtering to keep only files with '.gz' at the end
   file_ls_gz_only <- file_ls[grepl("\\.gz$", file_ls)]
- # (file_ls_gz_only)
+  #(file_ls_gz_only)
   
-  
-  # read in rasters 
-  ras_ls <- lapply(file_ls_gz_only, function(file, ...) {
-    # set raster file
-    print(file)
-    #file = '11_Nov'
-    ras_path = paste(myPath, 'rawData/DeutschWetter',  i, file , sep = "/")
-    
-   # print(file)
-    # unzip file
-    R.utils::gunzip(ras_path, remove = FALSE, overwrite = T)
-    
-    # read file
-    ff <- gsub(".gz$", "", ras_path)
-    # read raster
-    z <- rast(ff)
-    # set the reference system:
-    crs(z) <- "EPSG:31467"
-    return(z)
-    
-  })
-  
-  #plot(ras_ls[[50]])
-  
-  # extract raster values to a vector:
-  ext_ls <- lapply(ras_ls, function(ras) {
-    df <- terra::extract(ras, xy2)
-    return(df)
-  })
-  
-  
-  # merge data by columns:
-  df <- do.call(cbind, ext_ls)
-  
-  # add the globalID XY data 
-  out.df <- cbind(df, 
-                  globalid           = xy$globalid,
-                  falsto_name        = xy$falsto_name       )
-  #names(out.df)
-  
-  # remove IDs: every raster column now has each ID column: duplicated
-  out.df <- out.df %>% 
-    dplyr::select(-c(ID))
-  
-  
-  # organize the data in time: 
-  # codng for the names XXXXYY - XXXX - year, YY - month
-  # data represent the monthly mean values at the grid of 1km2
-  # 
-  # Mean of the monthly averaged mean daily air temperature in 2 m height above ground, 
-  # given in 1/10 °C.
-  names(out.df) <- gsub('asc', '', names(out.df))
-  names(out.df)
-  
-  
-  # Convert to long format
-  long.df <- 
-    out.df %>% 
-    pivot_longer(!c(globalid, falsto_name), names_to = "time", values_to = 'vals') %>% 
-    # split year and months
-    mutate(month = as.numeric(str_sub(time, -2, -1)),  # extract last two characters (month)
-           year = as.numeric(str_sub(time, 1,4))) %>%      # extract first 4 characters (year)  
+  # Assuming file_ls contains the paths of all raster files
+   ras_ls <- lapply(file_ls_gz_only, process_raster_file, path_prefix = paste(myPath, "rawData/DeutschWetter", sep = "/"), var = i)
+
+  ras_stack <- rast(ras_ls)
+
+  #ras_stack <- process_raster_file(file_ls)  # Stack all rasters
+  extracted_values <- terra::extract(ras_stack, xy2)
+
+  extracted_values$falsto_name <- xy2$falsto_name
+  extracted_values$globalid    <- xy2$globalid
+
+  names(extracted_values) <- gsub('asc', '', names(extracted_values))
+
+  long.df <- extracted_values %>%
+    pivot_longer(!c(ID, globalid, falsto_name), names_to = "time", values_to = 'vals') %>%
+    mutate(month = as.numeric(str_sub(time, -2, -1)),
+           year = as.numeric(str_sub(time, 1, 4))) %>%
     dplyr::select(-c(time))
-  
-  
-  # Export file
-  outName = paste0('xy_dwd_', i, '.csv')
-  #print(paste(myPath, outTable, outName, sep = '/'))
-  fwrite(long.df, paste(myPath, outTable, outName, sep = '/'))
-  
-  # Store the dataframe in the result list
+
   result_list[[i]] <- long.df
+
 }
 
 
+# too high PRCP!!! check locations:
+# Lalling_2   
+# Blaichach_1
+#St.Martin_1
 
-# # For single file: ---------------------------
-# Get rasters in .asc format:
-# ras_path = paste(myPath, 'rawData/DeutschWetter/01_Jan',  "200501asc.gz", sep = "/")
-# R.utils::gunzip(ras_path, remove=FALSE)
-# ff <- gsub(".gz$", "", ras_path)
-# z <- rast(ff)
-# # set the reference system:
-# crs(z) <- "EPSG:31467"
-# 
-# plot(z)
-# plot(xy2, add = T)
+
 
 # merge data together to calculate SPEI -----------------------------
 df_prec <- result_list$precip
@@ -196,9 +163,39 @@ df_temp <- result_list$temp
 df_prec <- df_prec %>% 
   rename(prcp = vals)
 
+df_prec %>% 
+  filter(falsto_name == 'Blaichach_1') %>% 
+  group_by(year) %>% 
+  summarize(prcp = sum(prcp)) %>% 
+  #View()
+  ggplot(aes(y = prcp,
+             x = year)) +
+  geom_line()
+
 df_temp <- df_temp %>% 
   rename(tmp = vals) %>% 
   mutate(tmp = tmp/10)  # correct for DWD recording: values are in 1/10 C format
+
+
+hist(df_temp$tmp)
+hist(df_prec$prcp)
+
+
+
+df_temp %>% 
+  ggplot(aes(x = year ,
+             y = tmp)) +
+  geom_point(alpha = 0.5)
+  
+
+
+df_prec %>% 
+  ggplot(aes(x = year ,
+             y = prcp)) +
+  geom_point(alpha = 0.5)  +
+  geom_smooth(aes(x = year ,
+                  y = prcp),
+              color = 'black')
 
 
 nrow(df_temp)
@@ -206,34 +203,55 @@ nrow(df_prec)
 
 # merge data
 df_clim <- df_prec %>% 
-  left_join(df_temp, by = join_by(globalid, falsto_name, month, year))
+  left_join(df_temp, by = join_by(globalid, falsto_name, month, year, ID)) %>% 
+  right_join(as.data.frame(xy2  ), by = c('falsto_name',  'globalid'                )) %>% 
+  dplyr::select(c(falsto_name, prcp, month,  year,   tmp, y_wgs)) %>% 
+  distinct()
 
-
+summary(df_clim)
 (df_clim)
+
+
 # get SPEI -----------------------------------------------------------
-# SPEI: Standardized water precipitation index --------------------------------
-#SPEI_vars <- c("t2m", "tp")
+# SPEI: Standardized potential evapotranspiration index --------------------------------
 
-#temp_convert = 273.15  # convert temperature from Kelvin to Celsius
-
+# Function to calculate PET using Thornthwaite method
+calculate_pet_thornthwaite <- function(temp, latitude) {
+  # Using the built-in Thornthwaite function from the SPEI package
+    PET <- thornthwaite(temp, latitude)
+  return(PET)
+}
 
 #Get values for SPEI
 df1 <-
   df_clim %>% 
- # dplyr::filter(var %in% SPEI_vars ) %>% # filter only soil water content
   na.omit() %>% # remove duplicated values
-  #dplyr::select(-c(time_num, xx)) %>% # remove unnecessary cols
-  #spread(var, value) %>%
-  #mutate(t2m = t2m - temp_convert) %>%
-  mutate(PET = thornthwaite(tmp, 48.7775), 
-         BAL = prcp - PET) #%>%   # Längengrad Mitte Bayern
-  #mutate(ID = 1:nrow(df))
+  group_by(falsto_name) %>%
+  mutate(PET = calculate_pet_thornthwaite(tmp, unique(y_wgs)[1]),
+           BAL = prcp - PET) 
 
 # calculate SPEI for each falsto location:
 df_ls <- df1 %>%
+  #group_by(falsto_name, .add = TRUE) %>% 
   group_split(falsto_name)
 
-test <- df_ls[[2]]
+test <- df_ls[[102]]  # 102 Offenhausen_2    
+
+
+# convert df to time series
+df.ts <- test %>% 
+  arrange(year, month) %>% 
+  ts(df, start = c(1980, 01), end=c(2021,12), frequency=12) 
+
+# extract just values from SPEI object:
+dd = spei(df.ts[,'BAL'], scale = 12)$fitted
+dd2 = spei(df.ts[,'BAL'], scale = 12)
+plot(dd2)
+
+#df.ts$SPEI <- dd
+
+
+
 
 # Calculate the SPEI for each location:
 get_SPEI <- function(df, ...){
@@ -243,11 +261,12 @@ get_SPEI <- function(df, ...){
   
   # convert df to time series
   df.ts <- df %>% 
+    arrange(year, month) %>% 
     ts(df, start = c(1980, 01), end=c(2021,12), frequency=12) 
+    #ts(df, start = c(2008, 01), end=c(2021,12), frequency=12) 
   
   # Calculate spei or different time intervals:
-  my_scales = c(3,12) #c(3,12) # 3,6,12
-  spei_ls <- lapply(my_scales, function(s) {
+  spei_ls <- lapply(my_spei_scales, function(s) {
     
     # extract just values from SPEI object:
     dd = spei(df.ts[,'BAL'], scale = s)$fitted
@@ -273,28 +292,89 @@ get_SPEI <- function(df, ...){
 }
 
 # apply over the list of df (locations):
-
 df_ls2<- lapply(df_ls, get_SPEI)
 
 # merge into one file:
 df_spei_ID <- do.call('rbind', df_ls2)
 
+df_spei_ID2 <- df_spei_ID
+
+df_spei_ID2 %>% 
+ # filter(falsto_name == 'Bleichach_1') %>% 
+  filter(scale == 12) %>%
+  ggplot(aes(x = date, y = spei)) +
+  #geom_line() +
+  stat_summary(fun = mean, geom = "point", color = "black", size = 1) +
+  scale_x_date(limits = as.Date(c("1980-01-01", "2021-12-01"))) # Replace with actual dates
+
+
+hist(df_prec$prcp)
+
+
+df_spei_ID2 %>% 
+  filter(falsto_name == 'Blaichach_1') %>% 
+  filter(scale == 12) %>%
+  ggplot(aes(x = date, y = spei)) +
+  geom_line() 
+  
+
+df_prec %>% 
+  group_by(year, falsto_name) %>% 
+  summarize(sum_prcp = sum(prcp)) %>%
+  View()
+  ggplot(aes(x = year,
+             y = sum_prcp)) +
+  geom_line(alpha = 0.5)
+
 # summarize spei per year - one SPEI value per year and ID! 
 df_spei_ID <-  df_spei_ID %>% 
   dplyr::mutate(year  = lubridate::year(date),
                 month = lubridate::month(date)) %>%  
-  dplyr::select(-c(scale, date))
+  dplyr::select(-c(date))
+
+
+# plot if correct??
+df_spei_ID %>%
+  filter(year %in% 2015:2021) %>% 
+  ggplot(aes(x = month ,
+             y = spei,
+             group = factor(year),
+             color = factor(year))) +
+
+  #geom_point(alpha = 0.5)  +
+  geom_smooth()+
+  #geom_point(alpha = 0.5)  +
+  facet_grid(year~scale) +
+  geom_hline(yintercept = 0, col = 'red', lty = 'dashed') 
+
+
+
+
 
 # export file:
 #fwrite(out.df, paste(myPath, outTable, 'xy_spei.csv', sep = "/"))
 
 # spei does only up to 2021
-df_spei_year <- 
+df_spei_veg_season <- 
   df_spei_ID %>% 
+  dplyr::filter(month %in% c(3:10)& year %in% 2015:2021) %>% 
   ungroup(.) %>% 
-  group_by(ID, year) %>% 
-  summarise(spei = mean(spei)) 
+  group_by(falsto_name, year, scale) %>% 
+  summarise(spei = median(spei)) 
 
+
+
+
+# Export data -------------------------------------------------------------
+
+
+data.table::fwrite(df_clim, 
+                   'outTable/xy_clim_DWD.csv')
+data.table::fwrite(df_spei_veg_season, 
+                   'outTable/xy_spei_veg_season_DWD.csv')
+
+data.table::fwrite(df_spei_ID, 
+                   'outTable/xy_spei_all_DWD.csv')
 
 
 
@@ -305,7 +385,7 @@ df_spei_year <-
 
   
 # convert to time series data ----------------------------------------
-df.ts <- ts(df, start = c(1980, 01), end=c(2021,12), frequency=12) 
+df.ts <- ts(test, start = c(1980, 01), end=c(2021,12), frequency=12) 
 
 head(df.ts)
 plot(df.ts)
@@ -325,19 +405,9 @@ plot(df.ts)
 
 
 # Variables needed:
-# YEAR monthly precipitation totals, in mm. 
 # MONTH monthlyprecipitation totals, in mm. 
 # PRCP monthly precipitation totals, in mm. 
-# TMAX monthlymean daily maximum temperature, in ºC. 
-# TMIN monthly mean daily minimum temperature, in ºC. 
 # TMED monthly mean temperature, in ºC. 
-# AWND monthly mean wind speed, in km h-1 
-# ACSH monthly mean sun hours, in h. 
-# ACSH monthly mean cloud cover, in %.
-
-
-
-
 
 
 
@@ -346,16 +416,19 @@ plot(df.ts)
 
 # Load data 
 data(wichita) 
-head(wichita)
+tail(wichita)
 str(wichita)
+plot(wichita)
 
 # Compute potential evapotranspiration (PET) and climatic water balance (BAL) 
 wichita$PET <- thornthwaite(wichita$TMED, lat = 37.6475) # 48.777500
 wichita$BAL <- wichita$PRCP-wichita$PET 
 
 # Convert to a ts (time series) object for convenience 
-wichita <- ts(wichita[,-c(1,2)], end=c(2011,10), frequency=12) 
-plot(wichita) 
+wichita.ts <- ts(wichita[,-c(1,2)], end=c(2011,10), frequency=12) 
+str(wichita.ts)
+head(wichita.ts)
+plot(wichita.ts) 
 
 # One and tvelwe-months SPEI 
 spei1 <- spei(wichita[,'BAL'], 3) 
