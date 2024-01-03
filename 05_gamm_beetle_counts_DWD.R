@@ -86,10 +86,12 @@ stable_traps <-
 # prepare data RS --------------------------------------------
 df_RS_out <- df_RS_out %>% 
   dplyr::select(-c(globalid, id)) %>% 
+  mutate(falsto_name = gsub("[^A-Za-z0-9_]", "", falsto_name)) %>% 
   dplyr::rename(trapID = falsto_name)
 
 # change column names
 lisa_merged_df <- lisa_merged_df %>% 
+  mutate(falsto_name = gsub("[^A-Za-z0-9_]", "", falsto_name)) %>% 
   dplyr::rename(trapID = falsto_name,
                 sum_ips = sum_beetle) %>% 
   dplyr::select(c(year, trapID, sum_ips, Morans_I))
@@ -109,8 +111,8 @@ dat_lag <-   dat_fin %>%
                   previous_veg_prcp   =  dplyr::lag(veg_prcp,   order_by = year),
                   previous_spei1      =  dplyr::lag(spei1,      order_by = year),
                   previous_spei3      =  dplyr::lag(spei3,      order_by = year),
-                  previous_spei12     =  dplyr::lag(spei12,     order_by = year),
-                  previous_spei24     =  dplyr::lag(spei24,     order_by = year)) %>% 
+                  previous_spei6     =  dplyr::lag(spei6,     order_by = year),
+                  previous_spei6_2     =  dplyr::lag(spei6,     order_by = year, n = 2)) %>% 
   dplyr::mutate(population_growth     = (sum_ips - previous_sum_ips) / previous_sum_ips * 100,
                 population_growth2    = dplyr::lag(population_growth, order_by = year)) %>%  # lag population growth by one more year
   left_join(df_RS_out, 
