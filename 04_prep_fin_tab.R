@@ -9,8 +9,9 @@ rm(list=ls())
 # Read my paths -----------------------------------------------------------
 source('myPaths.R')
 
-spring.months = 3:5
-veg.months = 3:10
+spring.months         = 3:5
+veg.months            = 3:10
+study.period.extended = 2013:2021
 
 
 # get libs ----------------------------------------------------------------
@@ -73,7 +74,7 @@ median_spei <-
     replace(is.na(.), 0)
 
 
-# plot SPEI over different scales
+# plot SPEI over different scales ----------------------------------------------
 ggplot2::ggplot(median_spei) + 
   geom_area(aes(x = date, y = pos), fill = "blue", col = "grey8") +
   geom_area(aes(x = date, y = neg), fill = "red",  col = "grey8") +
@@ -90,11 +91,11 @@ df_spei_months <- df_spei_months %>%
 
 
   
-  mean.prcp = mean(df_clim[,year %in% 1980:2015]$prcp)
-  mean.tmp = mean(df_clim$tmp)
+mean.prcp = mean(df_clim[,year %in% 1980:2015]$prcp)
+mean.tmp = mean(df_clim$tmp)
   
   p.prcp <- df_clim %>%
-    filter(year %in% 2015:2021) %>% 
+    filter(year %in% study.period.extended) %>% 
     ggplot(aes(x = as.factor(year), 
                y = prcp)) +
     geom_boxplot() +
@@ -105,7 +106,7 @@ df_spei_months <- df_spei_months %>%
  
   
   p.tmp <- df_clim %>%
-    filter(year %in% 2015:2021) %>% 
+    filter(year %in% study.period.extended) %>% 
     ggplot(aes(x = as.factor(year), 
                y = tmp)) +
     geom_boxplot() +
@@ -157,19 +158,19 @@ df_topo <- df_topo %>%
 # order spei data: spei3, spei12
 # spring temperature
 df_temp_spring = df_clim %>% 
-  filter(year %in% 2015:2021 & month %in% spring.months) %>%
+  filter(year %in% study.period.extended & month %in% spring.months) %>%
   group_by(year, falsto_name) %>% 
   summarise(spring_tmp = mean(tmp))
   
 # temperature over vegetation season
 df_temp_veg_season = df_clim %>% 
-  filter(year %in% 2015:2021 & month %in% veg.months) %>%
+  filter(year %in% study.period.extended & month %in% veg.months) %>%
   group_by(year, falsto_name) %>% 
   summarise(veg_tmp = mean(tmp))
 
 # precipitation
 df_prcp_veg_season = df_clim %>% 
-  filter(year %in% 2015:2021 & month %in% veg.months) %>%
+  filter(year %in% study.period.extended & month %in% veg.months) %>%
   group_by(year, falsto_name) %>% 
   summarise(veg_prcp = mean(prcp))
 
@@ -192,7 +193,7 @@ head(df_spei)#SPEI is already filtered over years and to vegetation season, just
 df_spei_wide <- 
   df_spei %>% 
   pivot_wider(names_from = scale, values_from = spei)# %>% 
-  #filter(year %in% 2015:2021) #%>% already set up for veg season
+  #filter(year %in% study.period.extended) #%>% already set up for veg season
 
 # rename columns
 df_spei_wide <- df_spei_wide %>%
@@ -221,11 +222,11 @@ df_predictors <-
   df_temp_spring %>%  
   right_join(df_temp_veg_season, by = c("falsto_name", 'year')) %>%
   right_join(df_prcp_veg_season, by = c("falsto_name",  'year')) %>%
-  right_join(df_spei_wide, by = c("falsto_name", 'year')) %>%
-  right_join(df_spei_year, by = c("falsto_name", 'year')) %>%
+  right_join(df_spei_wide, by = c("falsto_name", 'year')) %>%  # spei vegetation season
+ # right_join(df_spei_year, by = c("falsto_name", 'year')) %>%
    # View()
-    right_join(xy_df, by = c('falsto_name', 'year')) %>% # add XY coordinates for each trap  and filter the data
-    right_join(df_topo, by = c("falsto_name", 'globalid')) %>%
+    left_join(xy_df, by = c('falsto_name', 'year')) %>% # add XY coordinates for each trap  and filter the data
+    left_join(df_topo, by = c("falsto_name", 'globalid')) %>%
   ungroup(.) %>% 
     dplyr::select(-c(globalid))
  
@@ -261,8 +262,8 @@ ips.year.avg <- ips.year.avg %>%
 # make a final table with all Ys, and all Xs to see a correlation matrix. reduce predictors to keep meaningful ones.----------
 dat_fin <- 
   df_predictors %>% 
-  right_join(ips.year.sum) %>%
-  right_join(max.diff.doy) %>%
+  left_join(ips.year.sum) %>%
+  left_join(max.diff.doy) %>%
   left_join(ips.aggreg) %>%
   mutate(pairID = gsub('.{2}$', '', falsto_name)) %>% 
   dplyr::rename(trapID = falsto_name) %>% 
@@ -438,20 +439,7 @@ save(dat_fin, file="outData/final_table.Rdata")
 
 
 
-# Save data ---------------------------------------------------------------
-
-# save(ips_sum_preds,           # final df: predictors aggregated by year, sum beetle by year
-#      df_predictors_year,      # df predictors per year, can be merged with different dependent variables
-#      p_temp,                  # plot temp
-#      p_prec,                  # plot prec
-#      p_spei12,
-#      p_spei12_bav, 
-#      p_spei_freq, 
-#      vif_values_fin,          # VIF values for final set of predictors
-#      file="outData/predictors.Rdata") 
-
-
-
+#
 
 
 
