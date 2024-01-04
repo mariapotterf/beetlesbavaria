@@ -1103,7 +1103,7 @@ dd <- dat_lag_scaled %>%
 
 
 
-# simplify analysis: get average per pairID
+### simplify analysis: AVG get average per pairID --------------------------
 dd_simpl <- dd %>% 
   ungroup(.) %>% 
   group_by(year, pairID) %>% 
@@ -1132,16 +1132,19 @@ m2_3 <- glm.nb(sum_ips ~ veg_tmp + spei3 + previous_spei3_2 + previous_spei1_2, 
 m3 <- glm.nb(sum_ips ~ veg_tmp + spei3 + previous_spei3 + previous_spei12_2, dd_simpl)
 
 m4 <- glm.nb(sum_ips ~ veg_tmp +spei1  + previous_spei1 +previous_spei1_2, dd_simpl)
-m5 <- glm.nb(sum_ips ~ veg_tmp +spei3  + previous_spei3 +previous_spei3_2, dd_simpl)  # the best, r2 13, good model assumptions
+m5 <- glm.nb(sum_ips ~ veg_tmp +spei3  + previous_spei3 +previous_spei3_2, dd_simpl)  
 m6 <- glm.nb(sum_ips ~ veg_tmp +spei6  + previous_spei6 +previous_spei6_2, dd_simpl)
 m7 <- glm.nb(sum_ips ~ veg_tmp +spei12  + previous_spei12 +previous_spei12_2, dd_simpl)
 
 
 m8 <- glm.nb(sum_ips ~ veg_tmp +previous_spei3_2, dd_simpl)  
 
-m9 <- glm.nb(sum_ips ~ veg_tmp +previous_spei3_2 + previous_spei12_2, dd_simpl)  
+# the winner!
+m9 <- glm.nb(sum_ips ~ veg_tmp +previous_spei3_2 + previous_spei12_2, dd_simpl)  # the simples one, and still good, has good diagnostics
+
 m9.poly1 <- glm.nb(sum_ips ~ veg_tmp + poly(previous_spei3_2,2) + previous_spei12_2, dd_simpl)  
-m9.poly2 <- glm.nb(sum_ips ~ poly(veg_tmp,2) + previous_spei3_2 + previous_spei12_2, dd_simpl) # the best one 
+m9.poly2 <- glm.nb(sum_ips ~ poly(veg_tmp,2) + previous_spei3_2 + previous_spei12_2, dd_simpl) 
+m9.poly2.2 <- glm.nb(sum_ips ~ exp(veg_tmp) + previous_spei3_2 + previous_spei12_2, dd_simpl) 
 m9.poly3 <- glm.nb(sum_ips ~ poly(veg_tmp,3) + previous_spei3_2 + previous_spei12_2, dd_simpl) 
 m9.poly4 <- glm.nb(sum_ips ~ poly(veg_tmp,2) + previous_spei3_2 + poly(previous_spei12_2,2) , dd_simpl) 
 m9.poly5 <- glm.nb(sum_ips ~ exp(veg_tmp) + previous_spei3_2 + poly(previous_spei12_2,2) , dd_simpl) 
@@ -1153,13 +1156,18 @@ plot(x = dd_simpl$veg_tmp, y = dd_simpl$sum_ips )
 # add previous temp
 m10 <- glm.nb(sum_ips ~ veg_tmp + previous_veg_tmp + previous_spei3_2 + previous_spei12_2, dd_simpl)  
 
-summary(m9.poly6)
-r2(m9.poly6)
-simRs <- simulateResiduals(m9.poly2, plot = T)
-plot(allEffects(m9.poly2))
+# tested glmer as well, but no success
+summary(m9)
+r2(m9)
+simRs <- simulateResiduals(m9, plot = T)
+plot(allEffects(m9.poly2.2))
 testOutliers(m9.poly2)
-AIC(m4,m5,m6,m7, m8, m9, m9.poly1, m9.poly2, m9.poly3, m9.poly4, m9.poly5, m9.poly6, m9.poly7, m9.poly8)
+AIC(m4,m5,m6,m7, m8, m9, m9.poly1, m9.poly2, m9.poly3, m9.poly4, m9.poly5, m9.poly6, m9.poly7, m9.poly8, m9.poly2.2)
 vif(m9.poly2)
+pacf(residuals(m9.poly2))
+
+
+
 
 # remove additionsl NAs
 dd_complete <- dd %>%
@@ -1181,7 +1189,7 @@ m1          <- glm.nb(sum_ips ~ veg_tmp, data = dd, link = log)
 
 
 AICc(m1.null, m1,m2, m2.1, m2.2, m2.3, m2.4, m2.5, m2.1_1) # ,  m1.poly2, m1.poly3
-simulationOutput <- simulateResiduals(fittedModel = m9.poly2.full, plot = T)
+simulationOutput <- simulateResiduals(fittedModel = m2, plot = T)
 testOutliers(m9.poly2.full, type = 'bootstrap') 
 simulateResiduals(m9.poly2.full, plot = T)
 
@@ -1243,7 +1251,7 @@ acf(m7)
 
 
 
-# continue from here!!! 
+# try using mixed effects models 
 
 m.glmer1 <- glmer(sum_ips ~ veg_tmp + annual_spei6 + 
                                    (1 | pairID/trapID), 
@@ -1308,27 +1316,42 @@ anova(m2)
 
 
 #### PLOT GLM.NB IPS vs climate veg_tmp -----------------------
-dat_veg_tmp <- data.frame(veg_tmp = seq(min(dat_lag_scaled_complete$veg_tmp), max(dat_lag_scaled_complete$veg_tmp), length.out = 100),
-                          annual_spei6 = mean(dat_lag_scaled_complete$annual_spei6, na.rm = TRUE))
+# Generate a sequence of values for each predictor
+dat_veg_tmp <- data.frame(veg_tmp = seq(min(dd_simpl$veg_tmp), max(dd_simpl$veg_tmp), length.out = 100),
+                          previous_spei3_2 = mean(dd_simpl$previous_spei3_2, na.rm = TRUE),
+                          previous_spei12_2 = mean(dd_simpl$previous_spei12_2, na.rm = TRUE))
 
 # Predictions for veg_tmp
-dat_veg_tmp$predicted <- predict(m2, newdata = dat_veg_tmp, type = "response")
-ci_veg_tmp <- predict(m2, newdata = dat_veg_tmp, type = "response", se.fit = TRUE)
+dat_veg_tmp$predicted <- predict(m9, newdata = dat_veg_tmp, type = "response")
+ci_veg_tmp <- predict(m9, newdata = dat_veg_tmp, type = "response", se.fit = TRUE)
 dat_veg_tmp$upper <- ci_veg_tmp$fit + 1.96 * ci_veg_tmp$se.fit
 dat_veg_tmp$lower <- ci_veg_tmp$fit - 1.96 * ci_veg_tmp$se.fit
 
-# Prepare data for annual_spei6
-dat_annual_spei6 <- data.frame(annual_spei6 = seq(min(dat_lag_scaled_complete$annual_spei6), 
-                                                  max(dat_lag_scaled_complete$annual_spei6), length.out = 100),
-                               veg_tmp = mean(dat_lag_scaled_complete$veg_tmp, na.rm = TRUE))
 
-# Predictions for annual_spei6
-dat_annual_spei6$predicted <- predict(m2, newdata = dat_annual_spei6, type = "response")
-ci_annual_spei6 <- predict(m2, newdata = dat_annual_spei6, type = "response", se.fit = TRUE)
-dat_annual_spei6$upper <- ci_annual_spei6$fit + 1.96 * ci_annual_spei6$se.fit
-dat_annual_spei6$lower <- ci_annual_spei6$fit - 1.96 * ci_annual_spei6$se.fit
+# Prepare data for previous_spei3_2
+dat_previous_spei3_2 <- data.frame(previous_spei3_2 = seq(min(dd_simpl$previous_spei3_2), 
+                                                          max(dd_simpl$previous_spei3_2), length.out = 100),
+                                   veg_tmp = mean(dd_simpl$veg_tmp, na.rm = TRUE),
+                                   previous_spei12_2 = mean(dd_simpl$previous_spei12_2, na.rm = TRUE))
 
-# Plot for veg_tmp
+# Predictions for previous_spei3_2
+dat_previous_spei3_2$predicted <- predict(m9, newdata = dat_previous_spei3_2, type = "response")
+ci_previous_spei3_2 <- predict(m9, newdata = dat_previous_spei3_2, type = "response", se.fit = TRUE)
+dat_previous_spei3_2$upper <- ci_previous_spei3_2$fit + 1.96 * ci_previous_spei3_2$se.fit
+dat_previous_spei3_2$lower <- ci_previous_spei3_2$fit - 1.96 * ci_previous_spei3_2$se.fit
+
+# Prepare data for previous_spei12_2
+dat_previous_spei12_2 <- data.frame(previous_spei12_2 = seq(min(dd_simpl$previous_spei12_2), 
+                                                            max(dd_simpl$previous_spei12_2), length.out = 100),
+                                    veg_tmp = mean(dd_simpl$veg_tmp, na.rm = TRUE),
+                                    previous_spei3_2 = mean(dd_simpl$previous_spei3_2, na.rm = TRUE))
+
+# Predictions for previous_spei12_2
+dat_previous_spei12_2$predicted <- predict(m9, newdata = dat_previous_spei12_2, type = "response")
+ci_previous_spei12_2 <- predict(m9, newdata = dat_previous_spei12_2, type = "response", se.fit = TRUE)
+dat_previous_spei12_2$upper <- ci_previous_spei12_2$fit + 1.96 * ci_previous_spei12_2$se.fit
+dat_previous_spei12_2$lower <- ci_previous_spei12_2$fit - 1.96 * ci_previous_spei12_2$se.fit
+
 
 
 # Define a common theme
@@ -1338,32 +1361,38 @@ common_theme <- theme_minimal(base_size = 11) +
         panel.grid.minor = element_blank(),
         panel.border = element_rect(color = "black", fill = NA),
         axis.text.x = element_text(color = "black"),
-        plot.margin = margin(5.5, 5.5, 5.5, 5.5))
+        plot.margin = margin(5.5, 5.5, 5.5, 5.5),
+        aspect.ratio = 1 )
 
-# Apply the common theme to the plots
 # Plot for veg_tmp with orange color
 p1 <- ggplot(dat_veg_tmp, aes(x = veg_tmp, y = predicted)) +
   geom_line(color = "#E69F00") +
+  ylim(10000, 35000) +
   geom_ribbon(aes(ymin = lower, ymax = upper), fill = "#E69F00", alpha = 0.2) +
-  labs(title = "a)", x = "Temperature (veg_tmp)", y = "Sum Beetles/year") +
-  common_theme +
-  theme(aspect.ratio=1) +
-  #coord_fixed(ratio = 1) + # Set aspect ratio to 1
-  ylim(13000, 35000)
+  labs(title = "", x = "Temperature (veg_tmp)", y = "Sum Beetles/year") +
+  common_theme
 
-# Plot for annual_spei6 with blue color
-p2 <- ggplot(dat_annual_spei6, aes(x = annual_spei6, y = predicted)) +
+
+
+# Plot for previous_spei3_2 with blue color
+p2 <- ggplot(dat_previous_spei3_2, aes(x = previous_spei3_2, y = predicted)) +
   geom_line(color = "#0072B2") +
   geom_ribbon(aes(ymin = lower, ymax = upper), fill = "#0072B2", alpha = 0.2) +
-  labs(title = "b)", x = "SPEI (annual_spei6)", y = " ") +
-  common_theme +
-  #coord_fixed(ratio = 1) + # Set aspect ratio to 1
-  theme(axis.text.y = element_blank(), axis.ticks.y = element_blank(),
-        aspect.ratio=1) +
-  ylim(13000, 35000)
+  ylim(10000, 35000) +
+  labs(title = "", x = "SPEI (previous_spei3_2)", y = "Sum Beetles/year") +
+  common_theme
 
-# Arrange the plots side by side
-ggarrange(p1, p2, ncol = 2, nrow = 1, widths = c(1, 1))
+# Plot for previous_spei12_2 with green color
+p3 <- ggplot(dat_previous_spei12_2, aes(x = previous_spei12_2, y = predicted)) +
+  geom_line(color = "#009E73") +
+  ylim(10000, 35000) +
+  geom_ribbon(aes(ymin = lower, ymax = upper), fill = "#009E73", alpha = 0.2) +
+  labs(title = "", x = "SPEI (previous_spei12_2)", y = "Sum Beetles/year") +
+  common_theme
+
+
+ggarrange(p1, p2, p3, ncol = 3, nrow = 1)
+
 
 
 summary(m2)
