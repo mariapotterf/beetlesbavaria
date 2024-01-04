@@ -101,7 +101,7 @@ xy2$y_wgs <- crds(xy_latlng)[,'y']
 
 
 
-# stack rasters firsst??
+# stack rasters firsst
 process_raster_file <- function(file, path_prefix, var) {
   ras_path <- paste(path_prefix, var, file, sep = "/")
   unzipped_path <- gsub(".gz$", "", ras_path)
@@ -314,7 +314,7 @@ df_spei_ID %>%
 # spei does only up to 2021
 df_spei_veg_season <- 
   df_spei_ID %>% 
-  dplyr::filter(month %in% c(3:10)& year %in% 2015:2021) %>% 
+  dplyr::filter(month %in% c(3:10)& year %in% 2013:2021) %>% 
   ungroup(.) %>% 
   group_by(falsto_name, year, scale) %>% 
   summarise(spei = median(spei)) 
