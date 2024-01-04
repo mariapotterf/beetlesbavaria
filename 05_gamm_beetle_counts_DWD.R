@@ -68,19 +68,6 @@ load(file=   "outData/final_table.Rdata")
 load(file =  "outData/buffers.Rdata")  # df_RS_out
 load(file =  "outData/lisa.Rdata")     # read LISA Moran's I stats
 
-# get unique trapIDs of traps that remained stable (only one globalid)
-# over time
-stable_traps <- 
-  df_RS_out %>% 
-  group_by(falsto_name, globalid) %>% 
-  dplyr::summarize(n = n()) %>% 
-  dplyr::filter(n == 7) %>% 
-  distinct(falsto_name) %>% 
-  pull() %>% 
-  as.vector()
-
-
-
 
 
 # prepare data RS --------------------------------------------
@@ -111,12 +98,12 @@ dat_lag <-   dat_fin %>%
                   previous_veg_prcp   =  dplyr::lag(veg_prcp,   order_by = year),
                   previous_spei1      =  dplyr::lag(spei1,      order_by = year),
                   previous_spei3      =  dplyr::lag(spei3,      order_by = year),
-                  previous_spei6     =  dplyr::lag(spei6,     order_by = year),
+                  previous_spei6      =  dplyr::lag(spei6,     order_by = year),
                   previous_spei12     =  dplyr::lag(spei12,     order_by = year),
-                  previous_spei1_2      =  dplyr::lag(spei1,      order_by = year, n = 2),
-                  previous_spei3_2      =  dplyr::lag(spei3,      order_by = year, n = 2),
-                  previous_spei6_2     =  dplyr::lag(spei6,     order_by = year, n = 2),
-                  previous_spei12_2     =  dplyr::lag(spei12,     order_by = year, n = 2)) %>% 
+                  previous_spei1_2    =  dplyr::lag(spei1,      order_by = year, n = 2),
+                  previous_spei3_2    =  dplyr::lag(spei3,      order_by = year, n = 2),
+                  previous_spei6_2    =  dplyr::lag(spei6,     order_by = year, n = 2),
+                  previous_spei12_2   =  dplyr::lag(spei12,     order_by = year, n = 2)) %>% 
   dplyr::mutate(population_growth     = (sum_ips - previous_sum_ips) / previous_sum_ips * 100,
                 population_growth2    = dplyr::lag(population_growth, order_by = year)) %>%  # lag population growth by one more year
   left_join(df_RS_out, 
@@ -126,7 +113,8 @@ dat_lag <-   dat_fin %>%
   dplyr::mutate(previous_Moran       =  dplyr::lag(Morans_I , order_by = year),
                 previous_Moran2      =  dplyr::lag(Morans_I , order_by = year, n = 2),
                 ) %>% 
-  dplyr::mutate(trapID = as.factor(trapID)) #%>% 
+  dplyr::mutate(trapID = as.factor(trapID)) %>%
+  dplyr::filter(year %in% 2015:2021)
 
 
 # # check if results are correct
@@ -144,11 +132,13 @@ dat_lag <-   dat_fin %>%
 ### Spearman - select SPEI --------------------------------------------------
 keep_speis <- c(#'sum_ips', 
                 "spei1"  ,            
-               "spei3", 'spei6',  "spei12",  "spei24", "annual_spei1","annual_spei3",
-               'annual_spei6',
-                "annual_spei12" ,  
-                "annual_spei24" ,
-               "previous_spei1",
+               "spei3", 'spei6',  "spei12",  "spei24", 
+               # "annual_spei1",
+               # "annual_spei3",
+               # 'annual_spei6',
+               #  "annual_spei12" ,  
+               #  "annual_spei24" ,
+                "previous_spei1",
                "previous_spei1_2",
                "previous_spei3",
                "previous_spei3_2",
@@ -416,12 +406,15 @@ print(sorted_correlations)
 ## Scale predictors ================================================================================
 
 # skip columns if not for scaling
-skip_col <- c('trapID', 'pairID', "x", "y", 'year', 'spei1','spei3','spei6', 'spei12','spei24',
-              'sum_ips', 'previous_sum_ips', 'previous_sum_ips2',
-              "previous_spei6", 
-              "previous_spei6_2", 
-              'annual_spei1','annual_spei3','annual_spei6','annual_spei12','annual_spei24',
-              'previous_spei1', 'previous_spei3')
+#spei_cols <- grepl("spei", names(dat_lag))
+
+additional_skip_cols <- c('trapID', 'pairID', "x", "y", 'year', 
+              'sum_ips', 'previous_sum_ips', 'previous_sum_ips2')
+
+# Combine spei columns with additional columns to skip
+skip_col <- additional_skip_cols #c(names(dat_lag)[spei_cols], additional_skip_cols)
+
+# scale also SPEIs
 
 # export new df
 dat_lag_scaled <-
@@ -459,25 +452,6 @@ dat_lag_scaled_complete <- dat_lag_scaled %>%
 # peak difference vs climate drivers
 
 #### prepare individual tables for each analyses -----------------------------------------------------
-cols_beetle_population <- c("trapID" , "pairID","x"  ,  "y" , "year", 
-                            "annual_spei6"  ,   "spring_tmp" ,         "veg_tmp" ,
-                            "sum_ips",
-                            "previous_sum_ips" , "previous_sum_ips2",  "previous_peak_diff1", "previous_peak_diff2", "previous_veg_tmp",
-                            "previous_spring_tmp",
-                            "previous_veg_prcp",   "population_growth",   "population_growth2" )
-cols_doy_aggregation <- c('agg_doy', "trapID" , "pairID","x"  ,  "y" , "year", 
-                          "annual_spei6"  ,   "spring_tmp" ,         "veg_tmp" , "veg_prcp" ,           "elev",                "sum_ips",
-                          "previous_sum_ips" , "previous_sum_ips2",  "previous_peak_diff1", "previous_peak_diff2", "previous_veg_tmp",
-                          "previous_spring_tmp",
-                          "previous_veg_prcp",   "population_growth",   "population_growth2" )
-
-
-cols_doy_peak <- c('peak_diff', "trapID" , "pairID","x"  ,  "y" , "year", 
-                          "annual_spei1"  ,   "spring_tmp" ,         "veg_tmp" , "veg_prcp" ,           "elev",                "sum_ips",
-                          "previous_sum_ips" , "previous_sum_ips2",  "previous_peak_diff1", "previous_peak_diff2", "previous_veg_tmp",
-                          "previous_spring_tmp",
-                          "previous_veg_prcp",   "population_growth",   "population_growth2" )
-
 
 windows()
 hist(dat_lag_scaled)
@@ -1096,10 +1070,7 @@ r2(m_beetle_interaction1.1)
 windows()
 
 pairs(sum_ips ~ veg_tmp  + annual_spei6, dat_lag, panel = panel.smooth)
-
-
-
-pairs(sum_ips ~ veg_tmp + previous_spei6_2 + previous_spei6  + annual_spei6, dat_lag, panel = panel.smooth)
+pairs(sum_ips ~ veg_tmp + veg_prcp + previous_spei6_2 + previous_spei6  + spei6, dat_lag, panel = panel.smooth)
 
 
 
@@ -1112,32 +1083,134 @@ pairs(sum_ips ~ veg_tmp + previous_spei6_2 + previous_spei6  + annual_spei6, dat
 # select only columns of interests, to not remove more data as necessary 
 # eg lagged values, that were NA
 dd <- dat_lag_scaled %>% 
-  dplyr::select(c(sum_ips, veg_tmp,annual_spei6,  
+  dplyr::select(c(sum_ips, veg_tmp,
+                  previous_veg_tmp,
+                  spei1,
+                  previous_spei1,
+                  previous_spei1_2,
+                  spei3,
+                  previous_spei3,
+                  previous_spei3_2,
+                  spei12,
+                  spei6,
                   previous_spei6,
-                  previous_spei6_2, pairID, trapID, year))
+                  previous_spei6_2,
+                  spei12,
+                  previous_spei12,
+                  previous_spei12_2,
+                  pairID, trapID, year))
+
+
+
+
+# simplify analysis: get average per pairID
+dd_simpl <- dd %>% 
+  ungroup(.) %>% 
+  group_by(year, pairID) %>% 
+  summarise(sum_ips = round(mean(sum_ips)), 
+            veg_tmp =mean(veg_tmp),
+            previous_veg_tmp =mean(previous_veg_tmp),
+            spei1 = mean(spei1),
+            previous_spei1 = mean(previous_spei1),
+            previous_spei1_2 = mean(previous_spei1_2),
+            spei3 = mean(spei3),
+            previous_spei3 = mean(previous_spei3),
+            previous_spei3_2 = mean(previous_spei3_2),
+            spei6 = mean(spei6),
+            previous_spei6 = mean(previous_spei6),
+            previous_spei6_2 = mean(previous_spei6_2),
+            
+            spei12 = mean(spei12),
+            previous_spei12 = mean(previous_spei12),
+            previous_spei12_2 = mean(previous_spei12_2))
+
+m1 <- glm.nb(sum_ips ~ veg_tmp + spei3 + previous_spei3 + previous_spei3_2, dd_simpl)
+
+m2 <- glm.nb(sum_ips ~ veg_tmp + spei3 + previous_spei3 + previous_spei3_2 + previous_spei12_2, dd_simpl)
+m2_2 <- glm.nb(sum_ips ~ veg_tmp + spei3 + previous_spei3_2 + previous_spei12_2, dd_simpl)
+m2_3 <- glm.nb(sum_ips ~ veg_tmp + spei3 + previous_spei3_2 + previous_spei1_2, dd_simpl)
+m3 <- glm.nb(sum_ips ~ veg_tmp + spei3 + previous_spei3 + previous_spei12_2, dd_simpl)
+
+m4 <- glm.nb(sum_ips ~ veg_tmp +spei1  + previous_spei1 +previous_spei1_2, dd_simpl)
+m5 <- glm.nb(sum_ips ~ veg_tmp +spei3  + previous_spei3 +previous_spei3_2, dd_simpl)  # the best, r2 13, good model assumptions
+m6 <- glm.nb(sum_ips ~ veg_tmp +spei6  + previous_spei6 +previous_spei6_2, dd_simpl)
+m7 <- glm.nb(sum_ips ~ veg_tmp +spei12  + previous_spei12 +previous_spei12_2, dd_simpl)
+
+
+m8 <- glm.nb(sum_ips ~ veg_tmp +previous_spei3_2, dd_simpl)  
+
+m9 <- glm.nb(sum_ips ~ veg_tmp +previous_spei3_2 + previous_spei12_2, dd_simpl)  
+m9.poly1 <- glm.nb(sum_ips ~ veg_tmp + poly(previous_spei3_2,2) + previous_spei12_2, dd_simpl)  
+m9.poly2 <- glm.nb(sum_ips ~ poly(veg_tmp,2) + previous_spei3_2 + previous_spei12_2, dd_simpl) # the best one 
+m9.poly3 <- glm.nb(sum_ips ~ poly(veg_tmp,3) + previous_spei3_2 + previous_spei12_2, dd_simpl) 
+m9.poly4 <- glm.nb(sum_ips ~ poly(veg_tmp,2) + previous_spei3_2 + poly(previous_spei12_2,2) , dd_simpl) 
+m9.poly5 <- glm.nb(sum_ips ~ exp(veg_tmp) + previous_spei3_2 + poly(previous_spei12_2,2) , dd_simpl) 
+m9.poly6 <- glm.nb(sum_ips ~ exp(veg_tmp) + exp(-previous_spei3_2) + poly(previous_spei12_2,2) , dd_simpl)
+m9.poly7 <- glm.nb(sum_ips ~ exp(veg_tmp) + exp(-previous_spei3_2) + exp(-previous_spei12_2) , dd_simpl)
+m9.poly8 <- glm.nb(sum_ips ~ exp(veg_tmp) + exp(-previous_spei3_2) , dd_simpl)
+
+plot(x = dd_simpl$veg_tmp, y = dd_simpl$sum_ips )
+# add previous temp
+m10 <- glm.nb(sum_ips ~ veg_tmp + previous_veg_tmp + previous_spei3_2 + previous_spei12_2, dd_simpl)  
+
+summary(m9.poly6)
+r2(m9.poly6)
+simRs <- simulateResiduals(m9.poly2, plot = T)
+plot(allEffects(m9.poly2))
+testOutliers(m9.poly2)
+AIC(m4,m5,m6,m7, m8, m9, m9.poly1, m9.poly2, m9.poly3, m9.poly4, m9.poly5, m9.poly6, m9.poly7, m9.poly8)
+vif(m9.poly2)
+
+# remove additionsl NAs
+dd_complete <- dd %>%
+  na.omit()
+
+
 # althought, using 
 
 windows()
-plot(dd$previous_spei6_2,dd$previous_spei6)
+plot(dd$spei3,dd$previous_spei3)
+
 
 ## Fit the GLMM with negative binomial distribution & random effects ------------
-m1.null     <- glm.nb(sum_ips ~ 1, data = dat_lag_scaled, link = log)
-m1          <- glm.nb(sum_ips ~ veg_tmp, data = dat_lag_scaled, link = log)
-#m1.poly2    <- glm.nb(sum_ips ~ poly(veg_tmp, 2), data = dat_lag_scaled_complete)
-#m1.poly3 <- glm.nb(sum_ips ~ poly(veg_tmp, 3), data = dat_lag_scaled_complete)
-#m1.sc.poly2 <- glm.nb(sum_ips  ~ poly(veg_tmp, 2), data = dat_lag_scaled_complete)
+m1.null     <- glm.nb(sum_ips ~ 1, data = dd, link = log)
+m1          <- glm.nb(sum_ips ~ veg_tmp, data = dd, link = log)
 
-AICc(m1.null, m1) # ,  m1.poly2, m1.poly3
-simulationOutput <- simulateResiduals(fittedModel = m1, plot = T)
-testOutliers(m1.exp, type = 'bootstrap') 
+
+#m9.poly2.full <- glm.nb(sum_ips ~ poly(veg_tmp,2) + previous_spei3_2 + previous_spei12_2, dd) 
+
+
+AICc(m1.null, m1,m2, m2.1, m2.2, m2.3, m2.4, m2.5, m2.1_1) # ,  m1.poly2, m1.poly3
+simulationOutput <- simulateResiduals(fittedModel = m9.poly2.full, plot = T)
+testOutliers(m9.poly2.full, type = 'bootstrap') 
+simulateResiduals(m9.poly2.full, plot = T)
 
 # always use complete observations! remove NAs
-m2 <- glm.nb(sum_ips ~ veg_tmp + annual_spei6, dat_lag_scaled)
-m2.2 <- glm.nb(sum_ips ~ veg_tmp + poly(annual_spei6,2), dat_lag_scaled)
-m3 <- glm.nb(sum_ips ~ poly(veg_tmp,2) + poly(annual_spei6,2), dat_lag_scaled)
+m2 <- glm.nb(sum_ips ~ veg_tmp + spei3, dd)
+
+plot(m2.1)  # 684, 769, 669, 483
+outlier.ind <- c(684, 769, 669, 483)
+
+outlierData <- dd[outlier.ind, ]
+
+# CHECK DIFFERENT SPEIS
+m2.1 <- glm.nb(sum_ips ~ veg_tmp + spei3 + previous_spei3_2, dd)
+m2.1_1 <- glm.nb(sum_ips ~ veg_tmp + spei3 + previous_spei3 + previous_spei3_2, dd)
+m2.2 <- glm.nb(sum_ips ~ veg_tmp + spei6 + previous_spei6_2, dd)
+
+m2.3 <- glm.nb(sum_ips ~ veg_tmp + spei12 + previous_spei12_2, dd)
+m2.4 <- glm.nb(sum_ips ~ veg_tmp + spei1 + previous_spei1_2, dd)
+
+m2.5 <- glm.nb(sum_ips ~ veg_tmp + spei3 + previous_spei12_2, dd)
+
+
+
+
+#m2.2 <- glm.nb(sum_ips ~ veg_tmp + poly(spei6,2), dat_lag_scaled)
+m3 <- glm.nb(sum_ips ~ poly(veg_tmp,2) + poly(annual_spei6,2), dd)
 # add lagged values of spei
-m4 <- glm.nb(sum_ips ~ veg_tmp + annual_spei6 + previous_spei6, dat_lag_scaled)
-m5 <- glm.nb(sum_ips ~ veg_tmp + annual_spei6 + previous_spei6 + previous_spei6_2, dat_lag_scaled)
+m4 <- glm.nb(sum_ips ~ veg_tmp + annual_spei6 + previous_spei6, dd)
+m5 <- glm.nb(sum_ips ~ veg_tmp + annual_spei6 + previous_spei6 + previous_spei6_2, dd)
 
 # use veg season spei
 m6 <- glm.nb(sum_ips ~ veg_tmp + spei6 + previous_spei6 + previous_spei6_2, dat_lag_scaled)
@@ -1174,7 +1247,7 @@ acf(m7)
 
 m.glmer1 <- glmer(sum_ips ~ veg_tmp + annual_spei6 + 
                                    (1 | pairID/trapID), 
-                                 data = dat_lag_scaled_complete,
+                                 data = dd,
                                  na.action = 'na.fail',
                                  family = negative.binomial(2.8588)
 )
@@ -1296,17 +1369,144 @@ ggarrange(p1, p2, ncol = 2, nrow = 1, widths = c(1, 1))
 summary(m2)
 
 
+# include 2 SPEIs and lagged values: ---------------------------------------
+pairs(sum_ips ~ veg_tmp + previous_spei3_2  + previous_spei12_2, dd_complete, panel = panel.smooth) 
+
+m1 <-  glm.nb(sum_ips ~ veg_tmp, dd_complete) 
+
+# inspect short term drought
+m2 <-  glm.nb(sum_ips ~ veg_tmp + spei1, dd_complete) # spei3 is not importantt 
+m3 <-  glm.nb(sum_ips ~ veg_tmp + spei1 + previous_spei1, dd_complete)   # one year lag is not iportant
+m4 <-  glm.nb(sum_ips ~ veg_tmp + spei1 + previous_spei1_2, dd_complete)
+
+m5 <-  glm.nb(sum_ips ~ veg_tmp + spei1 + previous_spei1 + previous_spei1_2 + previous_spei12_2, dd_complete)
+
+
+m6 <-  glm.nb(sum_ips ~ veg_tmp + spei1 + previous_spei12_2, dd_complete)
+
+
+AIC(m1, m2, m3, m4, m5)
+summary(m6)
+simulateOutput <- simulateResiduals(m6_1, plot = T)
+
+# addd long term grought
+m6 <-  glm.nb(sum_ips ~ veg_tmp + previous_spei6_2 + spei12, dd) # spei12 is not important
+
+m6_1 <- glmer.nb(sum_ips ~ veg_tmp + spei3 + previous_spei3_2 + (1 | pairID), data = dd)
+
+AIC(m6, m6_1)
+m7 <-  glm.nb(sum_ips ~ veg_tmp + previous_spei1_2 + previous_spei12, dd_complete)
+m8 <-  glm.nb(sum_ips ~ veg_tmp + previous_spei1_2 + previous_spei12 + previous_spei12_2, dd_complete)
+m9 <-  glm.nb(sum_ips ~ veg_tmp + previous_spei1_2  + previous_spei12_2, dd_complete)  # remove non signoficant lag1
+
+# add poly or quadratic tersm
+m9_1 <-  glm.nb(sum_ips ~ veg_tmp + I(veg_tmp^2) + previous_spei1_2  + previous_spei12_2, dd_complete)  # remove non signoficant lag1
+
+m9_interaction <- glm.nb(formula = sum_ips ~ veg_tmp * previous_spei3_2 + veg_tmp * previous_spei12_2, 
+                         data = dd_complete, init.theta = 1.773405852, link = log)
+
+
+m9_interaction2 <- glm.nb(formula = sum_ips ~ veg_tmp+ previous_spei3_2*previous_spei12_2, 
+                         data = dd_complete, init.theta = 1.773405852, link = log)
+
+
+m9_poly <-  glm.nb(sum_ips ~poly(veg_tmp,2) + poly(previous_spei3_2,2)  + poly(previous_spei12_2,2), dd_complete)  # remove non signoficant lag1
+
+m9_poly2 <-  glm.nb(sum_ips ~I(veg_tmp^2) + poly(previous_spei3_2,2)  + poly(previous_spei12_2,2), dd_complete)  # remove non signoficant lag1
+
+
+
+# remove tmp
+m10 <-  glm.nb(sum_ips ~ previous_spei3_2  + previous_spei12_2, dd_complete)  # remove non signoficant lag1
+
+
+# simplify, keep only spei12
+m11 <-  glm.nb(sum_ips ~ veg_tmp +  previous_spei12_2, dd_complete)  # does not improve the model, I should keep both SPEIs
+
+
+AIC(m11,m9, m9_poly2)
+
+
+
+# add random effects
+mm8 <-  glmer.nb(sum_ips ~ veg_tmp + previous_spei3_2 + previous_spei12_2 +  (1 | pairID), dd_complete)  # too complex
+mm9 <-  glmer.nb(sum_ips ~ veg_tmp + previous_spei3_2 + previous_spei12 + previous_spei12_2 +  (1 | year), dd_complete)    #
+mm10 <-  glmer.nb(sum_ips ~ veg_tmp + previous_spei12_2 +  (1 | pairID), dd_complete) # too complex
+
+vif(m9_poly)
+
+AICc(m5, m6, m7, m8, m9, m10, m9_1, m9_interaction, m9_poly, m9_poly2, m9_interaction2, m11)
+summary(m9_poly2)
+r2(m9)
+plot(allEffects(m9_interaction2))
+simulateResiduals(fittedModel = m9  , plot = T)
+
+mm1 <- glm.nb(sum_ips ~ veg_tmp + spei3 + previous_spei3+ previous_spei3_2 + spei12+ previous_spei12+ previous_spei12_2, dd_complete) 
+
+
+glmm1 <- glmer.nb(sum_ips ~ veg_tmp + previous_spei3_2 + previous_spei12_2 + 
+                    #    (1 | pairID) + 
+                    (1 | year), 
+                      data = dd_complete,
+                      na.action = 'na.fail'#,
+                      #family = negative.binomial(2.8588)
+                      #, na.action = "na.omit"  "na.fail"
+)
+# remove year as random
+glmm2 <- glmer(sum_ips ~ veg_tmp + previous_spei12_2 + #+ spei12+ previous_spei12
+                 (1 | pairID) , 
+               data = dd_complete,
+               na.action = 'na.fail',
+               family = negative.binomial(2.4025)
+               #, na.action = "na.omit"  "na.fail"
+)
+
+glmm3 <- glmer.nb(sum_ips ~ poly(veg_tmp,2) + poly(previous_spei12_2,2) + 
+                    (1 | pairID), 
+                  data = dd_complete, 
+                  na.action = 'na.fail')
+
+summary(glmm3)
+AICc(mm1, glmm1,glmm2, glmm3, m9_interaction2,glmm3  )
+
+simulationOutput <- simulateResiduals(fittedModel = glmm3, plot = T)
+testOutliers(glmm2, type = 'bootstrap') 
+plot(allEffects(glmm2))
+
+
+# Variance Inflation Factor for fixed effects
+vif_values <- vif(glmm1)
+
+(vif_values)
+
+# Autocorrelation check
+acf(residuals(glmm1))
+
+
+
+
+
+
+
 
 
 # DREDGE Variable selection, IPS vs environment  ------------------------------------------------------
 
+cor(dd_complete$spei12, dd_complete$spei3)
 
 
 
 # Fit a global model with all potential predictors
-global_model <- glmer(sum_ips ~ poly(veg_tmp,2) + annual_spei6 + 
-                         (1 | pairID/trapID), 
-                      data = dat_lag_scaled_complete,
+global_model <- glmer(sum_ips ~ veg_tmp +
+                        spei1 + 
+                        previous_spei1_2 +
+                        #spei3 + 
+                        #previous_spei3_2 + 
+                        #spei6 + 
+                        #previous_spei6_2 +
+                        spei12 + previous_spei12_2 + 
+                         (1 | pairID), 
+                      data = dd_complete,
                       na.action = 'na.fail',
                       family = negative.binomial(2.8588)
                       #, na.action = "na.omit"  "na.fail"
@@ -1320,7 +1520,7 @@ global_model <- glmer(sum_ips ~ poly(veg_tmp,2) + annual_spei6 +
 model_set <- dredge(global_model)
 
 # View the results
-print(model_set)
+#print(model_set)
 
 # Sort by AIC
 model_set_sorted <- model_set[order(model_set$AIC),]
@@ -1329,36 +1529,21 @@ model_set_sorted <- model_set[order(model_set$AIC),]
 head(model_set_sorted)
 
 
-# examine models:
+# try one by one, the most important from teh global model -------------------------------
+m1 <- glmer(sum_ips ~ veg_tmp +
+                        spei1 + 
+                        previous_spei1_2 +
+                        spei12 + 
+                        previous_spei12_2 + 
+                        (1 | pairID), 
+                      data = dd_complete,
+                      na.action = 'na.fail',
+                      family = negative.binomial(2.8588)
+                      #, na.action = "na.omit"  "na.fail"
+)
 
-# Assuming you want to examine model 207 from your model set
-i = 6
-selected_model <- get.models(model_set, subset = i)  # subset = 1 for the best model; adjust if needed
-
-# Get a summary of the selected model
-summary(selected_model)  # selected_model is a list, [[1]] accesses the first element
-
-simulationOutput <- simulateResiduals(fittedModel = selected_model  , plot = T) # m3.7.1.aut2
-
-testOutliers(selected_model , type = 'bootstrap') # i have outliers dectected, need to simplify the model! 
-# Calculate pseudo-R^2 for the selected model
-r.squared <- r.squaredGLMM(selected_model[[i]])
-print(r.squared)  # prints both marginal and conditional R^2; for GLM, marginal R^2 is more relevant
-
-# my best variables are:
-#(Int)        elv ply(veg_tmp,2)      prc prv_sum_ips_scl rmn_spr       sm     spe df    logLik     AICc
-#95  9.882                     + -0.01892          0.6325 0.01873          0.05847  8 -51722.85 103461.7
-# does not really good, the models fit is very poor and variables are not meaningfull
-
-
-# Plot the effects
-windows()
-plot(selected_model[[1]], page = 1)
-
-# Get the coefficients
-coef(selected_model[[1]])
-
-plot(allEffects(selected_model[[1]]))
+summary(m1)
+AICc(m1)
 
 
 ### GLMM - ips counts with random effect and nb ----------------------------------------
