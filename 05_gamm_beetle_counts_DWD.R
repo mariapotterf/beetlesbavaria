@@ -1180,7 +1180,7 @@ windows()
 plot(dd$spei3,dd$previous_spei3)
 
 
-## Fit the GLMM with negative binomial distribution & random effects ------------
+## Fit the GLMM with negative binomial distribution & random effects: all data ------------
 m1.null     <- glm.nb(sum_ips ~ 1, data = dd, link = log)
 m1          <- glm.nb(sum_ips ~ veg_tmp, data = dd, link = log)
 
@@ -1239,7 +1239,7 @@ testOutliers(m2, type = 'bootstrap')
 
 
 # Get the coefficients
-coef(m2)
+coef(m9)
 r2(m2)
 summary(m7)
 vif(m7)
@@ -1251,68 +1251,25 @@ acf(m7)
 
 
 
-# try using mixed effects models 
-
-m.glmer1 <- glmer(sum_ips ~ veg_tmp + annual_spei6 + 
-                                   (1 | pairID/trapID), 
-                                 data = dd,
-                                 na.action = 'na.fail',
-                                 family = negative.binomial(2.8588)
-)
-
-# simplify nesting design
-m.glmer2 <- glmer(sum_ips ~ veg_tmp + annual_spei6 + 
-                    (1 | pairID), 
-                  data = dat_lag_scaled_complete,
-                  na.action = 'na.fail',
-                  family = negative.binomial(2.8588))
-
-
-AICc(m2,m.glmer2)
-
 simulationOutput <- simulateResiduals(fittedModel = m.glmer2, plot = T)
 testOutliers(m.glmer2, type = 'bootstrap') 
 
 
 # Variance Inflation Factor for fixed effects
-vif_values <- vif(m.glmer2)
-
-(vif_values)
+vif(m9)
 
 # Autocorrelation check
-acf(residuals(m.glmer2))
-acf(residuals(m2))
-acf(residuals(m7))
+acf(residuals(m9))
 
 #$ homoscedascity check
-plot(fitted(m.glmer2), residuals(m.glmer2))
+plot(fitted(m9), residuals(m9))
 abline(h = 0, col = "red")
 
 
-# normality of random effects
-qqnorm(ranef(m.glmer2)$pairID)
-qqline(ranef(m.glmer2)$pairID)
-
 # Get the coefficients
-coef(m2)
-r2(m2.2)
-summary(m2)
-
-plot(allEffects(m.glmer2)) ## m2 is teh best!!! compare with glmer.nb
-windows()
-plot(allEffects(m2))
-
-summary(m.glmer2)
-summary(m2)
-
-# compare models:
-summary(m2)
-
-anova(m2)
-
-
-
-# go for simpler model, as the m2 model do not violetae model assumptions
+coef(m9)
+r2(m9)
+summary(m9)
 
 
 #### PLOT GLM.NB IPS vs climate veg_tmp -----------------------
@@ -1394,11 +1351,18 @@ p3 <- ggplot(dat_previous_spei12_2, aes(x = previous_spei12_2, y = predicted)) +
 ggarrange(p1, p2, p3, ncol = 3, nrow = 1)
 
 
+require(ggiraph)
+require(ggiraphExtra)
+ggPredict(m2,se=TRUE,interactive=TRUE,digits=3)
+
+
+
+
 
 summary(m2)
 
 
-# include 2 SPEIs and lagged values: ---------------------------------------
+##### include 2 SPEIs and lagged values: ---------------------------------------
 pairs(sum_ips ~ veg_tmp + previous_spei3_2  + previous_spei12_2, dd_complete, panel = panel.smooth) 
 
 m1 <-  glm.nb(sum_ips ~ veg_tmp, dd_complete) 
@@ -1519,7 +1483,7 @@ acf(residuals(glmm1))
 
 
 
-# DREDGE Variable selection, IPS vs environment  ------------------------------------------------------
+##### DREDGE Variable selection, IPS vs environment  ------------------------------------------------------
 
 cor(dd_complete$spei12, dd_complete$spei3)
 
@@ -1558,7 +1522,7 @@ model_set_sorted <- model_set[order(model_set$AIC),]
 head(model_set_sorted)
 
 
-# try one by one, the most important from teh global model -------------------------------
+##### try one by one, the most important from teh global model -------------------------------
 m1 <- glmer(sum_ips ~ veg_tmp +
                         spei1 + 
                         previous_spei1_2 +
@@ -1575,7 +1539,7 @@ summary(m1)
 AICc(m1)
 
 
-### GLMM - ips counts with random effect and nb ----------------------------------------
+##### GLMM - ips counts with random effect and nb ----------------------------------------
 
 m3 <- glmer.nb(sum_ips ~ veg_tmp + annual_spei6 + (1|pairID) + (1|trapID), data = dat_lag_scaled)
 
@@ -1876,1057 +1840,11 @@ simulationOutput <- simulateResiduals(fittedModel = m3.7.3.poly, plot = T)
 # Predicting beetle counts
 AIC(m3.5, m3.7.1, m3.7.3.poly)
 
-### plot GLM.nb  ===================================================
-unique_trapIDs <- levels(dat_lag_scaled$trapID)
-unique_pairID   <- levels(dat_lag_scaled$pairID)
-unique_temp       <- levels(dat_lag_scaled$temp_fact)
-temp_range        <- seq(min(dat_lag_scaled$veg_tmp), 
-                         max(dat_lag_scaled$veg_tmp), 
-                         length.out = 100)
-new_data <- expand.grid(veg_tmp = temp_range, 
-                        temp_fact = levels(dat_lag_scaled$temp_fact),
-                        pairID = unique_pairID[1],
-                        trapID = unique_trapIDs[1])
 
-new_data$predicted_counts <- predict(m3.7.4.exp, newdata = new_data, re.form = NULL)
-
-# Plotting
-ggplot(new_data, aes(x = veg_tmp, y = predicted_counts, color = temp_fact)) +
-  geom_line() +
-  labs(title = "Predicted Beetle Counts by Temperature and Year",
-       x = "Temperature (z-score)",
-       y = "Predicted Beetle Counts") +
-  theme_minimal()
-
-#
-r2(m3.7.4.exp)
-r2(m3.7.3.poly)
-r2(m3.7.4.lin)
-
-
-
-# ceck different seasons??
-ggplot(dat_lag_scaled, aes(x = veg_tmp, y = sum_ips, color = temp_fact)) +
-  geom_point() +
-  geom_smooth()+
-  theme_minimal()
-
-
-
-m4 <- glmer.nb(sum_ips ~ veg_tmp + spei + (1|pairID) + (1|trapID), 
-               data = dat_lag_scaled)
-
-m5 <- glmer.nb(sum_ips ~ veg_tmp + spei + (1 | pairID/trapID), # account for nested design
-               data = dat_lag_scaled)
-
-m6 <- glmer.nb(sum_ips ~ veg_tmp + (1 | pairID/trapID), # account for nested design
-               data = dat_lag_scaled)
-
-m7 <- glmer.nb(sum_ips ~ veg_tmp + elev + (1 | pairID/trapID), # account for nested design
-               data = dat_lag_scaled)  # error
-
-m8 <- glmer.nb(sum_ips ~ veg_tmp + spruce_1986 + (1 | pairID/trapID), # account for nested design
-               data = dat_lag_scaled)  
-
-# account for nteraction between temp and year account for spatial and temporal autocorrelation
-m9 <- glmer.nb(sum_ips ~ veg_tmp * year + spruce_1986 + (1 | pairID/trapID), 
-               data = dat_lag_scaled)
-
-# visualize teh effect of temperature over years
-# Assuming 'veg_tmp' ranges from min_veg_tmp to max_veg_tmp in your data
-veg_tmp_range <- seq(min(dat_lag_scaled$veg_tmp), 
-                 max(dat_lag_scaled$veg_tmp), 
-                 length.out = 100)
-
-# Create a data frame for predictions
-new_data <- expand.grid(veg_tmp = veg_tmp_range, 
-                        year = levels(dat_lag_scaled$year), 
-                        spruce_1986 = mean(dat_lag_scaled$spruce_1986))  # Adjust other variables as needed
-
-# Predict using the model
-new_data$predicted <- predict(m9, newdata = new_data, re.form = NA, type = "response")
-
-# Plotting
-ggplot(new_data, 
-       aes(x = veg_tmp, y = predicted, color = year)) +
-  geom_line() +
-  labs(title = "Effect of Temperature across Years",
-       x = "Temperature",
-       y = "Predicted sum_ips") +
-  theme_minimal() +
-  scale_color_brewer(palette = "Set1")
-
-
-
-# allow temparature interacting with year, but not year as individual preddictor
-m10 <- glmer.nb(sum_ips ~ veg_tmp:year + veg_tmp + spruce_1986 + (1 | pairID/trapID), 
-                data = dat_lag_scaled)
-
-
-
-### glmmTMB account for temporal correlation and overdispersion in data -------------
-
-
-# not meaningfull!!!
-m11 <- glmmTMB(sum_ips ~ veg_tmp + spruce_1986 + 
-                (1 | pairID/trapID) + 
-                (0 + year | pairID/trapID) + 
-                 ar1(year + 0|trapID), # account for autocorrelation, as here: https://stats.stackexchange.com/questions/393734/covariance-structures-in-glmmtmb-for-temporal-autocorrelation
-              data = dat_lag_scaled,
-              family = nbinom2,
-              ziformula = ~ 1,  # Zero-inflation formula, adjust as necessary
-              dispformula = ~ 1#,  # Dispersion formula, adjust as necessary
-              #corStruct = corAR1(form = ~ year | pairID/trapID)
-              )
-
-# m11 does not work: as the glmmTMB does not work with the temporal autocorrelation
-# create the year as random intercept to account for systematic error in year:
-
-m12 <- glmmTMB(sum_ips ~ veg_tmp + spruce_1986 + (1 + year | pairID/trapID),
-              data = dat_lag_scaled,
-              family = nbinom2(),
-              ziformula = ~ 1,  # Zero-inflation part, adjust if needed
-              dispformula = ~ 1)  # Dispersion part, adjust if needed
-
-
-AICc( m8, m9, m10)
-r2(m3.5)       # get R squared
-confint(m5)  # get confidence interval
-
-
-plot(allEffects(m3.5))
-
-AICc(m5)
-dredge(m5)
-
-
-
-### GLM check residuals, outlieras and different tests --------------------------- 
-windows()
-simulationOutput <- simulateResiduals(fittedModel = m3.5, plot = T)
-testOutliers(m3.5, type = 'bootstrap') # p_val is n.s.: outliers do not occurs more often then by chance
-testDispersion(m3.5)  # P_val is significant, data are overdispersed
-testZeroInflation(m3.5)
-
-
-plotResiduals(simulationOutput)
-
-summary(m5)
-plot(m2)
-
-AICc(m2)
-
-
-r2(m2)
-
-
-
-### GAM tested models: ips_sum --------------------------------------------------
-
-dat_lag %>% 
-  ggplot(aes(y = sum_ips,
-             x = veg_tmp,
-             color = factor(year))) +
-  geom_smooth()
-
-
-dat_lag %>% 
-  ggplot(aes(y = sum_ips,
-             x = veg_tmp,
-             color = factor(temp_fact))) +
-  geom_point(alpha = 0.3)+
-  geom_smooth() +
-  facet_grid(.~temp_fact) +
-  theme_bw()
-
-# decide about which years are warm and which not??
-# check the z-score
-dat_lag %>% 
-  ggplot(aes(y = veg_tmp_z,
-             x = year,
-             group = year)) +
-  geom_boxplot(notch = T)
-
-
-m.gam0 <- bam(sum_ips ~ 
-                s(veg_tmp, k = 4),# +
-              #s(trapID, bs = 're') +  # categorical, account for how much individual trap contributes to the total variation
-              #s(pairID, bs = 're') +   # trap pair
-              #s(x,y, k = 50)
-              # ,
-              dat_lag_scaled, 
-              family = tw)
-
-
-m.gam1 <- bam(sum_ips ~ 
-                s(veg_tmp, by=temp_fact, k = 4),# +
-            #s(trapID, bs = 're') +  # categorical, account for how much individual trap contributes to the total variation
-            #s(pairID, bs = 're') +   # trap pair
-            #s(x,y, k = 50)
-           # ,
-          dat_lag_scaled, 
-          family = tw)
-
-
-m.gam2 <- bam(sum_ips ~ 
-                s(veg_tmp, by=temp_fact, k = 4) +
-              s(trapID, bs = 're') +  # categorical, account for how much individual trap contributes to the total variation
-              s(pairID, bs = 're') +   # trap pair
-              s(x,y),
-              dat_lag_scaled, 
-              family = tw)
-
-# add base 'ds' for coordinates
-m.gam3 <- bam(sum_ips ~ 
-                s(veg_tmp, by=temp_fact, k = 4) +
-                s(trapID, bs = 're') +  # categorical, account for how much individual trap contributes to the total variation
-                s(pairID, bs = 're') +   # trap pair
-                s(x,y, bs = 'ds'),
-              dat_lag_scaled, 
-              family = tw)
-
-# add base 'ds' for coordinates
-m.gam4 <- bam(sum_ips ~ 
-                s(veg_tmp, by=temp_fact, k = 4) +
-                s(trapID, bs = 're') +  # categorical, account for how much individual trap contributes to the total variation
-                s(pairID, bs = 're') +   # trap pair
-                s(x,y, bs = 'ds'),
-              dat_lag_scaled, 
-              family = tw)
-
-# add year variable to account for autocorrelation
-m.gam5 <- bam(sum_ips ~ 
-                s(veg_tmp, by=temp_fact, k = 4) +
-                s(year,bs = 're', k = 3) +
-                s(trapID, bs = 're') +  # categorical, account for how much individual trap contributes to the total variation
-                s(pairID, bs = 're') +   # trap pair
-                s(x,y, bs = 'ds'),
-              dat_lag_scaled, 
-              family = tw)
-
-
-# add lagged variables to account for temp autocorrelation
-m.gam6 <- bam(sum_ips ~ 
-                s(previous_sum_ips, k = 3) +
-                s(veg_tmp, by=temp_fact, k = 4) +
-                s(year,bs = 're', k = 3) +
-                s(trapID, bs = 're') +  # categorical, account for how much individual trap contributes to the total variation
-                s(pairID, bs = 're') +   # trap pair
-                s(x,y, bs = 'ds'),
-              dat_lag_scaled, 
-              family = tw)
-
-
-### Evaluated GAM -------------------------------------------------------------
-AICc(m.gam1, m.gam2, m.gam3, m.gam4, m.gam5,m.gam6 ) 
-windows()
-plot(m.gam6, page = 1, shade = T)
-appraise(m.gam6)
-summary(m.gam6)
-
-## Compare GAM, GLM: include anomalies categories or not? -----------
-
-# -> conclusion: go for simpler model, do not split the data in periods
-AIC(m3.6, m3.7.1, m3.7.2, m3.7.3.poly, m.gam0, m.gam5)
-AICc(m3.6, m3.7.1, m3.7.2, m3.7.3.poly, m.gam0, m.gam5)
-BIC(m3.6, m3.7.1, m3.7.2, m3.7.3.poly, m.gam0, m.gam5)
-
-# the best models:
-m.gam5 # lowest AIC, AICc, BIC, df 130 = very complex, r2 = 
-m3.7.1 # less complex (df = 7)
-m3.6   # less complex (df = 5)
-
-
-
-r2(m.gam5) # 0.50
-r2(m3.7.1) # 0.58 
-r2(m3.6)   # 0.54 less complex (df = 5)
-
-
-### Test autocorrelation of residuals ------------------------------------------------
-acf(residuals(m3.7.1))  # seems relatively ok
-pacf(residuals(m3.7.1))
-
-plot(allEffects(m3.7.1))
-
-# different ways to handle temporal autocorrelation --------------------------
-# wrong!! low AIC, but issueas with family, and not corect residuals
-m.gamm <- gamm(sum_ips ~ s(veg_tmp, by = temp_fact, k = 4) +
-                 s(year_num, by = temp_fact, bs = "re") +
-                 s(pairID, bs = "re") +
-                 s(trapID, bs = "re"),
-               data = dat_lag_scaled, 
-               family = nb())
-appraise(m.gamm$gam)
-plot(m.gamm$gam, page = 1)
-
-acf(residuals(m.gamm$gam))
-pacf(residuals(m.gamm$gam))
-
-# 1. if data are overdispersed, need to use neg bin family
-
-m.glmmTMB <- glmmTMB(sum_ips ~ poly(veg_tmp, 2) * temp_fact + 
-                       (1 | year_num:temp_fact) + 
-                       (1 | pairID) + 
-                       (1 | trapID),
-                     data = dat_lag_scaled, 
-                     family = nbinom2)
-
-# 2. handle overdispersion by add observation level ID as random effect
-m.gam1 <- gam(sum_ips ~ s(veg_tmp, by = temp_fact, k = 4) +
-               s(pairID, bs = "re") +
-               s(trapID, bs = "re") +
-               s(id, bs = "re"),  # Observation-level random effect
-             data = dat_lag_scaled, 
-             family = nb())
-
-m.gam2 <- gam(sum_ips ~ s(veg_tmp, by = temp_fact, k = 4) +
-                s(pairID, bs = "re") +
-                s(trapID, bs = "re") +
-                s(id, bs = "re"),  # Observation-level random effect
-              data = dat_lag_scaled, 
-              family = poisson())
-
-# the best!
-m.gam3 <- gam(sum_ips ~ s(veg_tmp, by = temp_fact, k = 4) +
-                s(pairID, bs = "re") +
-                s(trapID, bs = "re") +
-                s(id, bs = "re"),  # Observation-level random effect
-              data = dat_lag_scaled, 
-              family = tw())
-
-
-  plot_smooth(m.gam3, 
-                          view="veg_tmp", 
-                          rm.ranef =TRUE, 
-                          #transform=function(x) 100*inv.logit(x),  
-                          plot_all="temp_fact")$fv
-
-
-
-
-###  GAM shown in a plot --------------------------------------------------------
-
-# Select specific levels for id, pairID, and trapID
-selected_id <- unique(dat_lag_scaled$id)[5]      # Replace 1 with your chosen level
-selected_pairID <- unique(dat_lag_scaled$pairID)[5]
-selected_trap <- unique(dat_lag_scaled$trapID)[5]
-
-# Generate Predicted Values
-new_data <- expand.grid(temp_fact = unique(dat_lag_scaled$temp_fact),
-                        veg_tmp = seq(min(dat_lag_scaled$veg_tmp), max(dat_lag_scaled$veg_tmp), length.out = 100),
-                        pairID = selected_pairID,
-                        trapID = selected_trap,
-                        id = selected_id)
-
-# Predict using your model
-new_data$predicted <- predict(m.gam3, newdata = new_data, type = "response")
-
-# Create the Plot
-ggplot(new_data, aes(x = veg_tmp, y = predicted, color = temp_fact)) +
-  geom_line() +
-  labs(title = "Predicted sum_ips by Temp Factor",
-       x = "Temperature",
-       y = "Predicted sum_ips") +
-  theme_minimal() +
-  scale_color_brewer(palette = "Set1")
-
-## GAMM test model run, before improving autocorrelation - simpler - does not work!! -----------------
-m.gamm1 <- gamm(
-  sum_ips ~ s(veg_tmp, by = temp_fact, k = 4) +
-    s(pairID, bs = "re") +
-    s(trapID, bs = "re") +
-    s(id, bs = "re"),
-  data = dat_lag_scaled,
-  family = nb()
-)
-
-# include autocorrelation; make sure that 
-m.gamm2 <- gamm(
-  sum_ips ~ s(veg_tmp, by = temp_fact, k = 4) +
-    s(pairID, bs = "re") +
-    s(trapID, bs = "re") +
-    s(id, bs = "re"),
-  data = dat_lag_scaled,
-  family = nb(),
-  correlation = corAR1(form = ~ year_num)
-)
-
-AICc(m.gam1,m.gam2,m.gam3)
-appraise(m.gam3)
-
-acf(residuals(m.gam3))
-pacf(residuals(m.gam3))
-
-
-AICc(m.gamm,m.glmmTMB, m.gam)
-
-
-# test only for individual years, year needs to be treated as a factor for AR structure!
-# does not work
-m.gamm.ar <- gamm(
-  sum_ips ~ s(veg_tmp, k = 4),# +
-   # s(pairID, bs = "re") +
-  #  s(trapID, bs = "re") +
-   # s(id, bs = "re"),
-  data = dat_lag_scaled,
-  #family = nb(),
-  correlation = corAR1(form = ~ year_num)
-)
-
-
-
-# using mixed effects GAMM with explicit temporal autocorrelation -------------
-# Example of using gamm for temporal autocorrelation
-
-# to account for autocorrelation using corAR, I need to have one year per category
-m.gamm1 <- gamm(sum_ips ~ s(veg_tmp, by=year, k = 4), 
-                  s(pairID, bs = "re") +
-                  s(trapID, bs = "re"),
-                data = dat_lag_scaled, 
-                #family = nb(), 
-                correlation = corAR1(form = ~ year_num))
-
-
-
-
-
-
-
-m.gamm1 <- gamm(sum_ips ~ s(veg_tmp, by=temp_fact, k = 4), 
-               s(year_num, by = temp_fact, bs = "re") +
-                 s(pairID, bs = "re") +
-                 s(trapID, bs = "re"),
-               data = dat_lag_scaled, 
-               #family = nb(), 
-               correlation = corAR1(form = ~ year_num))
 
 # Perform the Durbin-Watson test - better for linear models? ACF,pACF are better for gams, GAMM (gams with mixed effects)
-dw_result <- dwtest(residuals(m.gam5) ~ fitted(m.gam5))
+dw_result <- dwtest(residuals(m9) ~ fitted(m9))
 (dw_result)
-
-
-
-
-# GAM first try, unscaled----------------------------------------------------------------
-
-m1 <- gam(sum_ips ~ s(previous_sum_ips, k = 70) +
-            s(year, k = 6) +
-            veg_tmp +
-            s(trapID, bs = 're') +  # categorical, account for how much individual trap contributes to the total variation
-            s(pairID, bs = 're') +   # trap pair
-            s(x,y, k = 50) +
-            s(year, veg_tmp),
-          dat_lag, family = tw)
-
-m2 <- gam(sum_ips ~ s(previous_sum_ips, k = 70) +
-            s(year, k = 6) +
-            previous_veg_tmp + 
-            veg_tmp +
-            s(trapID, bs = 're') +  # categorical, account for how much individual trap contributes to the total variation
-            s(pairID, bs = 're') +   # trap pair
-            s(x,y, k = 50) +
-            s(year, veg_tmp),
-          dat_lag, family = tw)
-
-m3 <- gam(sum_ips ~ s(previous_sum_ips, k = 70) +
-            s(year, k = 6) +
-            veg_tmp +
-            spei +
-            s(trapID, bs = 're') +  # categorical, account for how much individual trap contributes to the total variation
-            s(pairID, bs = 're') +   # trap pair
-            s(x,y, k = 50) +
-            s(year, veg_tmp),
-          dat_lag, family = tw)
-
-
-m4 <- gam(sum_ips ~ s(previous_sum_ips, k = 70) +
-            s(year, k = 6) +
-            veg_tmp +
-            spei +
-            s(trapID, bs = 're') +  # categorical, account for how much individual trap contributes to the total variation
-            s(pairID, bs = 're') +   # trap pair
-           # s(x,y, k = 50) +
-            s(year, veg_tmp),
-          dat_lag, family = tw)
-
-
-m5 <- gam(sum_ips ~ s(previous_sum_ips, k = 70) +
-            s(year, k = 6) +
-            s(elev) +
-            veg_tmp +
-            spei +
-            s(trapID, bs = 're') +  # categorical, account for how much individual trap contributes to the total variation
-            s(pairID, bs = 're') +   # trap pair
-            # s(x,y, k = 50) +
-            s(year, veg_tmp),
-          dat_lag, family = tw)
-
-m6 <- gam(sum_ips ~ s(previous_sum_ips, k = 70) +
-            s(year, k = 6) +
-            s(elev) +
-            veg_tmp +
-            spei +
-            s(trapID, bs = 're') +  # categorical, account for how much individual trap contributes to the total variation
-            s(pairID, bs = 're') +   # trap pair
-            # s(x,y, k = 50) +
-            s(year, veg_tmp),
-          dat_lag, family = tw)
-
-
-m7 <- gam(sum_ips ~ s(previous_sum_ips, k = 70) +
-            s(year, k = 6) +
-            #s(elev) +
-            s(spruce_1986) +
-                        veg_tmp +
-            spei +
-            s(trapID, bs = 're') +  # categorical, account for how much individual trap contributes to the total variation
-            s(pairID, bs = 're') +   # trap pair
-            # s(x,y, k = 50) +
-            s(year, veg_tmp),
-          dat_lag, family = tw)
-
-m8 <- bam(sum_ips ~ s(previous_sum_ips, k = 70) +
-            s(year, k = 6) +
-            s(elev) +
-            s(spruce_1986) +
-            veg_tmp +
-            spei +
-            s(trapID, bs = 're') +  # categorical, account for how much individual trap contributes to the total variation
-            s(pairID, bs = 're') +   # trap pair
-            # s(x,y, k = 50) +
-            s(year, veg_tmp),
-          method="fREML", 
-          dat_lag, family = tw)
-
-
-m9 <- bam(sum_ips ~ s(previous_sum_ips, k = 70) +
-            s(year, k = 6) +
-            s(elev) +
-            s(spruce_1986) +
-            veg_tmp +
-            spei +
-            s(trapID, bs = 're') +  # categorical, account for how much individual trap contributes to the total variation
-            s(pairID, bs = 're') +   # trap pair
-             s(x,y, k = 25, bs = 'ds') +
-            s(year, veg_tmp),
-          method="fREML", 
-          dat_lag, family = tw)
-
-m9.nb <- bam(sum_ips ~ s(previous_sum_ips, k = 70) +
-            s(year, k = 6) +
-            s(elev) +
-            s(spruce_1986) +
-            veg_tmp +
-            spei +
-            s(trapID, bs = 're') +  # categorical, account for how much individual trap contributes to the total variation
-            s(pairID, bs = 're') +   # trap pair
-            s(x,y, k = 25, bs = 'ds') +
-            s(year, veg_tmp),
-          method="fREML", 
-          dat_lag, family = nb)
-
-m9.poisson <- bam(sum_ips ~ s(previous_sum_ips, k = 70) +
-               s(year, k = 6) +
-               s(elev) +
-               s(spruce_1986) +
-               veg_tmp +
-               spei +
-               s(trapID, bs = 're') +  # categorical, account for how much individual trap contributes to the total variation
-               s(pairID, bs = 're') +   # trap pair
-               s(x,y, k = 25, bs = 'ds') +
-               s(year, veg_tmp),
-             method="fREML", 
-             dat_lag, family = poisson)
-
-m9.poisson.sc <- bam(sum_ips ~ s(previous_sum_ips, k = 70) +
-                    s(year, k = 6) +
-                    s(elev) +
-                    s(spruce_1986) +
-                    veg_tmp +
-                    spei +
-                    s(trapID, bs = 're') +  # categorical, account for how much individual trap contributes to the total variation
-                    s(pairID, bs = 're') +   # trap pair
-                    s(x,y, k = 25, bs = 'ds') +
-                    s(year, veg_tmp),
-                  method="fREML", 
-                  dat_lag, family = poisson, scale = -1)
-
-# add population growth
-m10 <- bam(sum_ips ~ s(previous_sum_ips, k = 70) +
-            s(year, k = 6) +
-            s(elev) +
-            s(spruce_1986) +
-            s(population_growth) +
-            veg_tmp +
-            spei +
-            s(trapID, bs = 're') +  # categorical, account for how much individual trap contributes to the total variation
-            s(pairID, bs = 're') +   # trap pair
-            # s(x,y, k = 50) +
-            s(year, veg_tmp),
-          dat_lag,method="fREML",  family = tw)
-
-m10.2 <- bam(sum_ips ~ s(previous_sum_ips, k = 70) +
-             s(year, k = 6) +
-             s(elev) +
-             s(spruce_1986) +
-             s(population_growth) +
-             veg_tmp +
-             spei +
-             s(trapID, bs = 're') +  # categorical, account for how much individual trap contributes to the total variation
-             s(pairID, bs = 're') +   # trap pair
-             # s(x,y, k = 50) +
-             s(veg_tmp, year),
-           dat_lag,method="fREML",  family = tw)
-
-
-# remove s(veg_tmp, year)
-m10.3 <- bam(sum_ips ~ s(previous_sum_ips, k = 70) +
-               s(year, k = 6) +
-               s(elev) +
-               s(spruce_1986) +
-               s(population_growth) +
-               veg_tmp +
-               spei +
-               s(trapID, bs = 're') +  # categorical, account for how much individual trap contributes to the total variation
-               s(pairID, bs = 're'),# +   # trap pair
-               # s(x,y, k = 50) +
-              # s(veg_tmp, year),
-             dat_lag,method="fREML",  family = tw)
-
-# interaction using tensor# s(veg_tmp, year)
-m10.4 <- bam(sum_ips ~ s(previous_sum_ips, k = 70) +
-               s(year, k = 6) +
-               s(elev) +
-               s(spruce_1986) +
-               s(population_growth) +
-               veg_tmp +
-               spei +
-               s(trapID, bs = 're') +  # categorical, account for how much individual trap contributes to the total variation
-               s(pairID, bs = 're') +   # trap pair
-             # s(x,y, k = 50) +
-              ti(veg_tmp, year),
-             dat_lag,method="fREML",  family = tw)
-
-
-# remove previous beetle sum
-m11 <- bam(sum_ips ~ #s(previous_sum_ips, k = 70) +
-             s(year, k = 6) +
-             s(elev) +
-             s(spruce_1986) +
-             s(population_growth) +
-             veg_tmp +
-             spei +
-             s(trapID, bs = 're') +  # categorical, account for how much individual trap contributes to the total variation
-             s(pairID, bs = 're') +   # trap pair
-             # s(x,y, k = 50) +
-             s(year, veg_tmp),
-           dat_lag,method="fREML",  family = tw)
-
-# elevation as linear
-m12 <- bam(sum_ips ~ #s(previous_sum_ips, k = 70) +
-             s(year, k = 6) +
-             elev +
-             s(spruce_1986) +
-             s(population_growth) +
-             veg_tmp +
-             spei +
-             s(trapID, bs = 're') +  # categorical, account for how much individual trap contributes to the total variation
-             s(pairID, bs = 're') +   # trap pair
-             # s(x,y, k = 50) +
-             s(year, veg_tmp),
-           dat_lag,method="fREML",  family = tw)
-
-
-
-# add temperature from previous year
-m13 <- bam(sum_ips ~ s(previous_sum_ips, k = 70) +
-               s(year, k = 6) +
-               s(elev) +
-               s(spruce_1986) +
-               s(population_growth) +
-               s(previous_veg_tmp) +
-               veg_tmp +
-               spei +
-               s(trapID, bs = 're') +  # categorical, account for how much individual trap contributes to the total variation
-               s(pairID, bs = 're'),# +   # trap pair
-             # s(x,y, k = 50) +
-             # s(veg_tmp, year),
-             dat_lag,method="fREML",  family = tw)
-
-#previous year pop growth
-m13.2 <- bam(sum_ips ~ s(previous_sum_ips, k = 70) +
-             s(year, k = 5) +
-             s(elev) +
-             s(spruce_1986) +
-             s(population_growth2, k = 6) +
-             s(previous_veg_tmp) +
-             veg_tmp +
-             spei +
-             s(trapID, bs = 're') +  # categorical, account for how much individual trap contributes to the total variation
-             s(pairID, bs = 're'),# +   # trap pair
-           # s(x,y, k = 50) +
-           # s(veg_tmp, year),
-           dat_lag,method="fREML",  family = tw)
-
-
-# set terms to linear
-
-# include autocorrelation: A, and check for autocorrelation by XXXX test
-m13.3 <- bam(sum_ips ~ s(previous_sum_ips, k = 70) +
-               s(year, k = 5) +
-               elev +
-               s(spruce_1986) +
-               population_growth2 +
-               previous_veg_tmp +
-               veg_tmp +
-               spei +
-               s(trapID, bs = 're') +  # categorical, account for how much individual trap contributes to the total variation
-               s(pairID, bs = 're'),# +   # trap pair
-             # s(x,y, k = 50) +
-             # s(veg_tmp, year),
-             dat_lag,method="fREML",  family = tw)
-
-
-m13.3.1 <- bam(sum_ips ~ s(previous_sum_ips, k = 4) +
-               s(year, k = 5) +
-               elev +
-               s(spruce_1986) +
-               population_growth2 +
-               previous_veg_tmp +
-               veg_tmp +
-               spei +
-               s(trapID, bs = 're') +  # categorical, account for how much individual trap contributes to the total variation
-               s(pairID, bs = 're'),# +   # trap pair
-             # s(x,y, k = 50) +
-             # s(veg_tmp, year),
-             dat_lag,method="fREML",  family = tw)
-
-
-
-m13.3.1.temp.ac <- gamm(sum_ips ~ s(previous_sum_ips, k = 4) +
-              s(year, k = 5) +
-                elev +
-                s(spruce_1986) +
-                population_growth2 +
-                previous_veg_tmp +
-                veg_tmp +
-                spei +
-                s(trapID, bs = 're') +  # categorical, account for how much individual trap contributes to the total variation
-                s(pairID, bs = 're'),
-            data = dat_lag,
-            family = tw,
-            correlation = corAR1(form = ~ year | trapID))
-
-
-m1.temp.ac <- gamm(sum_ips ~ s(previous_sum_ips, k = 4) +
-                          s(year, k = 5) +
-                          #elev +
-                          s(spruce_1986) +
-                          population_growth2 +
-                          previous_veg_tmp +
-                          s(veg_tmp) +
-                          #spei +
-                          s(trapID, bs = 're') +  # categorical, account for how much individual trap contributes to the total variation
-                          s(pairID, bs = 're'),
-                        data = dat_lag,
-                        family = tw,
-                        correlation = corAR1(form = ~ year | trapID))
-
-
-m2.temp.ac <- gamm(sum_ips ~ #s(previous_sum_ips, k = 4) +
-                     #s(year, k = 5) +
-                     #elev +
-                     #s(spruce_1986) +
-                     #population_growth2 +
-                     #previous_veg_tmp +
-                     s(veg_tmp) +
-                     #spei +
-                     s(trapID, bs = 're') +  # categorical, account for how much individual trap contributes to the total variation
-                     s(pairID, bs = 're'),
-                   data = dat_lag,
-                   family = tw,
-                   correlation = corAR1(form = ~ year | trapID))
-
-
-
-# check for autocorrelation in residuals:
-acf(residuals(m1.temp.ac$lme))  # Final model!!!
-
-appraise(m1.temp.ac$gam)
-plot(m1.temp.ac$gam, page = 1, shade = T)
-summary(m1.temp.ac$gam)
-AIC(m13.3.1.temp.ac,m13.3.1, m1.temp.ac )
-
-
-#!!!! glm, model averaging???
-
-
-
-# add previous year spei 
-m14 <- bam(sum_ips ~ s(previous_sum_ips, k = 70) +
-             s(year, k = 6) +
-             s(elev) +
-             s(spruce_1986) +
-             s(population_growth) +
-     s(previous_veg_tmp)+
-             s(previous_spei) +
-             veg_tmp +
-             spei +
-             s(trapID, bs = 're') +  # categorical, account for how much individual trap contributes to the total variation
-             s(pairID, bs = 're'),# +   # trap pair
-           # s(x,y, k = 50) +
-           # s(veg_tmp, year),
-           dat_lag,method="fREML",  family = tw)
-
-
-# add temperature from previous year
-m13.nb <- bam(sum_ips ~ s(previous_sum_ips, k = 70) +
-             s(year, k = 6) +
-             s(elev) +
-             s(spruce_1986) +
-             s(population_growth) +
-             s(previous_veg_tmp) +
-             veg_tmp +
-             spei +
-             s(trapID, bs = 're') +  # categorical, account for how much individual trap contributes to the total variation
-             s(pairID, bs = 're'),# +   # trap pair
-           # s(x,y, k = 50) +
-           # s(veg_tmp, year),
-           dat_lag,method="fREML",  family = nb(theta = 1.8))
-
-
-# use as linear terms if the edf = 1
-m15 <- bam(sum_ips ~ s(previous_sum_ips, k = 70) +
-             year +
-             elev +
-             spruce_1986 +
-             s(population_growth) +
-             previous_veg_tmp +
-             veg_tmp +
-             spei +
-             s(trapID, bs = 're') +  # categorical, account for how much individual trap contributes to the total variation
-             s(pairID, bs = 're'),# +   # trap pair
-           # s(x,y, k = 50) +
-           # s(veg_tmp, year),
-           dat_lag,method="fREML",  family = tw(1.5))
-
-
-# use as linear terms if the edf = 1
-m16 <- bam(sum_ips ~ s(previous_sum_ips, k = 70) +
-             year +
-             elev +
-             spruce_1986 +
-             s(population_growth, k =80) +
-             previous_veg_tmp +
-             veg_tmp +
-             spei +
-             s(trapID, bs = 're') +  # categorical, account for how much individual trap contributes to the total variation
-             s(pairID, bs = 're'),# +   # trap pair
-           # s(x,y, k = 50) +
-           # s(veg_tmp, year),
-           dat_lag,method="fREML",  family = tw(1.5))
-
-
-# use automatic k - does not work well!
-m17 <- bam(sum_ips ~ s(previous_sum_ips, k = TRUE) +
-             year +
-             elev +
-             spruce_1986 +
-             s(population_growth, k =TRUE) +
-             previous_veg_tmp +
-             veg_tmp +
-             spei +
-             s(trapID, bs = 're') +  # categorical, account for how much individual trap contributes to the total variation
-             s(pairID, bs = 're'),# +   # trap pair
-           # s(x,y, k = 50) +
-           # s(veg_tmp, year),
-           dat_lag,method="fREML",  family = tw(1.5))
-
-
-
-
-#increase k values
-m16.2 <- bam(sum_ips ~ s(previous_sum_ips, k = 130) +
-             year +
-             elev +
-             spruce_1986 +
-             s(population_growth, k =130) +
-             previous_veg_tmp +
-             veg_tmp +
-             spei +
-             s(trapID, bs = 're') +  # categorical, account for how much individual trap contributes to the total variation
-             s(pairID, bs = 're'),# +   # trap pair
-           # s(x,y, k = 50) +
-           # s(veg_tmp, year),
-           dat_lag,method="fREML",  family = tw(1.5))
-
-
-#reduce tweedie
-m16.3 <- bam(sum_ips ~ s(previous_sum_ips, k = 130) +
-               year +
-               elev +
-               spruce_1986 +
-               s(population_growth, k =130) +
-               previous_veg_tmp +
-               veg_tmp +
-               spei +
-               s(trapID, bs = 're') +  # categorical, account for how much individual trap contributes to the total variation
-               s(pairID, bs = 're'),# +   # trap pair
-             # s(x,y, k = 50) +
-             # s(veg_tmp, year),
-             dat_lag,method="fREML",  family = tw)
-
-
-
-# increase k values for m13 model
-
-# work on m 13: inceaase k 
-m17 <- bam(sum_ips ~ s(previous_sum_ips, k = 100) +
-             s(year, k = 6) +
-             s(elev) +
-             s(spruce_1986) +
-             s(population_growth, k = 50) +
-             s(previous_veg_tmp, k = 20) +
-             veg_tmp +
-             spei +
-             s(trapID, bs = 're') +  # categorical, account for how much individual trap contributes to the total variation
-             s(pairID, bs = 're'),# +   # trap pair
-           # s(x,y, k = 50) +
-           # s(veg_tmp, year),
-           dat_lag,method="fREML",  family = tw)
-
-# set linear vars as linear, not smooths
-m18 <- bam(sum_ips ~ s(previous_sum_ips, k = 100) +
-             s(year, k = 6) +
-             elev +
-             spruce_1986 +
-             s(population_growth, k = 50) +
-             previous_veg_tmp +
-             veg_tmp +
-             spei +
-             s(trapID, bs = 're') +  # categorical, account for how much individual trap contributes to the total variation
-             s(pairID, bs = 're'),# +   # trap pair
-           # s(x,y, k = 50) +
-           # s(veg_tmp, year),
-           dat_lag,method="fREML",  family = tw)
-
-# reduce 'k' consistently
-m19 <- bam(sum_ips ~ s(previous_sum_ips, k = 50) +
-             s(year, k = 6) +
-             elev +
-             spruce_1986 +
-             s(population_growth, k = 50) +
-             previous_veg_tmp +
-             veg_tmp +
-             spei +
-             s(trapID, bs = 're') +  # categorical, account for how much individual trap contributes to the total variation
-             s(pairID, bs = 're'),# +   # trap pair
-           # s(x,y, k = 50) +
-           # s(veg_tmp, year),
-           dat_lag,method="fREML",  family = tw)
-
-
-
-
-# add remained forest as smooth
-m18.2 <- bam(sum_ips ~ s(previous_sum_ips, k = 50) +
-             s(year, k = 6) +
-             elev +
-             #spruce_1986 +
-             s(remained_spruce) +
-             s(population_growth, k = 20) +
-             previous_veg_tmp +
-             veg_tmp +
-             spei +
-             s(trapID, bs = 're') +  # categorical, account for how much individual trap contributes to the total variation
-             s(pairID, bs = 're'),# +   # trap pair
-           # s(x,y, k = 50) +
-           # s(veg_tmp, year),
-           dat_lag,method="fREML",  family = tw)
-
-
-# remove non significant and s termsadd remained forest as smooth
-m18.3 <- bam(sum_ips ~ s(previous_sum_ips, k = 50) +
-               s(year, k = 6) +
-               elev +
-               #spruce_1986 +
-               remained_spruce +
-               s(population_growth, k = 20) +
-               previous_veg_tmp +
-               veg_tmp +
-               spei +
-               s(trapID, bs = 're') +  # categorical, account for how much individual trap contributes to the total variation
-               s(pairID, bs = 're'),# +   # trap pair
-             # s(x,y, k = 50) +
-             # s(veg_tmp, year),
-             dat_lag,method="fREML",  family = tw)
-
-
-
-# put linear trends as linear
-
-summary(m18.2)
-gam.check(m17)
-k.check(m18)
-appraise(m17)
-plot(m18, page = 1, shade = T, scale = 0)
-AIC(#m1, m2, m3, m4, m5, m7, 
-  m8,  # intercept is NaN, which is not correct!
-  m9,
-  #m9.nb,
-  #m9.poisson, 
-  #m9.poisson.sc,
-  m10, 
-  #m10.2, m10.3, m10.4, 
-  m13,
-  m13.2,
- m13.3 # # !!!! this is the winner! having reasonable error distributions and explaining 50% od deviance
-  # m13.nb
-  #m14
-  #m11, m12
- #m15, 
- #m16, m16.2,
- #m17,
- #m18,
-# m18.2
-# m19
-  )
-
-
-
-# Plot the smoothed term with an exponentiated y-axis
-plot(m13.3, pages = 1, scale = 0, shade= T)
-plot(m8, pages = 1, scale = 0, shade= T)
-
-# Plot explained variability m13.3 -------------------------------------------------
-
-
-# Extract the F or t statistics as measures of effect size
-effect_size <- c(
-  previous_sum_ips = 20.257,
-  year = 5.850,
-  spruce_1986 = 2.037,
-  trapID = 0.000, 
-  pairID = 2.572,
-  elev = abs(1.800),                # t-value
-  population_growth2 = abs(1.325),  # t-value
-  previous_veg_tmp = abs(2.787),        # t-value
-  veg_tmp = abs(0.840),                 # t-value
-  spei = abs(2.952)                 # t-value
-)
-
-# Create a data frame for plotting
-df <- data.frame(term = names(effect_size), effect_size = unname(effect_size))
-df <- df[order(df$effect_size, decreasing = TRUE),]
-
-# Create the bar plot
-ggplot(df, aes(x = reorder(term, effect_size), y = effect_size)) + 
-  geom_bar(stat = "identity") + 
-  coord_flip() + 
-  labs(x = "Term", y = "Effect Size (F or |t| value)", title = "Effect Sizes of Terms in GAM Model")
-
-
 
 
 
@@ -2969,33 +1887,36 @@ library(glmmTMB)
 
 # Ensure that the transformed variable is strictly between 0 and 1, not 0 or 1
 dat_lag_scaled_complete$transformed_agg_doy <- pmin(pmax(dat_lag_scaled_complete$transformed_agg_doy, 1e-4), 1 - 1e-4)
-dat_lag_scaled_complete$tr_peak_doy <- pmin(pmax(dat_lag_scaled_complete$tr_peak_doy, 1e-4), 1 - 1e-4)
+dat_lag_scaled_complete$tr_peak_doy         <- pmin(pmax(dat_lag_scaled_complete$tr_peak_doy, 1e-4), 1 - 1e-4)
 
 
 # try GLM aggregation  -----------------
 
+
+
+
 # add random effects
-m.agg4 <- glmmTMB(transformed_agg_doy ~ veg_tmp + previous_sum_ips + (1 | pairID),
+m.agg4 <- glmmTMB(transformed_agg_doy ~ spring_tmp + previous_spei3_2 + (1 | pairID),
                   family = beta_family(link = "logit"),
                   data = dat_lag_scaled_complete)
 
-m.agg5 <- glmmTMB(transformed_agg_doy ~ poly(veg_tmp,2) + previous_sum_ips + (1 | pairID),
+m.agg5 <- glmmTMB(transformed_agg_doy ~ poly(spring_tmp,2) + previous_sum_ips + (1 | pairID),
                   family = beta_family(link = "logit"),
                   data = dat_lag_scaled_complete)
 
 # add nested trap within pairID - does not improve model
-m.agg6 <- glmmTMB(transformed_agg_doy ~ poly(veg_tmp,2) + previous_sum_ips + (1 | pairID/trapID),
+m.agg6 <- glmmTMB(transformed_agg_doy ~ poly(spring_tmp,2) + previous_sum_ips + (1 | pairID/trapID),
                   family = beta_family(link = "logit"),
                   data = dat_lag_scaled_complete)
 
 # add spei
-m.agg7 <- glmmTMB(transformed_agg_doy ~ veg_tmp + previous_sum_ips + spei +(1 | pairID),
+m.agg7 <- glmmTMB(transformed_agg_doy ~ spring_tmp + previous_sum_ips + spei +(1 | pairID),
                   family = beta_family(link = "logit"),
                   data = dat_lag_scaled_complete)
 
 
 # add previous temperature
-m.agg8 <- glmmTMB(transformed_agg_doy ~ veg_tmp + previous_veg_tmp + previous_sum_ips + spei +(1 | pairID),
+m.agg8 <- glmmTMB(transformed_agg_doy ~ spring_tmp + previous_veg_tmp + previous_sum_ips + spei +(1 | pairID),
                   family = beta_family(link = "logit"),
                   data = dat_lag_scaled_complete)
 
@@ -3006,7 +1927,7 @@ m.agg9 <- glmmTMB(transformed_agg_doy ~  previous_veg_tmp + previous_sum_ips + s
                   data = dat_lag_scaled_complete)
 
 AIC(m.agg4, m.agg5, m.agg6, m.agg7, m.agg8, m.agg9)
-simulationOutput <- DHARMa::simulateResiduals(fittedModel = m.agg9, 
+simulationOutput <- DHARMa::simulateResiduals(fittedModel = m.agg4, #$m.agg9, 
                                               plot = T)
 
 
@@ -3136,164 +2057,7 @@ plot(m13.3_st, page = 1, shade = T)
 # 10/17/2023 - after standardizing, the AIC is way lower and calculation is faster, but teh reults are the same
 # calculate beetle population growth (compare teh pup. from 
 #ne year to another)
-# identify transition points: how does this work???
-#
-# Install and load the changepoint package if not already installed
-# install.packages("changepoint")
-#library(changepoint)
 
-# Sample beetle counts data (replace with your data)
-beetle_counts <- c(100, 120, 150, 80, 100, 500, 800, 900, 1200, 1100, 1150)
-
-# Perform changepoint analysis to detect transitions
-cpt <- cpt.meanvar(beetle_counts)
-
-# Plot the data with changepoints
-plot(cpt)
-
-
-plot_smooth(m4, view = 'veg_tmp')
-pXXX<- plot_smooth(m1, 
-                          view="veg_tmp", 
-                          rm.ranef =TRUE)$fv
-
-
-
-
-
-windows()
-plot(m1, page = 1)
-
-
-dat_fin %>% 
-  ggplot(aes(y = sum_ips,
-             x = previous_veg_tmp)) + 
-  geom_point()
-
-
-
-m1 <- gam(sum_ips ~s(previous_sum_ips, k =50) + 
-            s(elev) +
-            s(conif_prop  ) +
-            s(previous_veg_tmp) +
-            s(year, k = 5) +
-            s(trapID, bs = 're') +  # account for how much individual trap contributes to the total variation
-            s(pairID, bs = 're') +   # trap pair
-            s(x,y),
-          dat_fin, family = nb )
-
-appraise(m1)
-summary(m1)
-plot(m1, page = 1, shade = T)
-
-# Inspect data ----------------------------------------------------------
-# VIF - variance inflation factor
-# depepndence between predictors - keep only independent ones
-# spatial and temporal autocorrelation
-
-# get korelogram: if line overpass teh dashed line, there is a corelation
-acf(dat_fin$sum_ips) # super correlated!
-
-
-
-
-
-# correlation between predictors ---------------------------------------
-dat_fin_cor <- dat_fin %>% 
-  dplyr::select(-c(trapID, pairID, year))
-
-
-# Check out which predictors are highly correlated to remove them from teh VIF
-preds.res <- cor(dat_fin_cor, use = "complete.obs")
-round(preds.res, 2)  # simplify visualization
-
-# p-values are missing: get them from different package:
-library("Hmisc")
-res2 <- Hmisc::rcorr(as.matrix(dat_fin_cor))
-res2
-
-
-library(corrplot)
-
-# Insignificant correlation are crossed
-corrplot(res2$r, type="upper", order="hclust", 
-         p.mat = res2$P, sig.level = 0.05, insig = "blank")
-
-
-
-# Check for scatter plots between precistors:
-#install.packages("PerformanceAnalytics")
-
-library("PerformanceAnalytics")
-chart.Correlation(dat_fin_cor, histogram=TRUE, pch=19)
-#chart.Correlation(ips2_predictors_years[[2]], histogram=TRUE, pch=19)
-
-
-
-
-
-
-
-
-# # variance inflation factor (VIF) ---------------------------------------------
-
-
-# Compute the VIF values: remove multicollinearity between predictors -------------
-# https://www.statology.org/variance-inflation-factor-r/
-vif_model_ips <- lm(sum_ips ~ conif_prop + elev +
-                    #sm +
-                     # vpd +
-                      sm_z + 
-                      #vpd_z + 
-                      #veg_tmp + 
-                      veg_tmp_z# +
-                      #spei + 
-                    #  spei_z
-                    , 
-                    data = dat_fin)
-
-
-
-# get a vector of vif values
-(vif_model_ips <- car::vif(vif_model_ips))
-
-# DOY of aggregation
-vif_model_agg <- lm(agg_doy ~ conif_prop + elev +
-                      sm +
-                      vpd +
-                      #sm_z + 
-                      #vpd_z + 
-                      #veg_tmp + 
-                      veg_tmp_z# +
-                    #spei + 
-                    #  spei_z
-                    , 
-                    data = dat_fin)
-
-
-
-# get a vector of vif values
-(vif_model_agg <- car::vif(vif_model_agg))
-
-
-
-# DOY of peak
-vif_model_peak <- lm(peak_doy ~ conif_prop + elev +
-                      sm +
-                      #vpd +
-                      sm_z + 
-                      #vpd_z + 
-                      #veg_tmp + 
-                      veg_tmp_z# +
-                   # spei + 
-                     # spei_z
-                    , 
-                    data = dat_fin)
-
-
-
-# get a vector of vif values
-(vif_model_peak <- car::vif(vif_model_peak))
 
 
 
