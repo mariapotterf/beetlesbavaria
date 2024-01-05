@@ -408,7 +408,7 @@ print(sorted_correlations)
 # skip columns if not for scaling
 #spei_cols <- grepl("spei", names(dat_lag))
 
-additional_skip_cols <- c('trapID', 'pairID', "x", "y", 'year', 
+additional_skip_cols <- c('trapID', 'pairID', "x", "y", 'year', 'agg_doy', 'peak_doy', 'peak_diff', 
               'sum_ips', 'previous_sum_ips', 'previous_sum_ips2')
 
 # Combine spei columns with additional columns to skip
@@ -1828,12 +1828,13 @@ m3.8 <- glmer.nb(sum_ips ~ veg_tmp  + (1| year) + (1| pairID/trapID), data = dat
 
 m3.5.1 <- glmer.nb(sum_ips ~ veg_tmp  + (1| year), data = dat_lag_scaled)
 
-
+summary(m3.8)
 summary(m3.7.2)
 AICc(m3.5, m3.6, m3.7)
 
 r2(m3.7.2)
 
+simulationOutput <- simulateResiduals(fittedModel = m3.8, plot = T)
 simulationOutput <- simulateResiduals(fittedModel = m3.7.3.poly, plot = T)
 
 
@@ -1852,88 +1853,161 @@ dw_result <- dwtest(residuals(m9) ~ fitted(m9))
 
 # predict DOY aggregation ---------------------------------------------------
 
-# 
-p_agg <- dat_lag_scaled %>% 
-ggplot(aes(x = veg_tmp,
-           y = agg_doy)) +
-  geom_smooth(method = 'glm') +
- # geom_point(alpha = 0.5) +
-  ylim(c(105, 190)) +
-  theme_bw()
+dd <- dat_lag_scaled %>% 
+  dplyr::select(c(agg_doy, 
+                  peak_doy,
+                  spring_tmp,
+                  spei1,
+                  previous_spei1,
+                  previous_spei1_2,
+                  spei3,
+                  previous_spei3,
+                  previous_spei3_2,
+                  spei12,
+                  spei6,
+                  previous_spei6,
+                  previous_spei6_2,
+                  spei12,
+                  previous_spei12,
+                  previous_spei12_2,
+                  pairID, trapID, year))
 
 
-# peak 
-p_peak <- dat_lag_scaled %>% 
-  ggplot(aes(x = veg_tmp,
-             y = peak_doy)) +
-  geom_smooth(method = 'glm') +
-  #geom_point(alpha = 0.5) +
-  ylim(c(105, 190)) +
-  theme_bw()
 
-library(ggpubr)
-ggarrange(p_agg, p_peak, common.legend = TRUE, legend="bottom", ncol = 2)
 
-hist(dat_lag_scaled_complete$agg_doy)
+### simplify analysis: AVG get average per pairID --------------------------
+dd_simpl <- dd %>% 
+  ungroup(.) %>% 
+  group_by(year, pairID) %>% 
+  summarise(agg_doy = round(mean(agg_doy)),
+            peak_doy = round(mean(peak_doy)),
+            spring_tmp =mean(spring_tmp),
+            spei1 = mean(spei1),
+            previous_spei1 = mean(previous_spei1),
+            previous_spei1_2 = mean(previous_spei1_2),
+            spei3 = mean(spei3),
+            previous_spei3 = mean(previous_spei3),
+            previous_spei3_2 = mean(previous_spei3_2),
+            spei6 = mean(spei6),
+            previous_spei6 = mean(previous_spei6),
+            previous_spei6_2 = mean(previous_spei6_2),
+            
+            spei12 = mean(spei12),
+            previous_spei12 = mean(previous_spei12),
+            previous_spei12_2 = mean(previous_spei12_2))
+
+
+
+
+
 
 # try modelsL # if bounded values, skewed: potentially beta regression with tranformation
-# Transform your response variable to fit within 0 to 1
-dat_lag_scaled_complete$transformed_agg_doy <- (dat_lag_scaled_complete$agg_doy - 92) / (300 - 92)
-dat_lag_scaled_complete$tr_peak_doy <- (dat_lag_scaled_complete$peak_doy - 92) / (300 - 92)
+dd$tr_agg_doy  <- (dd$agg_doy - 60) / (300 - 60)
+dd$tr_peak_doy <- (dd$peak_doy - 60) / (300 - 60)
 
 # Fit a beta regression model
 
 library(glmmTMB)
 
 # Ensure that the transformed variable is strictly between 0 and 1, not 0 or 1
-dat_lag_scaled_complete$transformed_agg_doy <- pmin(pmax(dat_lag_scaled_complete$transformed_agg_doy, 1e-4), 1 - 1e-4)
-dat_lag_scaled_complete$tr_peak_doy         <- pmin(pmax(dat_lag_scaled_complete$tr_peak_doy, 1e-4), 1 - 1e-4)
+dd$tr_agg_doy  <- pmin(pmax(dd$tr_agg_doy, 1e-4),  1 - 1e-4)
+dd$tr_peak_doy <- pmin(pmax(dd$tr_peak_doy, 1e-4), 1 - 1e-4)
+
+
+
+
+# Transform your response variable to fit within 0 to 1
+dd_simpl$tr_agg_doy  <- (dd_simpl$agg_doy - 60) / (300 - 60)
+dd_simpl$tr_peak_doy <- (dd_simpl$peak_doy - 60) / (300 - 60)
+
+# Ensure that the transformed variable is strictly between 0 and 1, not 0 or 1
+dd_simpl$tr_agg_doy  <- pmin(pmax(dd_simpl$tr_agg_doy, 1e-4),  1 - 1e-4)
+dd_simpl$tr_peak_doy <- pmin(pmax(dd_simpl$tr_peak_doy, 1e-4), 1 - 1e-4)
 
 
 # try GLM aggregation  -----------------
 
+hist(dd$agg_doy)
+hist(dd$peak_doy)
 
 
+m.agg1 <- glmmTMB(tr_agg_doy ~ spring_tmp + previous_spei3_2 ,
+                  family = beta_family(link = "logit"),
+                  data = dd)
+
+
+m.agg2 <- glmmTMB(tr_agg_doy ~ spring_tmp + spei3 + previous_spei3_2 ,
+                  family = beta_family(link = "logit"),
+                  data = dd)
+
+m.agg3 <- glmmTMB(tr_agg_doy ~ spring_tmp + spei3 + previous_spei3 + previous_spei3_2 ,
+                  family = beta_family(link = "logit"),
+                  data = dd)
 
 # add random effects
-m.agg4 <- glmmTMB(transformed_agg_doy ~ spring_tmp + previous_spei3_2 + (1 | pairID),
+m.agg4 <- glmmTMB(tr_agg_doy ~ spring_tmp + previous_spei3_2 + (1 | pairID),
                   family = beta_family(link = "logit"),
-                  data = dat_lag_scaled_complete)
+                  data = dd)
 
-m.agg5 <- glmmTMB(transformed_agg_doy ~ poly(spring_tmp,2) + previous_sum_ips + (1 | pairID),
+m.agg5 <- glmmTMB(tr_agg_doy ~ spring_tmp + previous_spei3_2 + previous_spei12_2 + (1 | pairID),
                   family = beta_family(link = "logit"),
-                  data = dat_lag_scaled_complete)
+                  data = dd)
 
 # add nested trap within pairID - does not improve model
-m.agg6 <- glmmTMB(transformed_agg_doy ~ poly(spring_tmp,2) + previous_sum_ips + (1 | pairID/trapID),
+m.agg6 <- glmmTMB(tr_agg_doy ~ spring_tmp + spei3 + previous_spei3_2 + previous_spei12_2 + (1 | pairID/trapID),
                   family = beta_family(link = "logit"),
-                  data = dat_lag_scaled_complete)
+                  data = dd)
 
 # add spei
-m.agg7 <- glmmTMB(transformed_agg_doy ~ spring_tmp + previous_sum_ips + spei +(1 | pairID),
+m.agg7 <- glmmTMB(tr_agg_doy ~ spring_tmp + spei3 +previous_spei3 + previous_spei3_2 + previous_spei12_2 +(1 | pairID),
                   family = beta_family(link = "logit"),
-                  data = dat_lag_scaled_complete)
+                  data = dd)
 
 
-# add previous temperature
-m.agg8 <- glmmTMB(transformed_agg_doy ~ spring_tmp + previous_veg_tmp + previous_sum_ips + spei +(1 | pairID),
+m.agg8 <- glmmTMB(tr_agg_doy ~ spring_tmp + spei1 +previous_spei3 + previous_spei3_2 + previous_spei12_2 +(1 | pairID),
                   family = beta_family(link = "logit"),
-                  data = dat_lag_scaled_complete)
+                  data = dd)
 
 
-# remove current temp
-m.agg9 <- glmmTMB(transformed_agg_doy ~  previous_veg_tmp + previous_sum_ips + spei +(1 | pairID),
+m.agg9 <- glmmTMB(tr_agg_doy ~ spring_tmp + spei1 +previous_spei1 + previous_spei1_2 + previous_spei12_2 +(1 | pairID/trapID),
                   family = beta_family(link = "logit"),
-                  data = dat_lag_scaled_complete)
+                  data = dd)
 
-AIC(m.agg4, m.agg5, m.agg6, m.agg7, m.agg8, m.agg9)
-simulationOutput <- DHARMa::simulateResiduals(fittedModel = m.agg4, #$m.agg9, 
+m.agg10 <- glmmTMB(tr_agg_doy ~ spring_tmp + spei1 +previous_spei1 + previous_spei1_2 + previous_spei12_2 + (1 | pairID/trapID) +
+                    (1|year),
+                  family = beta_family(link = "logit"),
+                  data = dd)
+
+# remove non signoificant vars - ned to keep random structure!  m.agg11 is teh best
+m.agg11 <- glmmTMB(tr_agg_doy ~ spring_tmp + spei1 + (1 | pairID/trapID) +
+                     (1|year),
+                   family = beta_family(link = "logit"),
+                   data = dd)
+# use SPEI3
+m.agg11_1 <- glmmTMB(tr_agg_doy ~ spring_tmp + spei3 + (1 | pairID/trapID) +
+                     (1|year),
+                   family = beta_family(link = "logit"),
+                   data = dd)
+# exclude random eff
+m.agg12 <- glmmTMB(tr_agg_doy ~ spring_tmp + spei1,
+                   family = beta_family(link = "logit"),
+                   data = dd)
+
+
+
+vif.model <- lm(tr_agg_doy ~ spring_tmp + spei1 +previous_spei1 + previous_spei1_2 + previous_spei12_2,# + (1 | pairID/trapID) +
+                     data = dd)
+vif(vif.model)
+
+summary(m.agg11)
+AIC(m.agg1, m.agg2, m.agg3, m.agg4, m.agg5, m.agg6, m.agg7, m.agg8, m.agg9, m.agg10, m.agg11,m.agg11_1, m.agg12)
+simulationOutput <- DHARMa::simulateResiduals(fittedModel = m.agg11, #$m.agg9, 
                                               plot = T)
 
 
 windows()
-plot(allEffects(m.agg8 ))
-r2(m.agg8)
+plot(allEffects(m.agg11 ))
+r2(m.agg11)
 
 
 
@@ -1989,74 +2063,11 @@ summary(m.peak8)
 # what is whatL example for agg and peak:
 
 dat_lag_scaled_complete %>% 
-  dplyr::select(c(agg_doy, transformed_agg_doy, peak_doy, tr_peak_doy )) %>% 
+  dplyr::select(c(agg_doy, tr_agg_doy, peak_doy, tr_peak_doy )) %>% 
   arrange(agg_doy) %>% 
   View()
 
 
-
-
-
-
-
-
-
-# standardize the dependent and predictors vals  -------------------------------------------------------
-# Standardize beetle counts for each trap over years
-dat_lag_standardized <- 
-  dat_lag %>%
-    ungroup(.) %>% 
-  dplyr::select(-c(trapID, pairID, year, x, y)) %>%
-  # Apply the scale function to standardize each column
-  mutate_all(scale)
-
-# move back removed columns
-dat_lag_standardized$trapID <- dat_lag$trapID
-dat_lag_standardized$pairID  <- dat_lag$pairID
-dat_lag_standardized$year      <- dat_lag$year
-dat_lag_standardized$x         <- dat_lag$x
-dat_lag_standardized$y         <- dat_lag$y
-
-hist(dat_lag_standardized$sum_ips)
-
-dat_lag_standardized2 <- dat_lag_standardized %>% drop_na() %>% as.data.frame()
-
-
-m8_st <- bam(sum_ips ~ s(previous_sum_ips) +
-            s(year, k = 3) +
-            s(elev) +
-            s(spruce_1986) +
-            veg_tmp +
-            spei +
-            s(trapID, bs = 're') +  # categorical, account for how much individual trap contributes to the total variation
-            s(pairID, bs = 're') +   # trap pair
-            s(year, veg_tmp),
-            method="fREML",
-            data = dat_lag_standardized2)
-
-
-m13.3_st <- bam(sum_ips ~ s(previous_sum_ips, k = 70) + 
-               s(year, k = 5) + 
-               elev + 
-               s(spruce_1986) + 
-               population_growth2 + 
-               previous_veg_tmp + 
-               veg_tmp + 
-               spei + 
-               s(trapID, bs = "re") + 
-               s(pairID, bs = "re"),
-             method="fREML",
-             data = dat_lag_standardized2)
-
-
-
-AIC(m8_st, m13.3, m13.3_st)
-appraise(m13.3_st)
-plot(m13.3_st, page = 1, shade = T)
-
-# 10/17/2023 - after standardizing, the AIC is way lower and calculation is faster, but teh reults are the same
-# calculate beetle population growth (compare teh pup. from 
-#ne year to another)
 
 
 
