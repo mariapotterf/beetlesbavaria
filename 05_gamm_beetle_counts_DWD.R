@@ -1141,6 +1141,14 @@ m8 <- glm.nb(sum_ips ~ veg_tmp +previous_spei3_2, dd_simpl)
 
 # the winner!
 m9 <- glm.nb(sum_ips ~ veg_tmp +previous_spei3_2 + previous_spei12_2, dd_simpl)  # the simples one, and still good, has good diagnostics
+# keep only SPEI12 for simplicity - the m9 still has better residual plot, and explain 18% compared to 10% of deviance
+m11 <- glm.nb(sum_ips ~ veg_tmp +previous_spei12_2, dd_simpl)  
+
+
+
+# !!!!!!
+
+AIC(m9, m11)
 
 m9.poly1 <- glm.nb(sum_ips ~ veg_tmp + poly(previous_spei3_2,2) + previous_spei12_2, dd_simpl)  
 m9.poly2 <- glm.nb(sum_ips ~ poly(veg_tmp,2) + previous_spei3_2 + previous_spei12_2, dd_simpl) 
@@ -1158,14 +1166,103 @@ m10 <- glm.nb(sum_ips ~ veg_tmp + previous_veg_tmp + previous_spei3_2 + previous
 
 # tested glmer as well, but no success
 summary(m9)
+summary(m11)
 r2(m9)
+r2(m11)
 simRs <- simulateResiduals(m9, plot = T)
+simRs <- simulateResiduals(m11, plot = T)
 plot(allEffects(m9.poly2.2))
 testOutliers(m9.poly2)
 AIC(m4,m5,m6,m7, m8, m9, m9.poly1, m9.poly2, m9.poly3, m9.poly4, m9.poly5, m9.poly6, m9.poly7, m9.poly8, m9.poly2.2)
 vif(m9.poly2)
 pacf(residuals(m9.poly2))
 
+
+
+# FINAL ONE! start simple with glmmTMB, then add random effects ============================
+m1 <- glmmTMB(sum_ips ~ veg_tmp,
+              family = nbinom2,
+              data = dd)
+
+m2 <- glmmTMB(sum_ips ~ veg_tmp +previous_spei3_2 ,
+              family = nbinom2,
+              data = dd)
+
+m3 <- glmmTMB(sum_ips ~ veg_tmp +previous_spei12_2 ,
+              family = nbinom2,
+              data = dd)
+# add random year
+m4 <- glmmTMB(sum_ips ~ veg_tmp +previous_spei12_2 + (1|year),
+              family = nbinom2,
+              data = dd)
+
+
+# add random pairs
+m5 <- glmmTMB(sum_ips ~ veg_tmp +previous_spei12_2 + (1|year) + (1 | pairID),
+              family = nbinom2,
+              data = dd)
+
+m6 <- glmmTMB(sum_ips ~ veg_tmp +previous_spei12_2 + (1|year) + (1 | pairID/trapID),
+              family = nbinom2,
+              data = dd)
+
+# add interaction
+m7 <- glmmTMB(sum_ips ~ veg_tmp*previous_spei12_2 + (1|year) + (1 | pairID/trapID),
+              family = nbinom2,
+              data = dd)
+
+
+# use poly fr temprature
+m8 <- glmmTMB(sum_ips ~ veg_tmp + I(veg_tmp^2) + previous_spei12_2 + (1|year) + (1 | pairID/trapID),
+              family = nbinom2,
+              data = dd)
+
+# FINAl !!!use spei3 instead of spei 12 - m9 is the best !!!!!
+m9 <- glmmTMB(sum_ips ~ veg_tmp + I(veg_tmp^2) + previous_spei3_2 + (1|year) + (1 | pairID/trapID),
+              family = nbinom2,
+              data = dd)
+
+
+# use spei1 instead of spei3
+m9.1 <- glmmTMB(sum_ips ~ veg_tmp + I(veg_tmp^2) + previous_spei1_2 + (1|year) + (1 | pairID/trapID),
+              family = nbinom2,
+              data = dd)
+
+
+
+# use both SPEIs spei3 instead of spei 12
+m10 <- glmmTMB(sum_ips ~ veg_tmp + I(veg_tmp^2) + previous_spei3_2 + previous_spei12_2 + (1|year) + (1 | pairID/trapID),
+              family = nbinom2,
+              data = dd)
+
+
+# remove spei 12, use poly term for spei
+m11 <- glmmTMB(sum_ips ~ veg_tmp + I(veg_tmp^2) + previous_spei3_2 + I(previous_spei3_2^2) + (1|year) + (1 | pairID/trapID),
+               family = nbinom2,
+               data = dd)
+
+
+
+m12 <- glmmTMB(sum_ips ~ veg_tmp + I(veg_tmp^2) + spei3 + (1|year) + (1 | pairID/trapID),
+               family = nbinom2,
+               data = dd)
+
+m13 <- glmmTMB(sum_ips ~ veg_tmp + I(veg_tmp^2) + previous_spei3 + (1|year) + (1 | pairID/trapID),
+               family = nbinom2,
+               data = dd)
+
+
+
+AIC(m1, m2, m3, m4, m5, m6, m7,m8, m9, m9.1, m10, m11, m12, m13)
+
+
+m9.tmb <- m9
+
+summary(m9)
+r2(m9)
+simRs <- simulateResiduals(m9, plot = T)
+plot(allEffects(m9))
+testOutliers(m9)
 
 
 
@@ -1390,7 +1487,7 @@ m6_1 <- glmer.nb(sum_ips ~ veg_tmp + spei3 + previous_spei3_2 + (1 | pairID), da
 AIC(m6, m6_1)
 m7 <-  glm.nb(sum_ips ~ veg_tmp + previous_spei1_2 + previous_spei12, dd_complete)
 m8 <-  glm.nb(sum_ips ~ veg_tmp + previous_spei1_2 + previous_spei12 + previous_spei12_2, dd_complete)
-m9 <-  glm.nb(sum_ips ~ veg_tmp + previous_spei1_2  + previous_spei12_2, dd_complete)  # remove non signoficant lag1
+m9 <-  glm.nb(sum_ips ~ veg_tmp + previous_spei1_2  + previous_spei12_2, dd)  # remove non signoficant lag1
 
 # add poly or quadratic tersm
 m9_1 <-  glm.nb(sum_ips ~ veg_tmp + I(veg_tmp^2) + previous_spei1_2  + previous_spei12_2, dd_complete)  # remove non signoficant lag1
@@ -1423,10 +1520,12 @@ AIC(m11,m9, m9_poly2)
 
 # add random effects
 mm8 <-  glmer.nb(sum_ips ~ veg_tmp + previous_spei3_2 + previous_spei12_2 +  (1 | pairID), dd_complete)  # too complex
-mm9 <-  glmer.nb(sum_ips ~ veg_tmp + previous_spei3_2 + previous_spei12 + previous_spei12_2 +  (1 | year), dd_complete)    #
+mm9 <-  glmer.nb(sum_ips ~ veg_tmp + previous_spei3_2 + previous_spei12 + previous_spei12_2 +  (1 | year), dd)    #
 mm10 <-  glmer.nb(sum_ips ~ veg_tmp + previous_spei12_2 +  (1 | pairID), dd_complete) # too complex
 
 vif(m9_poly)
+
+AIC(m9.tmb, m9, mm9)
 
 AICc(m5, m6, m7, m8, m9, m10, m9_1, m9_interaction, m9_poly, m9_poly2, m9_interaction2, m11)
 summary(m9_poly2)
@@ -1473,7 +1572,7 @@ vif_values <- vif(glmm1)
 (vif_values)
 
 # Autocorrelation check
-acf(residuals(glmm1))
+acf(residuals(m9.tmb))
 
 
 
@@ -1483,371 +1582,13 @@ acf(residuals(glmm1))
 
 
 
-##### DREDGE Variable selection, IPS vs environment  ------------------------------------------------------
 
-cor(dd_complete$spei12, dd_complete$spei3)
 
 
-
-# Fit a global model with all potential predictors
-global_model <- glmer(sum_ips ~ veg_tmp +
-                        spei1 + 
-                        previous_spei1_2 +
-                        #spei3 + 
-                        #previous_spei3_2 + 
-                        #spei6 + 
-                        #previous_spei6_2 +
-                        spei12 + previous_spei12_2 + 
-                         (1 | pairID), 
-                      data = dd_complete,
-                      na.action = 'na.fail',
-                      family = negative.binomial(2.8588)
-                      #, na.action = "na.omit"  "na.fail"
-                      )
-
-# get a vector of vif values
-(vif_model_ips <- car::vif(global_model))
-
-
-# Run dredge on the global model
-model_set <- dredge(global_model)
-
-# View the results
-#print(model_set)
-
-# Sort by AIC
-model_set_sorted <- model_set[order(model_set$AIC),]
-
-# View the top models with the lowest AIC
-head(model_set_sorted)
-
-
-##### try one by one, the most important from teh global model -------------------------------
-m1 <- glmer(sum_ips ~ veg_tmp +
-                        spei1 + 
-                        previous_spei1_2 +
-                        spei12 + 
-                        previous_spei12_2 + 
-                        (1 | pairID), 
-                      data = dd_complete,
-                      na.action = 'na.fail',
-                      family = negative.binomial(2.8588)
-                      #, na.action = "na.omit"  "na.fail"
-)
-
-summary(m1)
-AICc(m1)
-
-
-##### GLMM - ips counts with random effect and nb ----------------------------------------
-
-m3 <- glmer.nb(sum_ips ~ veg_tmp + annual_spei6 + (1|pairID) + (1|trapID), data = dat_lag_scaled)
-
-m3.0 <- glmer.nb(sum_ips ~ annual_spei6  + (1|year), data = dat_lag_scaled)
-
-m3.1 <- glmer.nb(sum_ips ~ veg_tmp  + (1|trapID), data = dat_lag)
-
-m3.2 <- glmer.nb(sum_ips ~ veg_tmp  + (1|pairID), data = dat_lag)
-m3.3 <- glmer.nb(sum_ips ~ veg_tmp + (1| year), data = dat_lag)
-
-m3.4 <- glmer.nb(sum_ips ~ veg_tmp + year + (1| pairID), data = dat_lag)
-
-m3.5 <- glmer.nb(sum_ips ~ veg_tmp + (1| year), data = dat_lag_scaled)
-# consider as polynomial
-m3.5.1 <- glmer.nb(sum_ips ~ poly(veg_tmp,2) + (1| year), data = dat_lag_scaled)
-
-# add locatin as random effect
-m3.5.2 <- glmer.nb(sum_ips ~ poly(veg_tmp,2) + (1| year) + (1| pairID), data = dat_lag_scaled)
-
-
-# simplify year effect" replace by drought ref
-m3.5.3 <- glmer.nb(sum_ips ~ poly(veg_tmp,2) + (1| temp_fact) + (1| pairID), data = dat_lag_scaled)
-
-
-summary(m3.5.2)
-AICc(m3.5.2, m3.5.3, m3.7)  # m3.7 is better
-
-m3.6 <- glmer.nb(sum_ips ~ veg_tmp + (1| year) + (1| pairID), data = dat_lag_scaled)
-
-m3.7 <- glmer.nb(sum_ips ~ veg_tmp + (1| year) + (1| pairID/trapID), data = dat_lag_scaled)
-
-# add poly function, year is consider as random to account for diversity over years
-m3.7.1 <- glmer.nb(sum_ips ~ poly(veg_tmp,2) + (1| year) + (1| pairID/trapID), data = dat_lag_scaled)
-
-
-# account for temp autocorrelation: use lagged values to capture it
-m3.7.1.aut <- glmer(sum_ips ~ poly(veg_tmp, 2) + previous_sum_ips + (1 | year) + (1 | pairID/trapID), 
-                    data = dat_lag_scaled, 
-                    family = negative.binomial(2.8588))
-
-
-#add precipitaion
-m3.7.1.aut2 <- glm.nb(sum_ips ~ poly(veg_tmp, 2) + previous_sum_ips + veg_prcp ,  #+ (1 | pairID/trapID)
-                    data = dat_lag_scaled)
-# add other enviro predistors: remained spruce
-m3.7.1.aut3 <- glm.nb(sum_ips ~ poly(veg_tmp, 2) + previous_sum_ips + veg_prcp + remained_spruce,  #+ (1 | pairID/trapID)
-                      data = dat_lag_scaled)
-
-# add spei
-m3.7.1.aut4 <- glm.nb(sum_ips ~ poly(veg_tmp, 2) + previous_sum_ips + veg_prcp + remained_spruce + spei,  #+ (1 | pairID/trapID)
-                      data = dat_lag_scaled)
-
-# add spei as poly
-m3.7.1.aut5 <- glm.nb(sum_ips ~ poly(veg_tmp, 2) + previous_sum_ips + veg_prcp + remained_spruce + poly(spei,2),  #+ (1 | pairID/trapID)
-                      data = dat_lag_scaled)
-
-# add previous temp
-m3.7.1.aut6 <- glm.nb(sum_ips ~ poly(veg_tmp, 2) + previous_sum_ips + veg_prcp + remained_spruce + previous_veg_tmp + poly(spei,2),  #+ (1 | pairID/trapID)
-                      data = dat_lag_scaled_complete)
-
-m3.7.1.aut6.1 <- glm.nb(sum_ips ~ previous_sum_ips + poly(previous_veg_tmp,2) + poly(spei,2),  #+ (1 | pairID/trapID)
-                      data = dat_lag_scaled_complete)
-
-
-# remove previous temp as highly correlared
-m3.7.1.aut6.2 <- glm.nb(sum_ips ~ poly(veg_tmp, 2) + previous_sum_ips + veg_prcp + remained_spruce + poly(spei,2),  #+ (1 | pairID/trapID)
-                      data = dat_lag_scaled_complete)
-
-
-m3.7.1.aut6.3 <- glm.nb(sum_ips ~  previous_sum_ips + veg_prcp + remained_spruce + previous_veg_tmp + poly(spei,2),  #+ (1 | pairID/trapID)
-                        data = dat_lag_scaled_complete)
-
-# simplify model by removing non-significant predictors
-m3.7.1.aut6.4 <- glm.nb(sum_ips ~  previous_sum_ips + 
-                          #veg_prcp + 
-                          #remained_spruce + 
-                          previous_veg_tmp + spei,  
-                        data = dat_lag_scaled_complete)
-
-# get previous veg_tmp as poly
-m3.7.1.aut6.5 <- glm.nb(sum_ips ~  previous_sum_ips + 
-                          #veg_prcp + 
-                          #remained_spruce + 
-                          poly(previous_veg_tmp,2) + spei,  
-                        data = dat_lag_scaled_complete)
-
-
-# get spei as poly
-m3.7.1.aut6.6 <- glm.nb(sum_ips ~  previous_sum_ips + 
-                          #veg_prcp + 
-                          #remained_spruce + 
-                          poly(previous_veg_tmp,2) + poly(spei,2),  
-                        data = dat_lag_scaled_complete)
-
-
-# add interaction - not improve the terms
-m3.7.1.aut6.7 <- glm.nb(sum_ips ~  previous_sum_ips + 
-                          #veg_prcp + 
-                          #remained_spruce + 
-                          poly(previous_veg_tmp,2) + poly(spei,2) +
-                          previous_sum_ips:veg_tmp,  
-                        data = dat_lag_scaled_complete)
-
-
-
-# add interaction - not improve the terms
-m3.7.1.aut6.8 <- glm.nb(sum_ips ~  previous_sum_ips + 
-                          veg_tmp +
-                          #veg_prcp + 
-                          #remained_spruce + 
-                          poly(previous_veg_tmp,2) + poly(spei,2),  
-                        data = dat_lag_scaled_complete)
-
-
-m3.7.1.aut6.9 <- glm.nb(sum_ips ~  previous_sum_ips + 
-                          poly(veg_tmp,2) +
-                          #veg_prcp + 
-                          #remained_spruce + 
-                          poly(previous_veg_tmp,2) + spei,  
-                        data = dat_lag_scaled_complete)
-
-m3.7.1.aut6.10 <- glm.nb(sum_ips ~  previous_sum_ips + 
-                          poly(veg_tmp,2) +
-                          #veg_prcp + 
-                          #remained_spruce + 
-                          previous_veg_tmp + spei,  
-                        data = dat_lag_scaled_complete)
-
-
-AIC(m3.7.1.aut6.8, m3.7.1.aut6.9, m3.7.1.aut6.4)
-
-# add previous temp as poly
-m3.7.1.aut7 <- glm.nb(sum_ips ~ poly(veg_tmp, 2) + previous_sum_ips + veg_prcp + remained_spruce + poly(previous_veg_tmp,2) + poly(spei,2),  #+ (1 | pairID/trapID)
-                      data = dat_lag_scaled_complete)
-
-
-AIC(m3.7.1.aut6, m3.7.1.aut6.3, m3.7.1.aut6.4, m3.7.1.aut6.5)  # the best: m3.7.1.aut6
-plot(allEffects(m3.7.1.aut6.1))
-
-summary(m3.7.1.aut6.1)
-# r2(m3.7.1.aut6.10)
-
-dat_lag_scaled_complete %>% 
-  ggplot(aes(x = veg_tmp,
-             y = sum_ips)) +
-  geom_smooth()
-
-
-
-dat_lag %>% 
-  ggplot(aes(x = spei,
-             y = sum_ips)) +
-  geom_smooth()
-
-AICc(m3.7.1.aut2, m3.7.1.aut3, m3.7.1.aut4, m3.7.1.aut5, m3.7.1.aut6)
-
-
-
-
-# scale previous sum ips
-m3.7.1.aut.sc1 <- glmer(sum_ips ~ poly(veg_tmp, 2) + previous_sum_ips + (1 | year) + (1 | pairID/trapID), 
-                    data = dat_lag_scaled, 
-                    family = negative.binomial(2.8588))
-
-# remove 'year' as random
-m3.7.1.aut.sc2 <- glmer(sum_ips ~ poly(veg_tmp, 2) + previous_sum_ips+ (1 | pairID/trapID), 
-                    data = dat_lag_scaled, 
-                    family = negative.binomial(2.8588))
-
-
-# scale the lagged predictor; previous beetle sums
-m3.7.1.aut2 <- glmer(sum_ips ~ veg_tmp + previous_sum_ips + (1 | year) + (1 | pairID/trapID), 
-                    data = dat_lag_scaled, 
-                    family = negative.binomial(2.8588))
-
-# year as numeric, random
-m3.7.1.aut2.1 <- glmer(sum_ips ~ veg_tmp + previous_sum_ips + (1 | year_num) + (1 | pairID/trapID), 
-                     data = dat_lag_scaled, 
-                     family = negative.binomial(2.8588))
-
-# remove 'year' as random effect
-m3.7.1.aut3 <- glmer(sum_ips ~ veg_tmp + previous_sum_ips +  (1 | pairID/trapID), 
-                     data = dat_lag_scaled, 
-                     family = negative.binomial(2.8588))
-
-# add year as nested random effect
-m3.7.1.aut4 <- glmer(sum_ips ~ veg_tmp + previous_sum_ips +  (1 | pairID/trapID/year), 
-                     data = dat_lag_scaled, 
-                     family = negative.binomial(2.8588))
-
-
-# add poly function, year is consider as random to account for diversity over years
-m3.7.1.quadr <- glmer.nb(sum_ips ~ I(veg_tmp^2) + (1| year) + (1| pairID/trapID), data = dat_lag_scaled)
-
-
-# interaction between veg_tmp and beetle counts? 
-m_counts1 <- glm.nb(sum_ips ~ poly(veg_tmp,2) + previous_sum_ips, dat_lag_scaled )
-m_counts2 <- glm.nb(sum_ips ~ veg_tmp + previous_sum_ips + previous_sum_ips:veg_tmp, dat_lag_scaled )
-
-plot(allEffects(m_counts1))
-
-
-AICc(m3.7.1.aut, #t5his one is the best! (11/07/2023)
-     m3.7.1.aut.sc1,
-     m3.7.1.aut.sc2,
-     m3.7.1.aut1,
-     m3.7.1.aut3,
-     m3.7.1.aut2.1,
-     m3.7.1.aut2, # 
-     m3.7.1.aut4) 
-
-BIC(m3.7.1.aut, #t5his one is the best! (11/07/2023)
-     m3.7.1.aut.sc1,
-     m3.7.1.aut.sc2,
-     m3.7.1.aut1,
-     m3.7.1.aut3,
-     m3.7.1.aut2.1,
-     m3.7.1.aut2, # # the best!!!
-     m3.7.1.aut4) 
-
-acf(residuals(m3.7.1.aut6))  # seems relatively ok
-pacf(residuals(m3.7.1.aut6))
-
-
-cor(dat_lag_scaled_complete$veg_tmp, dat_lag_scaled_complete$previous_veg_tmp)
-cor(dat_lag_scaled_complete$spei, dat_lag_scaled_complete$veg_tmp)
-
-
-
-plot(allEffects(m3.7.1.aut6))
-dw_result <- dwtest(residuals(m3.7.1.aut6) ~ fitted(m3.7.1.aut6))
+dw_result <- dwtest(residuals(m9.tmb) ~ fitted(m9.tmb))
 (dw_result)
 
 summary(m3.7.1.aut6)
-vif(m3.7.1.aut6)
-
-r2(m3.7.1.aut6)
-# Durbin-Watson test
-# 
-# data:  residuals(m3.7.1.aut2) ~ fitted(m3.7.1.aut2)
-# DW = 1.6613, p-value = 8.204e-08
-# alternative hypothesis: true autocorrelation is greater than 0
-
-simulationOutput <- simulateResiduals(fittedModel = m3.7.1.aut2, plot = T)
-simulationOutput <- simulateResiduals(fittedModel = m3.7.1.aut, plot = T) # this one is little bit better from output
-
-# goodness of fit!
-r2(m3.7.1.aut6.4) # Nagelkerke s R2
-
-# account for autocorrelation: use GAM and MER model - does not work!!
-library(gamm4)
-gamm4_model <- gamm4(sum_ips ~ poly(veg_tmp, 2), 
-                     random = ~(1 | year_num) + (1 | pairID/trapID), 
-                     data = dat_lag_scaled, 
-                     #family = nb(2.8588),
-                     correlation = corAR1(form = ~ 1 | year_num))
-
-
-# simplify years by heat cetegories
-m3.7.2 <- glmer.nb(sum_ips ~ poly(veg_tmp,2) + (1| temp_fact) + (1| pairID/trapID), data = dat_lag_scaled)
-
-# add interaction heat vs ips_sums
-m3.7.3.poly <- glmer.nb(sum_ips ~ poly(veg_tmp,2)*temp_fact + (1| pairID/trapID), data = dat_lag_scaled)
-
-# keep it linear
-m3.7.4.lin <- glmer.nb(sum_ips ~ veg_tmp*temp_fact + (1| pairID/trapID), data = dat_lag_scaled)
-
-# keep it exp
-m3.7.4.exp <- glmer.nb(sum_ips ~ exp(veg_tmp)*temp_fact + (1| pairID/trapID), data = dat_lag_scaled)
-
-
-AICc(m3.7.1, m3.7.3.poly, m3.7.4.lin, m3.7.4.exp)
-
-# try as smooths??
-m3.7.3.smooth <- glmer.nb(sum_ips ~ splines::bs(veg_tmp, df = 4)*temp_fact + (1| pairID/trapID), data = dat_lag_scaled)
-
-
-
-#splines::bs(x, degrees = 3) * factor(category)
-
-# groups years by factor: temp factor by years???
-
-AICc(m3.7, m3.7.1, m3.7.2) # the best: m3.7.1
-
-m3.8 <- glmer.nb(sum_ips ~ veg_tmp  + (1| year) + (1| pairID/trapID), data = dat_lag_scaled)
-
-m3.5.1 <- glmer.nb(sum_ips ~ veg_tmp  + (1| year), data = dat_lag_scaled)
-
-summary(m3.8)
-summary(m3.7.2)
-AICc(m3.5, m3.6, m3.7)
-
-r2(m3.7.2)
-
-simulationOutput <- simulateResiduals(fittedModel = m3.8, plot = T)
-simulationOutput <- simulateResiduals(fittedModel = m3.7.3.poly, plot = T)
-
-
-# Predicting beetle counts
-AIC(m3.5, m3.7.1, m3.7.3.poly)
-
-
-
-# Perform the Durbin-Watson test - better for linear models? ACF,pACF are better for gams, GAMM (gams with mixed effects)
-dw_result <- dwtest(residuals(m9) ~ fitted(m9))
-(dw_result)
-
-
 
 
 
