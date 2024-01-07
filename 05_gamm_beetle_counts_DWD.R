@@ -159,7 +159,7 @@ spearman_correlation_matrix <- cor(df_spearman_spei,
                                    use = "complete.obs")
 
 # Print the correlation matrix
-print(spearman_correlation_matrix)
+#print(spearman_correlation_matrix)
 
 # Extract and sort correlations of sum_ips with SPEI variables
 
@@ -198,8 +198,6 @@ spearman_correlation_matrix <- cor(df_spearman_spei,
                                    method = "spearman", 
                                    use = "complete.obs")
 
-# Print the correlation matrix
-print(spearman_correlation_matrix)
 
 # Extract and sort correlations of sum_ips with SPEI variables
 cor_with_sum_ips <- spearman_correlation_matrix["sum_ips", -1]  # Exclude the first column (self-correlation)
@@ -238,12 +236,6 @@ sorted_correlations <- sort(cor_with_y, decreasing = TRUE)
 # Print the sorted correlations
 print(sorted_correlations)
 
-# Assuming spearman_correlation_matrix is your correlation matrix
-formatted_table <- kable(spearman_correlation_matrix, format = "pipe", digits = 2)
-
-# Print the formatted table
-cat(formatted_table)
-
 # th3e best is annula SPEI1 for beetle aggregation date
 
 
@@ -266,13 +258,7 @@ sorted_correlations <- sort(cor_with_y, decreasing = TRUE)
 # Print the sorted correlations
 print(sorted_correlations)
 
-# Assuming spearman_correlation_matrix is your correlation matrix
-formatted_table <- kable(spearman_correlation_matrix, format = "pipe", digits = 2)
 
-# Print the formatted table
-cat(formatted_table)
-
-# th3e best is annula SPEI1 for beetle peak culmination date
 
 
 
@@ -1080,6 +1066,11 @@ pairs(sum_ips ~ veg_tmp + veg_prcp + previous_spei6_2 + previous_spei6  + spei6,
 ### expore plots ------------------------------------------------------------------------
 
 ## test GLM (no random effects) on raw data ---------------------------------------------------------------------
+
+##apparoces: GLM - no random effects (glm.nb)
+# random effects : (glmer.nb) - not working really well
+# final: use glmmTMB -allow for specifying random structure and dependencies in data collection
+
 # select only columns of interests, to not remove more data as necessary 
 # eg lagged values, that were NA
 dd <- dat_lag_scaled %>% 
@@ -1124,58 +1115,6 @@ dd_simpl <- dd %>%
             previous_spei12 = mean(previous_spei12),
             previous_spei12_2 = mean(previous_spei12_2))
 
-m1 <- glm.nb(sum_ips ~ veg_tmp + spei3 + previous_spei3 + previous_spei3_2, dd_simpl)
-
-m2 <- glm.nb(sum_ips ~ veg_tmp + spei3 + previous_spei3 + previous_spei3_2 + previous_spei12_2, dd_simpl)
-m2_2 <- glm.nb(sum_ips ~ veg_tmp + spei3 + previous_spei3_2 + previous_spei12_2, dd_simpl)
-m2_3 <- glm.nb(sum_ips ~ veg_tmp + spei3 + previous_spei3_2 + previous_spei1_2, dd_simpl)
-m3 <- glm.nb(sum_ips ~ veg_tmp + spei3 + previous_spei3 + previous_spei12_2, dd_simpl)
-
-m4 <- glm.nb(sum_ips ~ veg_tmp +spei1  + previous_spei1 +previous_spei1_2, dd_simpl)
-m5 <- glm.nb(sum_ips ~ veg_tmp +spei3  + previous_spei3 +previous_spei3_2, dd_simpl)  
-m6 <- glm.nb(sum_ips ~ veg_tmp +spei6  + previous_spei6 +previous_spei6_2, dd_simpl)
-m7 <- glm.nb(sum_ips ~ veg_tmp +spei12  + previous_spei12 +previous_spei12_2, dd_simpl)
-
-
-m8 <- glm.nb(sum_ips ~ veg_tmp +previous_spei3_2, dd_simpl)  
-
-# the winner!
-m9 <- glm.nb(sum_ips ~ veg_tmp +previous_spei3_2 + previous_spei12_2, dd_simpl)  # the simples one, and still good, has good diagnostics
-# keep only SPEI12 for simplicity - the m9 still has better residual plot, and explain 18% compared to 10% of deviance
-m11 <- glm.nb(sum_ips ~ veg_tmp +previous_spei12_2, dd_simpl)  
-
-
-
-# !!!!!!
-
-AIC(m9, m11)
-
-m9.poly1 <- glm.nb(sum_ips ~ veg_tmp + poly(previous_spei3_2,2) + previous_spei12_2, dd_simpl)  
-m9.poly2 <- glm.nb(sum_ips ~ poly(veg_tmp,2) + previous_spei3_2 + previous_spei12_2, dd_simpl) 
-m9.poly2.2 <- glm.nb(sum_ips ~ exp(veg_tmp) + previous_spei3_2 + previous_spei12_2, dd_simpl) 
-m9.poly3 <- glm.nb(sum_ips ~ poly(veg_tmp,3) + previous_spei3_2 + previous_spei12_2, dd_simpl) 
-m9.poly4 <- glm.nb(sum_ips ~ poly(veg_tmp,2) + previous_spei3_2 + poly(previous_spei12_2,2) , dd_simpl) 
-m9.poly5 <- glm.nb(sum_ips ~ exp(veg_tmp) + previous_spei3_2 + poly(previous_spei12_2,2) , dd_simpl) 
-m9.poly6 <- glm.nb(sum_ips ~ exp(veg_tmp) + exp(-previous_spei3_2) + poly(previous_spei12_2,2) , dd_simpl)
-m9.poly7 <- glm.nb(sum_ips ~ exp(veg_tmp) + exp(-previous_spei3_2) + exp(-previous_spei12_2) , dd_simpl)
-m9.poly8 <- glm.nb(sum_ips ~ exp(veg_tmp) + exp(-previous_spei3_2) , dd_simpl)
-
-plot(x = dd_simpl$veg_tmp, y = dd_simpl$sum_ips )
-# add previous temp
-m10 <- glm.nb(sum_ips ~ veg_tmp + previous_veg_tmp + previous_spei3_2 + previous_spei12_2, dd_simpl)  
-
-# tested glmer as well, but no success
-summary(m9)
-summary(m11)
-r2(m9)
-r2(m11)
-simRs <- simulateResiduals(m9, plot = T)
-simRs <- simulateResiduals(m11, plot = T)
-plot(allEffects(m9.poly2.2))
-testOutliers(m9.poly2)
-AIC(m4,m5,m6,m7, m8, m9, m9.poly1, m9.poly2, m9.poly3, m9.poly4, m9.poly5, m9.poly6, m9.poly7, m9.poly8, m9.poly2.2)
-vif(m9.poly2)
-pacf(residuals(m9.poly2))
 
 
 
@@ -1263,6 +1202,10 @@ r2(m9)
 simRs <- simulateResiduals(m9, plot = T)
 plot(allEffects(m9))
 testOutliers(m9)
+acf(residuals(m9.tmb))
+
+dw_result <- dwtest(residuals(m9.tmb) ~ fitted(m9.tmb))
+(dw_result)
 
 
 
@@ -1271,109 +1214,11 @@ dd_complete <- dd %>%
   na.omit()
 
 
-# althought, using 
-
-windows()
-plot(dd$spei3,dd$previous_spei3)
-
-
-## Fit the GLMM with negative binomial distribution & random effects: all data ------------
-m1.null     <- glm.nb(sum_ips ~ 1, data = dd, link = log)
-m1          <- glm.nb(sum_ips ~ veg_tmp, data = dd, link = log)
-
-
-#m9.poly2.full <- glm.nb(sum_ips ~ poly(veg_tmp,2) + previous_spei3_2 + previous_spei12_2, dd) 
-
-
-AICc(m1.null, m1,m2, m2.1, m2.2, m2.3, m2.4, m2.5, m2.1_1) # ,  m1.poly2, m1.poly3
-simulationOutput <- simulateResiduals(fittedModel = m2, plot = T)
-testOutliers(m9.poly2.full, type = 'bootstrap') 
-simulateResiduals(m9.poly2.full, plot = T)
-
-# always use complete observations! remove NAs
-m2 <- glm.nb(sum_ips ~ veg_tmp + spei3, dd)
-
-plot(m2.1)  # 684, 769, 669, 483
-outlier.ind <- c(684, 769, 669, 483)
-
-outlierData <- dd[outlier.ind, ]
-
-# CHECK DIFFERENT SPEIS
-m2.1 <- glm.nb(sum_ips ~ veg_tmp + spei3 + previous_spei3_2, dd)
-m2.1_1 <- glm.nb(sum_ips ~ veg_tmp + spei3 + previous_spei3 + previous_spei3_2, dd)
-m2.2 <- glm.nb(sum_ips ~ veg_tmp + spei6 + previous_spei6_2, dd)
-
-m2.3 <- glm.nb(sum_ips ~ veg_tmp + spei12 + previous_spei12_2, dd)
-m2.4 <- glm.nb(sum_ips ~ veg_tmp + spei1 + previous_spei1_2, dd)
-
-m2.5 <- glm.nb(sum_ips ~ veg_tmp + spei3 + previous_spei12_2, dd)
-
-
-
-
-#m2.2 <- glm.nb(sum_ips ~ veg_tmp + poly(spei6,2), dat_lag_scaled)
-m3 <- glm.nb(sum_ips ~ poly(veg_tmp,2) + poly(annual_spei6,2), dd)
-# add lagged values of spei
-m4 <- glm.nb(sum_ips ~ veg_tmp + annual_spei6 + previous_spei6, dd)
-m5 <- glm.nb(sum_ips ~ veg_tmp + annual_spei6 + previous_spei6 + previous_spei6_2, dd)
-
-# use veg season spei
-m6 <- glm.nb(sum_ips ~ veg_tmp + spei6 + previous_spei6 + previous_spei6_2, dat_lag_scaled)
-# remove the current spei
-m7 <- glm.nb(sum_ips ~ veg_tmp  + previous_spei6 + previous_spei6_2, dat_lag_scaled)
-
-
-summary(m7)
-plot(m2, page = 1)
-
-AICc( m1, m2,m2.2, m3, m4, m5, m6, m7)
-BIC( m1, m2,m2.2, m3, m4, m5, m6)
-
-AIC(m2.complete, m2.missing)
-
-simulationOutput <- simulateResiduals(fittedModel = m2.2, plot = T)
-testOutliers(m2, type = 'bootstrap') 
-
-
-# Get the coefficients
-coef(m9)
-r2(m2)
-summary(m7)
-vif(m7)
-
-plot(allEffects(m7)) ## m2 is teh best!!! compare with glmer.nb
-
-acf(m7)
-# !!!!
-
-
-
-simulationOutput <- simulateResiduals(fittedModel = m.glmer2, plot = T)
-testOutliers(m.glmer2, type = 'bootstrap') 
-
-
-# Variance Inflation Factor for fixed effects
-vif(m9)
-
-# Autocorrelation check
-acf(residuals(m9))
-
-#$ homoscedascity check
-plot(fitted(m9), residuals(m9))
-abline(h = 0, col = "red")
-
-
-# Get the coefficients
-coef(m9)
-r2(m9)
-summary(m9)
-
 
 #### PLOT GLM.NB IPS vs climate veg_tmp -----------------------
 # Generate a sequence of values for each predictor
 dat_veg_tmp <- data.frame(veg_tmp = seq(min(dd_simpl$veg_tmp), max(dd_simpl$veg_tmp), length.out = 100),
-                          previous_spei3_2 = mean(dd_simpl$previous_spei3_2, na.rm = TRUE),
-                          previous_spei12_2 = mean(dd_simpl$previous_spei12_2, na.rm = TRUE))
+                          previous_spei3_2 = mean(dd_simpl$previous_spei3_2, na.rm = TRUE))
 
 # Predictions for veg_tmp
 dat_veg_tmp$predicted <- predict(m9, newdata = dat_veg_tmp, type = "response")
@@ -1385,12 +1230,11 @@ dat_veg_tmp$lower <- ci_veg_tmp$fit - 1.96 * ci_veg_tmp$se.fit
 # Prepare data for previous_spei3_2
 dat_previous_spei3_2 <- data.frame(previous_spei3_2 = seq(min(dd_simpl$previous_spei3_2), 
                                                           max(dd_simpl$previous_spei3_2), length.out = 100),
-                                   veg_tmp = mean(dd_simpl$veg_tmp, na.rm = TRUE),
-                                   previous_spei12_2 = mean(dd_simpl$previous_spei12_2, na.rm = TRUE))
+                                   veg_tmp = mean(dd_simpl$veg_tmp, na.rm = TRUE))
 
 # Predictions for previous_spei3_2
 dat_previous_spei3_2$predicted <- predict(m9, newdata = dat_previous_spei3_2, type = "response")
-ci_previous_spei3_2 <- predict(m9, newdata = dat_previous_spei3_2, type = "response", se.fit = TRUE)
+ci_previous_spei3_2         <- predict(m9, newdata = dat_previous_spei3_2, type = "response", se.fit = TRUE)
 dat_previous_spei3_2$upper <- ci_previous_spei3_2$fit + 1.96 * ci_previous_spei3_2$se.fit
 dat_previous_spei3_2$lower <- ci_previous_spei3_2$fit - 1.96 * ci_previous_spei3_2$se.fit
 
@@ -1598,6 +1442,7 @@ dd <- dat_lag_scaled %>%
   dplyr::select(c(agg_doy, 
                   peak_doy,
                   spring_tmp,
+                  veg_tmp,
                   spei1,
                   previous_spei1,
                   previous_spei1_2,
@@ -1623,6 +1468,7 @@ dd_simpl <- dd %>%
   summarise(agg_doy = round(mean(agg_doy)),
             peak_doy = round(mean(peak_doy)),
             spring_tmp =mean(spring_tmp),
+            veg_tmp = mean(veg_tmp),
             spei1 = mean(spei1),
             previous_spei1 = mean(previous_spei1),
             previous_spei1_2 = mean(previous_spei1_2),
@@ -1672,7 +1518,20 @@ hist(dd$agg_doy)
 hist(dd$peak_doy)
 
 
-m.agg1 <- glmmTMB(tr_agg_doy ~ spring_tmp + previous_spei3_2 ,
+m.agg0 <- glmmTMB(tr_agg_doy ~ veg_tmp + spei1  + (1 | pairID),
+                   family = beta_family(link = "logit"),
+                   dd)
+
+m.agg01 <- glmmTMB(tr_agg_doy ~ veg_tmp + previous_spei3_2  + (1 | pairID),
+                  family = beta_family(link = "logit"),
+                  dd)
+
+m.agg02 <- glmmTMB(tr_agg_doy ~ spring_tmp + previous_spei3_2  + (1 | pairID),
+                   family = beta_family(link = "logit"),
+                   dd)
+
+
+m.agg1 <- glmmTMB(tr_agg_doy ~ spring_tmp + spei1 ,
                   family = beta_family(link = "logit"),
                   data = dd)
 
@@ -1720,13 +1579,21 @@ m.agg10 <- glmmTMB(tr_agg_doy ~ spring_tmp + spei1 +previous_spei1 + previous_sp
                   data = dd)
 
 # remove non signoificant vars - ned to keep random structure!  m.agg11 is teh best
-m.agg11 <- glmmTMB(tr_agg_doy ~ spring_tmp + spei1 + (1 | pairID/trapID) +
-                     (1|year),
+m.agg11 <- glmmTMB(tr_agg_doy ~ spring_tmp + spei1 + (1 | pairID), #+
+                   #  (1|year)
                    family = beta_family(link = "logit"),
                    data = dd)
+
+m.agg11.sq <- glmmTMB(tr_agg_doy ~ spring_tmp + I(spring_tmp^2) + spei1 + (1 | pairID)   ,
+                   family = beta_family(link = "logit"),
+                   data = dd)
+
+m.agg11.poly <- glmmTMB(tr_agg_doy ~ poly(spring_tmp,2) + spei1 + (1 | pairID),
+                      family = beta_family(link = "logit"),
+                      data = dd)
+
 # use SPEI3
-m.agg11_1 <- glmmTMB(tr_agg_doy ~ spring_tmp + spei3 + (1 | pairID/trapID) +
-                     (1|year),
+m.agg11_1 <- glmmTMB(tr_agg_doy ~ spring_tmp + spei3 + (1 | pairID),
                    family = beta_family(link = "logit"),
                    data = dd)
 # exclude random eff
@@ -1734,71 +1601,199 @@ m.agg12 <- glmmTMB(tr_agg_doy ~ spring_tmp + spei1,
                    family = beta_family(link = "logit"),
                    data = dd)
 
+# exclude random eff, add lagged vals
+m.agg12.2 <- glmmTMB(tr_agg_doy ~ veg_tmp + previous_spei3_2 + (1| pairID),
+                   family = beta_family(link = "logit"),
+                   data = dd)
 
-
-vif.model <- lm(tr_agg_doy ~ spring_tmp + spei1 +previous_spei1 + previous_spei1_2 + previous_spei12_2,# + (1 | pairID/trapID) +
+m.agg12.3 <- glmmTMB(tr_agg_doy ~ poly(veg_tmp,2) + poly(previous_spei3_2,2) + (1| pairID),
+                     family = beta_family(link = "logit"),
                      data = dd)
-vif(vif.model)
 
-summary(m.agg11)
+
+m.agg12.3.12 <- glmmTMB(tr_agg_doy ~ poly(spring_tmp,2) + spei1 + poly(previous_spei12_2,2) + (1| pairID),
+                     family = beta_family(link = "logit"),
+                     data = dd)
+
+m.agg12.4 <- glmmTMB(tr_agg_doy ~ poly(spring_tmp,2) + previous_spei3_2 + (1| pairID),
+                     family = beta_family(link = "logit"),
+                     data = dd)
+
+m.agg12.5 <- glmmTMB(tr_agg_doy ~ spring_tmp + poly(previous_spei3_2,2) + (1| pairID),
+                     family = beta_family(link = "logit"),
+                     data = dd)
+
+m.agg12.6 <- glmmTMB(tr_agg_doy ~ poly(spring_tmp,2) + poly(previous_spei3_2,2) + as.factor(year) +(1| pairID),
+                     family = beta_family(link = "logit"),
+                     data = dd)
+
+
+
+m.agg12.spei1 <- glmmTMB(tr_agg_doy ~ poly(spring_tmp,2) + poly(spei1,2) +(1| pairID),
+                     family = beta_family(link = "logit"),
+                     data = dd)
+
+
+# try interaction - has worse AIC, go for the m.agg12.3
+m.agg12.3.int <- glmmTMB(tr_agg_doy ~ spring_tmp*previous_spei3_2 + (1| pairID),
+                     family = beta_family(link = "logit"),
+                     data = dd)
+
+
+
+
+# simplify random effects
+m.agg13 <- glmmTMB(tr_agg_doy ~ spring_tmp + spei1 + (1|pairID),
+                   family = beta_family(link = "logit"),
+                   data = dd)
+
+# use SPEI3
+m.agg14 <- glmmTMB(tr_agg_doy ~ spring_tmp + spei3 + (1|pairID),
+                   family = beta_family(link = "logit"),
+                   data = dd)
+
+# use previous speis
+m.agg15 <- glmmTMB(tr_agg_doy ~ spring_tmp + spei3+ previous_spei3 + (1|pairID),
+                   family = beta_family(link = "logit"),
+                   data = dd)
+
+
+# use previous speis
+m.agg16 <- glmmTMB(tr_agg_doy ~ spring_tmp + spei3+ previous_spei3 + previous_spei3_2 + (1|pairID),
+                   family = beta_family(link = "logit"),
+                   data = dd)
+
+
+
+
+summary(m.agg02)
 AIC(m.agg1, m.agg2, m.agg3, m.agg4, m.agg5, m.agg6, m.agg7, m.agg8, m.agg9, m.agg10, m.agg11,m.agg11_1, m.agg12)
-simulationOutput <- DHARMa::simulateResiduals(fittedModel = m.agg11, #$m.agg9, 
+simulationOutput <- DHARMa::simulateResiduals(fittedModel = m.agg12.3,#m.agg12.3,  #m.agg01 
                                               plot = T)
-
+AICc( m.agg01,m.agg13, m.agg14, m.agg15, m.agg16, m.agg12, m.agg12.2, m.agg12.3, m.agg12.4,m.agg12.5, m.agg12.3.int, m.agg12.3.12, m.agg0)
 
 windows()
-plot(allEffects(m.agg11 ))
-r2(m.agg11)
+plot(allEffects(m.agg12.3 ))
+r2(m.agg12.3)
+summary(m.agg12.3)
+
+acf(residuals(m.agg12.3))
+
+(dw_result <- dwtest(residuals(m.agg12.3) ~ fitted(m.agg12.3)))
+
+
+summary(m.agg12.3)  # is teh winner!! m.agg12.3
 
 
 
-
+# > summary(m.agg12.3)  # is teh winner!! m.agg12.3
+# Family: beta  ( logit )
+# Formula:          tr_agg_doy ~ poly(veg_tmp, 2) + poly(previous_spei3_2, 2) + (1 |      pairID)
+# Data: dd
+# 
+# AIC      BIC   logLik deviance df.resid 
+# -2272.2  -2237.3   1143.1  -2286.2     1073 
+# 
+# Random effects:
+#   
+#   Conditional model:
+#   Groups Name        Variance Std.Dev.
+# pairID (Intercept) 0.04945  0.2224  
+# Number of obs: 1080, groups:  pairID, 79
+# 
+# Dispersion parameter for beta family (): 32.8 
+# 
+# Conditional model:
+#   Estimate Std. Error z value Pr(>|z|)    
+# (Intercept)                -0.75822    0.02748 -27.587  < 2e-16 ***
+#   poly(veg_tmp, 2)1          -6.81460    0.61985 -10.994  < 2e-16 ***
+#   poly(veg_tmp, 2)2          -3.18407    0.48070  -6.624 3.50e-11 ***
+#   poly(previous_spei3_2, 2)1  5.38866    0.41051  13.127  < 2e-16 ***
+#   poly(previous_spei3_2, 2)2  1.73480    0.39732   4.366 1.26e-05 ***
+#   ---
+#   Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
 
 ### test fr peak population ----------------------------------------------------
-# add previous temperature
+
 
 # add random effects
-m.peak4 <- glmmTMB(tr_peak_doy ~ veg_tmp + previous_sum_ips + (1 | pairID),
+m.peak4 <- glmmTMB(tr_peak_doy ~ veg_tmp + previous_spei6  + (1 | pairID),
                   family = beta_family(link = "logit"),
-                  data = dat_lag_scaled_complete)
+                  data = dd)
 
-m.peak5 <- glmmTMB(tr_peak_doy ~ poly(veg_tmp,2) + previous_sum_ips + (1 | pairID),
+m.peak5 <- glmmTMB(tr_peak_doy ~ poly(veg_tmp,2) + previous_spei6 + (1 | pairID),
                   family = beta_family(link = "logit"),
-                  data = dat_lag_scaled_complete)
+                  data = dd)
+
 
 # add nested trap within pairID - does not improve model
-m.peak6 <- glmmTMB(tr_peak_doy ~ poly(veg_tmp,2) + previous_sum_ips + (1 | pairID/trapID),
+m.peak6 <- glmmTMB(tr_peak_doy ~ veg_tmp + poly(previous_spei6,2) + (1 | pairID),
                   family = beta_family(link = "logit"),
-                  data = dat_lag_scaled_complete)
+                  data = dd)
 
 # add spei
-m.peak7 <- glmmTMB(tr_peak_doy ~ veg_tmp + previous_sum_ips + spei +(1 | pairID),
+m.peak7 <- glmmTMB(tr_peak_doy ~ veg_tmp  + spei6 + previous_spei6 + previous_spei6_2 + (1 | pairID),
                   family = beta_family(link = "logit"),
-                  data = dat_lag_scaled_complete)
+                  data = dd)
 
 
-# add previous temperature
-m.peak8 <- glmmTMB(tr_peak_doy ~ veg_tmp + previous_veg_tmp + previous_sum_ips + spei +(1 | pairID),
-                  family = beta_family(link = "logit"),
-                  data = dat_lag_scaled_complete)
+# remove non significant
+m.peak8 <- glmmTMB(tr_peak_doy ~ veg_tmp + previous_spei6 + previous_spei6_2 + (1 | pairID),
+                   family = beta_family(link = "logit"),
+                   dd)
+                   
+
+# remove less important spei:
+m.peak9 <- glmmTMB(tr_peak_doy ~ veg_tmp + previous_spei6  + (1 | pairID),
+                   family = beta_family(link = "logit"),
+                   dd)
 
 
-# remove current temp
-m.peak9 <- glmmTMB(tr_peak_doy ~  previous_veg_tmp + previous_sum_ips + spei +(1 | pairID),
-                  family = beta_family(link = "logit"),
-                  data = dat_lag_scaled_complete)
 
 AIC(m.peak4, m.peak5, m.peak6, m.peak7, m.peak8, m.peak9)
-simulationOutput <- DHARMa::simulateResiduals(fittedModel = m.peak8, 
+simulationOutput <- DHARMa::simulateResiduals(fittedModel = m.peak9, 
                                               plot = T)
 
 
 windows()
-plot(allEffects(m.peak8 ))
-r2(m.peak8)
+plot(allEffects(m.peak9 ))
+r2(m.peak9)
+
+summary(m.peak9)
+
+acf(residuals(m.peak9))
+
+(dw_result <- dwtest(residuals(m.peak9) ~ fitted(m.peak9)))
 
 
-summary(m.peak8)
+summary(m.peak9)  # is teh winner!! 
+
+# > summary(m.peak9)
+# Family: beta  ( logit )
+# Formula:          tr_peak_doy ~ veg_tmp + previous_spei6 + (1 | pairID)
+# Data: dd
+# 
+# AIC      BIC   logLik deviance df.resid 
+# -1672.1  -1647.1    841.1  -1682.1     1101 
+# 
+# Random effects:
+#   
+#   Conditional model:
+#   Groups Name        Variance Std.Dev.
+# pairID (Intercept) 0.006043 0.07773 
+# Number of obs: 1106, groups:  pairID, 79
+# 
+# Dispersion parameter for beta family (): 18.6 
+# 
+# Conditional model:
+#   Estimate Std. Error z value Pr(>|z|)    
+# (Intercept)    -0.19810    0.01624 -12.200  < 2e-16 ***
+#   veg_tmp        -0.09209    0.01518  -6.066 1.31e-09 ***
+#   previous_spei6 -0.10219    0.01405  -7.275 3.45e-13 ***
+#   ---
+#   Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
+
+
 
 
 # what is whatL example for agg and peak:
