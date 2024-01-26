@@ -36,6 +36,8 @@ library("viridis")
 library('readr')
 library('itsadug')
 
+library(ggeffects)
+
 library(MASS)
 library(car)     # for VIF
 library(glmmTMB) # many families
@@ -1065,7 +1067,10 @@ pairs(sum_ips ~ veg_tmp + veg_prcp + previous_spei6_2 + previous_spei6  + spei6,
 # select only columns of interests, to not remove more data as necessary 
 # eg lagged values, that were NA
 dd <- dat_lag_scaled %>% 
-  dplyr::select(c(sum_ips, veg_tmp,
+  dplyr::select(c(sum_ips, 
+                  peak_diff,
+                  veg_tmp,
+                  spring_tmp,
                   previous_veg_tmp,
                   spei1,
                   previous_spei1,
@@ -1109,7 +1114,7 @@ dd_simpl <- dd %>%
 
 
 
-# FINAL ONE! start simple with glmmTMB, then add random effects ============================
+###### Predict Ips sum/year FINAL ONE! start simple with glmmTMB, then add random effects ============================
 m1 <- glmmTMB(sum_ips ~ veg_tmp,
               family = nbinom2,
               data = dd)
@@ -1158,6 +1163,7 @@ m9.2 <- glmmTMB(sum_ips ~ veg_tmp  + previous_spei3_2 + (1|year) + (1 | pairID/t
               data = dd)
 
 AIC(m9, m9.2)
+fin.m.counts <- m9.tmb
 
 
 # use spei1 instead of spei3
@@ -1197,8 +1203,15 @@ arrange(AIC(m1, m2, m3, m4, m5, m6, m7,m8, m9, m9.1, m10, m11, m12, m13), AIC)
 m9.tmb <- m9
 
 summary(m9)
+summary(m9.2)
+
 r2(m9)
+r2(m9.2)
+m9.tmb <- m9
+
 simRs <- simulateResiduals(m9, plot = T)
+simRs <- simulateResiduals(m9.2, plot = T)
+
 plot(allEffects(m9))
 testOutliers(m9)
 acf(residuals(m9.tmb))
@@ -1207,11 +1220,6 @@ dw_result <- dwtest(residuals(m9.tmb) ~ fitted(m9.tmb))
 (dw_result)
 
 
-
-summary(m9.tmb)
-
-r2(m9.2)
-r2(m9.tmb)
 
 
 
@@ -1245,29 +1253,11 @@ r2(m9.tmb)
 
 
 #
-# Assuming 'model' is your glm.nb model
-p1 <- ggpredict(m9.tmb, terms = "veg_tmp [all]", allow.new.levels = TRUE)
-p2 <- ggpredict(m9.tmb, terms = "previous_spei3_2 [all]", allow.new.levels = TRUE)
-
-
-create_effect_plot <- function(data, line_color = "blue", x_title = "X-axis", y_title = "Y-axis") {
-  ggplot(data, aes(x = x, y = predicted, ymin = conf.low, ymax = conf.high)) +
-    geom_line(color = line_color) +
-    geom_ribbon(alpha = 0.1, fill = line_color) +
-    labs(x = x_title, y = y_title) +
-    theme_minimal(base_size = 14) +
-    theme(aspect.ratio = 1, panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_rect(fill = "white", colour = "black"))
-}
 
 
 
-p1.counts <- create_effect_plot(p1, line_color = "red", x_title = "Temperature [z-score]", y_title = "Beetle counts")
-p2.counts <-create_effect_plot(p2, line_color = "blue", x_title = "SPEI [z-score]", y_title = "Beetle counts")
-
-# effect plots Sum IPS ----------------------------------------------------
 
 
-p.effect.counts <- ggarrange(p1.counts,p2.counts)
 
 
 
@@ -1277,7 +1267,6 @@ dd_complete <- dd %>%
 
 
 
-summary(m2)
 
 
 ##### include 2 SPEIs and lagged values: ---------------------------------------
@@ -1394,18 +1383,6 @@ vif_values <- vif(glmm1)
 
 # Autocorrelation check
 acf(residuals(m9.tmb))
-
-
-
-
-
-
-
-
-
-
-
-
 dw_result <- dwtest(residuals(m9.tmb) ~ fitted(m9.tmb))
 (dw_result)
 
@@ -1418,6 +1395,7 @@ summary(m3.7.1.aut6)
 dd <- dat_lag_scaled %>% 
   dplyr::select(c(agg_doy, 
                   peak_doy,
+                  peak_diff,
                   spring_tmp,
                   veg_tmp,
                   spei1,
@@ -1643,7 +1621,7 @@ m.agg16 <- glmmTMB(tr_agg_doy ~ spring_tmp + spei3+ previous_spei3 + previous_sp
 
 
 
-summary(m.agg02)
+summary(m.agg12.3)
 AIC(m.agg1, m.agg2, m.agg3, m.agg4, m.agg5, m.agg6, m.agg7, m.agg8, m.agg9, m.agg10, m.agg11,m.agg11_1, m.agg12)
 simulationOutput <- DHARMa::simulateResiduals(fittedModel = m.agg12.3, #m.agg10, #,#m.agg12.3,  #m.agg01 
                                               plot = T)
@@ -1693,20 +1671,7 @@ summary(m.agg12.3)  # is teh winner!! m.agg12.3
 
 # Effect plots ------------------------------------------------------------
 
-# Assuming 'model' is your glm.nb model
-p1 <- ggpredict(m.agg12.3, terms = "veg_tmp [all]", allow.new.levels = TRUE)
-p2 <- ggpredict(m.agg12.3, terms = "previous_spei3_2 [all]", allow.new.levels = TRUE)
-
-
-p1.agg <- create_effect_plot(p1, line_color = "red", x_title = "Temperature [z-score]", y_title = "Aggregation day")
-p2.agg <-create_effect_plot(p2, line_color = "blue", x_title = "SPEI [z-score]", y_title = "Aggregation day")
-
-# effect plots Sum IPS ----------------------------------------------------
-
-
-p.effect.agg <- ggarrange(p1.agg,p2.agg)
-
-
+fin.m.agg <- m.agg12.3
 
 
 
@@ -1751,6 +1716,7 @@ AIC(m.peak4, m.peak5, m.peak6, m.peak7, m.peak8, m.peak9)
 simulationOutput <- DHARMa::simulateResiduals(fittedModel = m.peak9, 
                                               plot = T)
 
+fin.m.peak <- m.peak9
 
 windows()
 plot(allEffects(m.peak9 ))
@@ -1791,42 +1757,156 @@ summary(m.peak9)  # is teh winner!!
 #   Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
 
 
-###### PEak Effect plots ------------------------------------------------------------
 
-# Assuming 'model' is your glm.nb model
-p1 <- ggpredict(m.peak9, terms = "veg_tmp [all]", allow.new.levels = TRUE)
-p2 <- ggpredict(m.peak9, terms = "previous_spei6 [all]", allow.new.levels = TRUE)
-
-
-create_effect_Y_trans <- function(data, line_color = "blue", x_title = "X-axis", y_title = "Y-axis", y_lim = c(0, 1)) {
-  data$predicted <- (data$predicted * (304 - 60)) + 60  # Reverse transformation for y-axis
-  data$conf.low <- (data$conf.low * (304 - 60)) + 60
-  data$conf.high <- (data$conf.high * (304 - 60)) + 60
-  
-  ggplot(data, aes(x = x, y = predicted, ymin = conf.low, ymax = conf.high)) +
-    geom_line(color = line_color) +
-    geom_ribbon(alpha = 0.1, fill = line_color) +
-    labs(x = x_title, y = y_title) +
-    ylim(y_lim) +
-    theme_minimal(base_size = 14) +
-    theme(panel.background = element_rect(fill = "white", colour = "black"),
-          aspect.ratio = 1, 
-          panel.grid.major = element_blank(), 
-          panel.grid.minor = element_blank())
-}
-
-p1.peak <- create_effect_Y_trans(p1, line_color = "red", x_title = "Temperature [z-score]", y_title = "Peak day", y_lim = c(130,200))
-p2.peak <-create_effect_Y_trans(p2, line_color = "blue", x_title = "SPEI [z-score]", y_title = "Peak day", y_lim = c(130,200))
-
-# effect plots Sum IPS ----------------------------------------------------
-p.effect.peak <- ggarrange(p1.peak,p2.peak)
-
-p.effect.peak
-
+cor(dd$previous_spei6,dd$veg_tmp )
+#cor(dd$previous_spei3_2,dd$spring_tmp )
 
 # GLM Peak difference -----------------------------------------------------
+#pairs(peak_diff ~ spri)
+
+dd$peak_diff <- as.integer(dd$peak_diff)
+cor(dd$spei6, dd$previous_spei3_2)
+
+hist(dd$peak_diff)
+
+m.peak.diff1 <- glmmTMB(peak_diff ~ spring_tmp,
+              family = nbinom2,
+              data = dd)
+
+m.peak.diff2 <- glmmTMB(peak_diff ~ spring_tmp + spei6 ,
+              family = nbinom2,
+              data = dd)
 
 
+m.peak.diff2.1 <- glmmTMB(peak_diff ~ spei6 ,
+                        family = nbinom2,
+                        data = dd)
+
+
+m.peak.diff2.2 <- glmmTMB(peak_diff ~ veg_tmp + spei6 +(1 | pairID),
+                          family = nbinom2,
+                          data = dd)
+
+m.peak.diff2.3 <- glmmTMB(peak_diff ~ spring_tmp + previous_spei3_2  +(1 | pairID),
+                          family = nbinom2,
+                          data = dd)
+
+summary(m.peak.diff2.3)  # teh best!!!!
+fin.m.peak.diff <- m.peak.diff2.3
+
+cor(dd$spring_tmp, dd$previous_spei3_2)
+
+AIC(m.peak.diff2.1, m.peak.diff2,m.peak.diff1,m.peak.diff2.2,m.peak.diff2.3)
+
+# add random trap effect
+m.peak.diff3 <- glmmTMB(peak_diff ~ spring_tmp + spei6 +  (1|year)+(1 | pairID),
+                        family = nbinom2,
+                        data = dd)
+
+# add random trap effect
+m.peak.diff3.1 <- glmmTMB(peak_diff ~ spring_tmp + previous_spei3_2 +(1 | pairID),
+                        family = nbinom2,
+                        data = dd)
+
+
+# add random year
+m.peak.diff4 <- glmmTMB(peak_diff ~ spring_tmp + spei6 + (1|year),
+              family = nbinom2,
+              data = dd)
+
+# add random trap effect
+m.peak.diff5 <- glmmTMB(peak_diff ~ spring_tmp + spei6 +  (1 | pairID),
+              family = nbinom2,
+              data = dd)
+
+# add random trap effect
+m.peak.diff5.1 <- glmmTMB(peak_diff ~ spring_tmp + previous_spei6_2 +  (1 | pairID),
+                        family = nbinom2,
+                        data = dd)
+
+
+m.peak.diff5.2 <- glmmTMB(peak_diff ~ spring_tmp + previous_spei3_2 +  (1 | pairID),
+                          family = nbinom2,
+                          data = dd)
+
+
+m.peak.diff5.3 <- glmmTMB(peak_diff ~ spring_tmp + I(spring_tmp^2) + previous_spei3_2 +  (1 | pairID),
+                          family = nbinom2,
+                          data = dd)
+AIC(m.peak.diff5, m.peak.diff5.1,m.peak.diff5.2,m.peak.diff5.3)
+
+# add interaction
+m.peak.diff6 <- glmmTMB(peak_diff ~ spring_tmp*spei6  + (1 | pairID),
+              family = nbinom2,
+              data = dd)
+
+
+# use poly fr temprature
+m.peak.diff7 <- glmmTMB(peak_diff ~ spring_tmp + I(spring_tmp^2) + spei6 + (1 | pairID),
+              family = nbinom2,
+              data = dd)
+
+
+
+# use annual temp and previous spei3 (as in teh count model)
+m.peak.diff8 <- glmmTMB(peak_diff ~ veg_tmp + I(veg_tmp^2) + previous_spei3_2  + (1 | pairID),
+                        family = nbinom2,
+                        data = dd)
+
+# ass SPEI 6 
+m.peak.diff9 <- glmmTMB(peak_diff ~ veg_tmp + I(veg_tmp^2) + spei6 + previous_spei3_2  + (1 | pairID),
+                        family = nbinom2,
+                        data = dd)
+
+
+m.peak.diff10 <- glmmTMB(peak_diff ~ spring_tmp + I(spring_tmp^2) + spei3 + previous_spei3_2  + (1 | pairID),
+                        family = nbinom2,
+                        data = dd)
+
+
+m.peak.diff11 <- glmmTMB(peak_diff ~ spring_tmp + I(spring_tmp^2) + spei6 + previous_spei6_2  + (1 | pairID),
+                         family = nbinom2,
+                         data = dd)
+
+m.peak.diff12 <- glmmTMB(peak_diff ~ spring_tmp + I(spring_tmp^2) + previous_spei6_2  + (1 | pairID),
+                         family = nbinom2,
+                         data = dd)
+
+m.peak.diff13 <- glmmTMB(peak_diff ~ spring_tmp  + previous_spei6_2  + (1 | pairID),
+                         family = nbinom2,
+                         data = dd)
+
+
+arrange(AIC(m.peak.diff1,m.peak.diff2,m.peak.diff3,m.peak.diff4,m.peak.diff5,m.peak.diff6,m.peak.diff7,m.peak.diff8,m.peak.diff9, m.peak.diff10, m.peak.diff11,m.peak.diff12,m.peak.diff13,
+            
+            m.peak.diff5.1,m.peak.diff5.2,m.peak.diff5.3,
+            m.peak.diff3.1, 
+            m.peak.diff2.1), AIC)
+
+
+
+summary(m.peak.diff2.3)
+r2(m.peak.diff2.3)
+simRs <- simulateResiduals(m.peak.diff2.3, plot = T)
+plot(allEffects(m.peak.diff2.3))
+testOutliers(m.peak.diff8)
+acf(residuals(m.peak.diff5.3))
+
+dw_result <- dwtest(residuals(m.peak.diff2.3) ~ fitted(m.peak.diff2.3))
+(dw_result)
+
+
+
+
+# save models -------------------------------------------------------------
+
+
+
+save( fin.m.agg,
+      fin.m.counts,
+      fin.m.peak,
+      fin.m.peak.diff,
+      file="outData/fin_models.Rdata")
 
 
 
