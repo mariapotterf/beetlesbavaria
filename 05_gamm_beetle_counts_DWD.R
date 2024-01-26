@@ -437,15 +437,6 @@ dat_lag_scaled_complete <- dat_lag_scaled %>%
 # DOY peak vs climate drivers
 # peak difference vs climate drivers
 
-#### prepare individual tables for each analyses -----------------------------------------------------
-
-windows()
-hist(dat_lag_scaled)
-
-
-
-
-
 
 
 
@@ -1063,7 +1054,7 @@ pairs(sum_ips ~ veg_tmp + veg_prcp + previous_spei6_2 + previous_spei6  + spei6,
 # make glm - beetle sums by temp and spei
 # test with the raw and scaled predictors;
 # glm, - define the polynomial relationship
-### expore plots ------------------------------------------------------------------------
+### explore plots ------------------------------------------------------------------------
 
 ## test GLM (no random effects) on raw data ---------------------------------------------------------------------
 
@@ -1161,6 +1152,13 @@ m9 <- glmmTMB(sum_ips ~ veg_tmp + I(veg_tmp^2) + previous_spei3_2 + (1|year) + (
               family = nbinom2,
               data = dd)
 
+# remove the I term to siimplify plotting - check how much it is better?
+m9.2 <- glmmTMB(sum_ips ~ veg_tmp  + previous_spei3_2 + (1|year) + (1 | pairID/trapID),
+              family = nbinom2,
+              data = dd)
+
+AIC(m9, m9.2)
+
 
 # use spei1 instead of spei3
 m9.1 <- glmmTMB(sum_ips ~ veg_tmp + I(veg_tmp^2) + previous_spei1_2 + (1|year) + (1 | pairID/trapID),
@@ -1191,8 +1189,9 @@ m13 <- glmmTMB(sum_ips ~ veg_tmp + I(veg_tmp^2) + previous_spei3 + (1|year) + (1
                data = dd)
 
 
+arrange(AIC(m1, m2, m3, m4, m5, m6, m7,m8, m9, m9.1, m10, m11, m12, m13), AIC)
 
-AIC(m1, m2, m3, m4, m5, m6, m7,m8, m9, m9.1, m10, m11, m12, m13)
+
 
 
 m9.tmb <- m9
@@ -1209,94 +1208,72 @@ dw_result <- dwtest(residuals(m9.tmb) ~ fitted(m9.tmb))
 
 
 
+summary(m9.tmb)
+
+r2(m9.2)
+r2(m9.tmb)
+
+
+
+# > summary(m9.tmb)
+# Family: nbinom2  ( log )
+# Formula:          sum_ips ~ veg_tmp + I(veg_tmp^2) + previous_spei3_2 + (1 | year) +      (1 | pairID/trapID)
+# Data: dd
+# 
+# AIC      BIC   logLik deviance df.resid 
+# 23796.9  23837.0 -11890.5  23780.9     1098 
+# 
+# Random effects:
+#   
+#   Conditional model:
+#   Groups        Name        Variance Std.Dev.
+# year          (Intercept) 0.06265  0.2503  
+# trapID:pairID (Intercept) 0.04338  0.2083  
+# pairID        (Intercept) 0.25363  0.5036  
+# Number of obs: 1106, groups:  year, 7; trapID:pairID, 158; pairID, 79
+# 
+# Dispersion parameter for nbinom2 family (): 2.89 
+# 
+# Conditional model:
+#   Estimate Std. Error z value Pr(>|z|)    
+# (Intercept)       9.80490    0.11453   85.61  < 2e-16 ***
+#   veg_tmp           0.18368    0.06350    2.89 0.003819 ** 
+#   I(veg_tmp^2)      0.06230    0.01897    3.28 0.001021 ** 
+#   previous_spei3_2 -0.14683    0.04239   -3.46 0.000532 ***
+#   ---
+#   Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
+
+
+#
+# Assuming 'model' is your glm.nb model
+p1 <- ggpredict(m9.tmb, terms = "veg_tmp [all]", allow.new.levels = TRUE)
+p2 <- ggpredict(m9.tmb, terms = "previous_spei3_2 [all]", allow.new.levels = TRUE)
+
+
+create_effect_plot <- function(data, line_color = "blue", x_title = "X-axis", y_title = "Y-axis") {
+  ggplot(data, aes(x = x, y = predicted, ymin = conf.low, ymax = conf.high)) +
+    geom_line(color = line_color) +
+    geom_ribbon(alpha = 0.1, fill = line_color) +
+    labs(x = x_title, y = y_title) +
+    theme_minimal(base_size = 14) +
+    theme(aspect.ratio = 1, panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_rect(fill = "white", colour = "black"))
+}
+
+
+
+p1.counts <- create_effect_plot(p1, line_color = "red", x_title = "Temperature [z-score]", y_title = "Beetle counts")
+p2.counts <-create_effect_plot(p2, line_color = "blue", x_title = "SPEI [z-score]", y_title = "Beetle counts")
+
+# effect plots Sum IPS ----------------------------------------------------
+
+
+p.effect.counts <- ggarrange(p1.counts,p2.counts)
+
+
+
 # remove additionsl NAs
 dd_complete <- dd %>%
   na.omit()
-
-
-
-#### PLOT GLM.NB IPS vs climate veg_tmp -----------------------
-# Generate a sequence of values for each predictor
-dat_veg_tmp <- data.frame(veg_tmp = seq(min(dd_simpl$veg_tmp), max(dd_simpl$veg_tmp), length.out = 100),
-                          previous_spei3_2 = mean(dd_simpl$previous_spei3_2, na.rm = TRUE))
-
-# Predictions for veg_tmp
-dat_veg_tmp$predicted <- predict(m9, newdata = dat_veg_tmp, type = "response")
-ci_veg_tmp <- predict(m9, newdata = dat_veg_tmp, type = "response", se.fit = TRUE)
-dat_veg_tmp$upper <- ci_veg_tmp$fit + 1.96 * ci_veg_tmp$se.fit
-dat_veg_tmp$lower <- ci_veg_tmp$fit - 1.96 * ci_veg_tmp$se.fit
-
-
-# Prepare data for previous_spei3_2
-dat_previous_spei3_2 <- data.frame(previous_spei3_2 = seq(min(dd_simpl$previous_spei3_2), 
-                                                          max(dd_simpl$previous_spei3_2), length.out = 100),
-                                   veg_tmp = mean(dd_simpl$veg_tmp, na.rm = TRUE))
-
-# Predictions for previous_spei3_2
-dat_previous_spei3_2$predicted <- predict(m9, newdata = dat_previous_spei3_2, type = "response")
-ci_previous_spei3_2         <- predict(m9, newdata = dat_previous_spei3_2, type = "response", se.fit = TRUE)
-dat_previous_spei3_2$upper <- ci_previous_spei3_2$fit + 1.96 * ci_previous_spei3_2$se.fit
-dat_previous_spei3_2$lower <- ci_previous_spei3_2$fit - 1.96 * ci_previous_spei3_2$se.fit
-
-# Prepare data for previous_spei12_2
-dat_previous_spei12_2 <- data.frame(previous_spei12_2 = seq(min(dd_simpl$previous_spei12_2), 
-                                                            max(dd_simpl$previous_spei12_2), length.out = 100),
-                                    veg_tmp = mean(dd_simpl$veg_tmp, na.rm = TRUE),
-                                    previous_spei3_2 = mean(dd_simpl$previous_spei3_2, na.rm = TRUE))
-
-# Predictions for previous_spei12_2
-dat_previous_spei12_2$predicted <- predict(m9, newdata = dat_previous_spei12_2, type = "response")
-ci_previous_spei12_2 <- predict(m9, newdata = dat_previous_spei12_2, type = "response", se.fit = TRUE)
-dat_previous_spei12_2$upper <- ci_previous_spei12_2$fit + 1.96 * ci_previous_spei12_2$se.fit
-dat_previous_spei12_2$lower <- ci_previous_spei12_2$fit - 1.96 * ci_previous_spei12_2$se.fit
-
-
-
-# Define a common theme
-common_theme <- theme_minimal(base_size = 11) +
-  theme(panel.background = element_blank(),
-        panel.grid.major = element_blank(),
-        panel.grid.minor = element_blank(),
-        panel.border = element_rect(color = "black", fill = NA),
-        axis.text.x = element_text(color = "black"),
-        plot.margin = margin(5.5, 5.5, 5.5, 5.5),
-        aspect.ratio = 1 )
-
-# Plot for veg_tmp with orange color
-p1 <- ggplot(dat_veg_tmp, aes(x = veg_tmp, y = predicted)) +
-  geom_line(color = "#E69F00") +
-  ylim(10000, 35000) +
-  geom_ribbon(aes(ymin = lower, ymax = upper), fill = "#E69F00", alpha = 0.2) +
-  labs(title = "", x = "Temperature (veg_tmp)", y = "Sum Beetles/year") +
-  common_theme
-
-
-
-# Plot for previous_spei3_2 with blue color
-p2 <- ggplot(dat_previous_spei3_2, aes(x = previous_spei3_2, y = predicted)) +
-  geom_line(color = "#0072B2") +
-  geom_ribbon(aes(ymin = lower, ymax = upper), fill = "#0072B2", alpha = 0.2) +
-  ylim(10000, 35000) +
-  labs(title = "", x = "SPEI (previous_spei3_2)", y = "Sum Beetles/year") +
-  common_theme
-
-# Plot for previous_spei12_2 with green color
-p3 <- ggplot(dat_previous_spei12_2, aes(x = previous_spei12_2, y = predicted)) +
-  geom_line(color = "#009E73") +
-  ylim(10000, 35000) +
-  geom_ribbon(aes(ymin = lower, ymax = upper), fill = "#009E73", alpha = 0.2) +
-  labs(title = "", x = "SPEI (previous_spei12_2)", y = "Sum Beetles/year") +
-  common_theme
-
-
-ggarrange(p1, p2, p3, ncol = 3, nrow = 1)
-
-
-require(ggiraph)
-require(ggiraphExtra)
-ggPredict(m2,se=TRUE,interactive=TRUE,digits=3)
-
-
 
 
 
@@ -1489,8 +1466,8 @@ dd_simpl <- dd %>%
 
 
 # try modelsL # if bounded values, skewed: potentially beta regression with tranformation
-dd$tr_agg_doy  <- (dd$agg_doy - 60) / (300 - 60)
-dd$tr_peak_doy <- (dd$peak_doy - 60) / (300 - 60)
+dd$tr_agg_doy  <- (dd$agg_doy - 60) / (304 - 60)
+dd$tr_peak_doy <- (dd$peak_doy - 60) / (304 - 60)
 
 # Fit a beta regression model
 
@@ -1668,7 +1645,7 @@ m.agg16 <- glmmTMB(tr_agg_doy ~ spring_tmp + spei3+ previous_spei3 + previous_sp
 
 summary(m.agg02)
 AIC(m.agg1, m.agg2, m.agg3, m.agg4, m.agg5, m.agg6, m.agg7, m.agg8, m.agg9, m.agg10, m.agg11,m.agg11_1, m.agg12)
-simulationOutput <- DHARMa::simulateResiduals(fittedModel = m.agg12.3,#m.agg12.3,  #m.agg01 
+simulationOutput <- DHARMa::simulateResiduals(fittedModel = m.agg12.3, #m.agg10, #,#m.agg12.3,  #m.agg01 
                                               plot = T)
 AICc( m.agg01,m.agg13, m.agg14, m.agg15, m.agg16, m.agg12, m.agg12.2, m.agg12.3, m.agg12.4,m.agg12.5, m.agg12.3.int, m.agg12.3.12, m.agg0)
 
@@ -1712,6 +1689,26 @@ summary(m.agg12.3)  # is teh winner!! m.agg12.3
 #   poly(previous_spei3_2, 2)2  1.73480    0.39732   4.366 1.26e-05 ***
 #   ---
 #   Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
+
+
+# Effect plots ------------------------------------------------------------
+
+# Assuming 'model' is your glm.nb model
+p1 <- ggpredict(m.agg12.3, terms = "veg_tmp [all]", allow.new.levels = TRUE)
+p2 <- ggpredict(m.agg12.3, terms = "previous_spei3_2 [all]", allow.new.levels = TRUE)
+
+
+p1.agg <- create_effect_plot(p1, line_color = "red", x_title = "Temperature [z-score]", y_title = "Aggregation day")
+p2.agg <-create_effect_plot(p2, line_color = "blue", x_title = "SPEI [z-score]", y_title = "Aggregation day")
+
+# effect plots Sum IPS ----------------------------------------------------
+
+
+p.effect.agg <- ggarrange(p1.agg,p2.agg)
+
+
+
+
 
 ### test fr peak population ----------------------------------------------------
 
@@ -1794,15 +1791,40 @@ summary(m.peak9)  # is teh winner!!
 #   Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
 
 
+###### PEak Effect plots ------------------------------------------------------------
+
+# Assuming 'model' is your glm.nb model
+p1 <- ggpredict(m.peak9, terms = "veg_tmp [all]", allow.new.levels = TRUE)
+p2 <- ggpredict(m.peak9, terms = "previous_spei6 [all]", allow.new.levels = TRUE)
 
 
-# what is whatL example for agg and peak:
+create_effect_Y_trans <- function(data, line_color = "blue", x_title = "X-axis", y_title = "Y-axis", y_lim = c(0, 1)) {
+  data$predicted <- (data$predicted * (304 - 60)) + 60  # Reverse transformation for y-axis
+  data$conf.low <- (data$conf.low * (304 - 60)) + 60
+  data$conf.high <- (data$conf.high * (304 - 60)) + 60
+  
+  ggplot(data, aes(x = x, y = predicted, ymin = conf.low, ymax = conf.high)) +
+    geom_line(color = line_color) +
+    geom_ribbon(alpha = 0.1, fill = line_color) +
+    labs(x = x_title, y = y_title) +
+    ylim(y_lim) +
+    theme_minimal(base_size = 14) +
+    theme(panel.background = element_rect(fill = "white", colour = "black"),
+          aspect.ratio = 1, 
+          panel.grid.major = element_blank(), 
+          panel.grid.minor = element_blank())
+}
 
-dat_lag_scaled_complete %>% 
-  dplyr::select(c(agg_doy, tr_agg_doy, peak_doy, tr_peak_doy )) %>% 
-  arrange(agg_doy) %>% 
-  View()
+p1.peak <- create_effect_Y_trans(p1, line_color = "red", x_title = "Temperature [z-score]", y_title = "Peak day", y_lim = c(130,200))
+p2.peak <-create_effect_Y_trans(p2, line_color = "blue", x_title = "SPEI [z-score]", y_title = "Peak day", y_lim = c(130,200))
 
+# effect plots Sum IPS ----------------------------------------------------
+p.effect.peak <- ggarrange(p1.peak,p2.peak)
+
+p.effect.peak
+
+
+# GLM Peak difference -----------------------------------------------------
 
 
 
