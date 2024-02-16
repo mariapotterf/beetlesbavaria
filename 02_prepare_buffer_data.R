@@ -42,7 +42,7 @@ library(dplyr)
 library(data.table)
 library(tidyr)
 library(raster)
-library(rgdal)
+#library(rgdal)
 library(lubridate)
 library(fasterize)
 library(ggpubr)
@@ -54,9 +54,9 @@ load("outData/ips_counts.Rdata")
 load("outData/spatial.Rdata")
 
 # Read data
-disturb_year <- rast('C:/Users/ge45lep/Documents/2022_BarkBeetles_Bavaria/rawData/germany114/disturbance_year_1986-2020_germany.tif')
-disturb_type <- rast('C:/Users/ge45lep/Documents/2022_BarkBeetles_Bavaria/rawData/fire_wind_barkbeetle_germany.tif')
-forest_cover <- rast('C:/Users/ge45lep/Documents/2022_BarkBeetles_Bavaria/rawData/germany114/forestcover_germany.tif')
+disturb_year <- rast('rawData/germany114/disturbance_year_1986-2020_germany.tif')
+disturb_type <- rast('rawData/fire_wind_barkbeetle_germany.tif')
+forest_cover <- rast('rawData/germany114/forestcover_germany.tif')
 
 # tree species classification: from 2017/2018 - some disturbed areas previously can be already removed???
 spruce_cover <- rast('C:/Users/ge45lep/Documents/2022_BarkBeetles_Bavaria/rawData/tree_species_map/spruce_bavaria_resampl30.tif')
@@ -173,7 +173,7 @@ xy <- terra::project(xy, crs(disturb_year))
 # create a list to look over
 xy_ls <- terra::split(xy, c('id')) #,# "OBJECTID" # 
 
-buff_width = 1000  # 1 km
+buff_width = 500  # 500 m
 
 # make a function to export df from each buffer: keep years, disturbance type and forest:
 # filter by spruce cover (30 m)
@@ -222,6 +222,136 @@ extract_rst_val <- function(xy, ...) {
    return(df)
   
   }
+
+
+# sensitivit  analysis -+------------------------------------------------------
+# Modified function to include buff_width as an argument
+extract_rst_val_2 <- function(xy, buff_width) {
+  # Assuming the rest of your function is correctly defined as in your example
+  # Function body...
+  # xy<- xy_ls[[951]]
+  # xy<- xy_ls[[952]]
+  id <- xy$id
+  #print(id)
+  
+  # get buffer
+  buff <- buffer(xy, buff_width)
+  #print('buff')
+  
+  # disturbance year
+  # crop data and then mask them to have a circle
+  dist_year_crop <- crop(disturb_year, buff)
+  dist_year_mask <- mask(dist_year_crop, buff)
+  #print('2')
+  
+  
+  # disturbance type: harvest, fire, beetle
+  dist_type_crop <- crop(disturb_type, buff)
+  dist_type_mask <- mask(dist_type_crop, buff)
+  #print('3')
+  
+  # tree class raster
+  # crop data and then mask them to have a circle
+  spruce_cover_crop <- crop(spruce_cover, buff)
+  spruce_cover_mask <- mask(spruce_cover_crop, buff)
+  
+  # Get vector of values
+  val_year <- as.vector(values(dist_year_mask))
+  val_type <- as.vector(values(dist_type_mask))
+  val_spruce <- as.vector(values(spruce_cover_mask))
+  
+  # merge data and drop NA values
+  df <- data.frame(year = val_year,
+                   type = val_type,
+                   spruce = val_spruce,
+                   id = id,
+                   buff_width = buff_width) 
+  df <- df %>% 
+    drop_na()
+  
+  
+  return(df)
+  
+}
+
+# Sensitivity analysis: buffer size ---------------------------------------
+# 
+# 
+# # Create a list to loop over, if not already created
+# xy_ls <- terra::split(xy, "id")
+# 
+# # Buff_width values to iterate over
+# buff_widths <- c(30,100, 250, 500, 750, 1000, 1500, 2000) # 
+# 
+# # Use lapply to apply the function over each buff_width and combine the results
+# results <- lapply(buff_widths, function(bw) {
+#   lapply(xy_ls, function(xy_item) {
+#     extract_rst_val_2(xy_item, bw)
+#   })
+# })
+# 
+# # Flatten the list (since lapply within lapply creates a nested list) and combine into one dataframe
+# sensitivity_final_df <- do.call(rbind, unlist(results, recursive = FALSE))
+# 
+# # Define a custom function to calculate mean and sd
+# mean_sd <- function(x) {
+#   data.frame(y = mean(x), ymin = mean(x) - sd(x), ymax = mean(x) + sd(x))
+# }
+# 
+#
+# p.sens.pix.counts <- sensitivity_final_df %>%
+#   filter(year %in% 2015:2020) %>%
+#   filter(type == 1) %>%  # wind&bbeetle
+#   group_by(id, buff_width) %>%
+#   summarize(sum_wind = n()) %>% # calculate the count of damaged pixels by buffer
+#   ggplot(aes(x = buff_width, y = sum_wind,
+#              color = ifelse(buff_width == 500, 'Buffer 500', 'Other Buffers'))) +
+#   stat_summary() +
+#   stat_summary(fun = mean, geom = "point", size = 3) +
+#  # geom_vline(xintercept = 1000, col = 'red', lty = 'dashed') +
+#   scale_color_manual(values = c('Buffer 500' = 'red', 'Other Buffers' = 'black')) +
+#   theme_classic() +
+#   xlab('Buffer width [m]') +
+#   ylab('Beetle infested pixels [#]') +
+#   theme(aspect.ratio = 1,
+#         text = element_text(size = 14), # Set general text size
+#         axis.title = element_text(size = 14), # Set axis titles text size
+#         axis.text = element_text(size = 14), # Set axis text (ticks) size
+#         plot.title = element_text(size = 14)) +
+#   guides(color = FALSE) # This removes the legend for color
+# 
+# 
+# 
+# 
+# 
+# 
+# # share of pixels from teh buffer
+# p.sens.pix.share <- sensitivity_final_df %>%
+#   filter(year %in% 2015:2020) %>%
+#   filter(type == 1) %>%  # wind&bbeetle
+#   group_by(id, buff_width) %>%
+#   summarize(sum_wind = n()) %>% # calculate the count of damaged pixels by buffer
+#   mutate(buff_area = pi * buff_width^2,
+#          share = sum_wind/buff_area*100) %>%
+#   ggplot(aes(x = buff_width, y = share,
+#              color = ifelse(buff_width == 500, 'Buffer 500', 'Other Buffers'))) +
+#   stat_summary() +
+#   stat_summary(fun = mean, geom = "point", size = 3) +
+#   # geom_vline(xintercept = 1000, col = 'red', lty = 'dashed') +
+#   scale_color_manual(values = c('Buffer 500' = 'red', 'Other Buffers' = 'black')) +
+#   theme_classic() +
+#   xlab('Buffer width [m]') +
+#   ylab('Share of infested pixels [%]') +
+#   theme(aspect.ratio = 1,
+#         text = element_text(size = 14), # Set general text size
+#         axis.title = element_text(size = 14), # Set axis titles text size
+#         axis.text = element_text(size = 14), # Set axis text (ticks) size
+#         plot.title = element_text(size = 14)) +
+#   guides(color = FALSE) # This removes the legend for color
+# 
+# # windows(7,4)
+# ggarrange(p.sens.pix.counts, p.sens.pix.share, labels = 'auto')
+
 
 
 # make a function to export df from each buffer: keep years, disturbance type and forest;
@@ -396,6 +526,7 @@ save(spruce_df,         # spruce cover by id, from 2017
      df_RS_out,            # final table with coordinates, counts and Rs disturbances and present spruce per year'
      df_anom,           # get harvest and wind anomalies per buffer                   
      xy_sf_expand,      # all xy trap coordinates (shifted over years)
+     sensitivity_final_df, # for sensitivity analysis, buffer width
      file =  "outData/buffers.Rdata")
 
 
