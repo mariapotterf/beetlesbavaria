@@ -81,7 +81,7 @@ xy_df <- data.frame(x = sf::st_coordinates(xy_sf_expand)[,"X"],
 xy_df <- distinct(xy_df)
 
 
-# Get sums of IPS beetle per year/trap: April 31 to October 30
+# Get sums of IPS beetle per year/trap: March 31 to October 30
 ips_sum <- 
   dat.ips.clean %>% 
   group_by(year,falsto_name) %>% 
