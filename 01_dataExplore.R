@@ -85,6 +85,11 @@ xy_sf <-
 
 unique(xy_sf$falsto_name)
 
+
+#xy_sf %>%  
+#  st_write(paste(out_path, "outSpatial/all_traps_3035.gpkg", sep = '/'), append=FALSE)
+
+
 # Beetle data processing -------------------------------------------------------------- 
 
 # Change name of the table
@@ -420,8 +425,82 @@ ips.aggreg %>%
              x = year,
              group = year)) +
   geom_boxplot()
-  
 
+
+# Sensitivity analysis  ---------------------------------------------------
+
+
+# Loop over threshold values
+beetle_thresholds <- c(0.1, 0.5, 1, 1.5, 2, 2.5, 3:10)*1000
+
+# Assuming df.daily is your dataframe and it contains columns: year, falsto_name, doy, cumsum
+# Replace 'cumsum' with the actual column name in your dataframe that should exceed the threshold
+
+results <- lapply(beetle_thresholds, function(threshold) {
+  df.daily %>%
+    group_by(year, falsto_name) %>%
+    arrange(doy) %>%
+    filter(cumsum > threshold) %>%
+    filter(row_number() == 1) %>%
+    ungroup() %>%
+    mutate(beetle_threshold = threshold)  # Add threshold value to the results for identification
+})
+
+# Combine all results into a single dataframe
+final_results <- bind_rows(results)
+
+tab_trap_counts <-as.data.frame(table(final_results$beetle_threshold))
+tab_trap_counts$Var1 <- as.numeric(as.character(tab_trap_counts$Var1))
+
+# Define a custom function to calculate mean and sd
+mean_sd <- function(x) {
+  data.frame(y = mean(x), ymin = mean(x) - sd(x), ymax = mean(x) + sd(x))
+}
+
+
+
+p.supp.agg <- 
+  final_results %>% 
+  ggplot(aes(x = beetle_threshold,  # Ensure beetle_threshold is treated as a categorical variable
+             y = doy,
+             color = ifelse(beetle_threshold == 1000, 'thresh 1000', 'Other'))) + 
+  stat_summary(fun.data = mean_sd) +
+  stat_summary(fun = mean, geom = "point", size = 3) +
+    scale_color_manual(values = c('thresh 1000' = 'red', 'Other' = 'black')) +
+  #geom_vline(xintercept = 1000, col = 'red', lty = 'dashed') +
+  theme_classic() + 
+  xlab('Beetle colonization threshold') + 
+  ylab('DOY') + 
+  theme(aspect.ratio = 1,
+        text = element_text(size = 14), # Set general text size
+        axis.title = element_text(size = 14), # Set axis titles text size
+        axis.text = element_text(size = 14), # Set axis text (ticks) size
+        plot.title = element_text(size = 14)) +
+    guides(color = FALSE) # This removes the legend for color
+
+p.supp.agg
+
+
+p.supp.trap_counts <- 
+  tab_trap_counts %>% 
+  ggplot(aes(x = Var1,
+             y = Freq,
+             color = ifelse(Var1 == 1000, 'thresh 1000', 'Other'))) + 
+  stat_summary() +
+  stat_summary(fun = mean, geom = "point", size = 3) +
+  scale_color_manual(values = c('thresh 1000' = 'red', 'Other' = 'black')) +
+  theme_classic() + 
+  #geom_vline(xintercept = 1000, col = 'red', lty = 'dashed') +
+  xlab('Beetle colonization threshold') + 
+  ylab('Trap count [#]') +
+  theme(aspect.ratio = 1,
+        text = element_text(size = 14), # Set general text size
+        axis.title = element_text(size = 14), # Set axis titles text size
+        axis.text = element_text(size = 14), # Set axis text (ticks) size
+        plot.title = element_text(size = 14)) + 
+    guides(color = FALSE)
+
+ggarrange(p.supp.agg, p.supp.trap_counts, ncol = 2, labels = 'auto')
 
 
 
