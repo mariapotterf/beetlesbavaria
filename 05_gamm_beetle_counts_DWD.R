@@ -390,43 +390,125 @@ qntils = c(0, 0.25, 0.5, 0.75, 1)
 qs_dat_fin <- 
   dat_fin %>% 
     ungroup(.) %>% 
- # group_by(year) %>%
     filter(year %in% 2015:2021) %>% 
- # mutate(distance = factor(distance, level = c("PA", "500", "2000", "control"))) %>% 
-  dplyr::reframe(qs_sum_ips   = quantile(sum_ips, qntils, na.rm = T ),
-            qs_peak_doy  = quantile(peak_doy, qntils, na.rm = T ),
-            qs_agg_doy   = quantile(agg_doy, qntils, na.rm = T ),
-            qs_peak_diff = quantile(peak_diff, qntils, na.rm = T ),
-           # mean_sum_ips   = mean(sum_ips, na.rm = T),
-          #  mean_peak_doy  = mean(peak_doy, na.rm = T),
-            #mean_agg_doy   = mean(agg_doy, na.rm = T),
-            #mean_peak_diff = mean(peak_diff, na.rm = T),
-            prob = qntils)
+  dplyr::reframe(sum_ips   = quantile(sum_ips, qntils, na.rm = T ),
+            peak_doy  = quantile(peak_doy, qntils, na.rm = T ),
+            agg_doy   = quantile(agg_doy, qntils, na.rm = T ),
+            peak_diff = quantile(peak_diff, qntils, na.rm = T )) %>% 
+  t() %>%
+  round(1) %>% 
+  as.data.frame()
 
-  
-    # Convert to long format
-    df_long <- qs_dat_fin %>%
-      pivot_longer(cols = c(qs_sum_ips, 
-                            qs_agg_doy,
-                            qs_peak_doy,
-                            qs_peak_diff), names_to = "measurement", values_to = "value") %>%
-      mutate(prob = as.character(prob)) # Convert prob to character for column names
-    
-    # Convert back to wide format as per your requirement
-    df_wide <- df_long %>%
-      pivot_wider(names_from = prob, values_from = value, names_prefix = "")
-    
-    # Print the resulting wide data frame
-    print(df_wide)
+(qs_dat_fin)  
+
+
+means_dat_fin <- 
+  dat_fin %>% 
+  ungroup(.) %>% 
+  filter(year %in% 2015:2021) %>% 
+  dplyr::reframe(sum_ips   = mean(sum_ips, na.rm = T),
+                 peak_doy  = mean(peak_doy, na.rm = T),
+                 agg_doy   = mean(agg_doy, na.rm = T),
+                 peak_diff = mean(peak_diff, na.rm = T)) %>% 
+  t() %>%
+  round(1) %>% 
+  as.data.frame() 
+
+
+str(means_dat_fin)
+
+# merge qs and mean tables
+summary_out <- cbind(qs_dat_fin, means_dat_fin)# %>%
+
 # Export as a nice table in word:
-sjPlot::tab_df(qs_tab_year,
-               file="quantiles_year.doc",
+sjPlot::tab_df(summary_out,
+               col.header = c(as.character(qntils), 'mean'),
+               show.rownames = TRUE,
+               file="outTable/summary_out.doc",
                digits = 1) 
 
 
+# Spagetti plots: development over time ----------------------------------------
+
+# make line plots of all traps
+dat_fin %>% 
+  ungroup(.) %>% 
+  filter(year %in% 2015:2021) %>% 
+  ggplot(aes(x = year,
+             y = sum_ips,
+             group = trapID)) +
+  labs(x = 'year') +
+  geom_line(alpha = 0.2) + 
+ # stat_summary(aes(group = year, fun = 'mean')) +
+  stat_summary(aes(x = year,
+                   y = sum_ips,
+                   group = year), fun = mean, geom = "line", col = 'red') +
+  theme_minimal(base_size = 10) +
+  theme(aspect.ratio = 1, 
+        panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(), 
+        panel.background = element_rect(fill = "white", colour = "black"))
+
+  
+
+dat_fin %>%
+  ungroup() %>%
+  filter(year %in% 2015:2021) %>%
+  ggplot(aes(x = year, y = sum_ips, group = trapID)) +
+  labs(x = 'Year') +
+  geom_line(alpha = 0.2) +  # Draw individual lines for each trapID with low opacity
+  stat_summary(
+    aes(x = year, y = sum_ips, group = 1), 
+    fun = mean,  # Calculate the mean of sum_ips for each year
+    geom = "line", 
+    col = 'red',  # Draw the line in red to distinguish the average
+    size = 1  # Adjust the size as needed to make the average line prominent
+  ) +
+  theme_minimal(base_size = 10) +
+  theme(
+    aspect.ratio = 1, 
+    panel.grid.major = element_blank(), 
+    panel.grid.minor = element_blank(), 
+    panel.background = element_rect(fill = "white", colour = "black")
+  )
 
 
+plot_data_with_average <- function(data, y_var, y_label, my_title) {
+  # Convert the y_var argument to a symbol to use in aes()
+  y_var_sym <- rlang::sym(y_var)
+  
+  data %>%
+    ungroup() %>%
+    filter(year %in% 2015:2021) %>%
+    ggplot(aes(x = year, y = !!y_var_sym, group = trapID)) +
+    labs(x = 'Year', y = y_label, title = my_title) +
+    geom_line(alpha = 0.2) +  
+    stat_summary(
+      aes(x = year, y = !!y_var_sym, group = 1), 
+      fun = mean,  # Calculate the mean for each year
+      geom = "line", 
+      color = "red",  # Ensure the average line is also red
+      size = 1.2  # Make the average line slightly thicker than individual lines
+    ) +
+    theme_minimal(base_size = 10) +
+    theme(
+      aspect.ratio = 1, 
+      panel.grid.major = element_blank(), 
+      panel.grid.minor = element_blank(), 
+      panel.background = element_rect(fill = "white", colour = "black")
+    )
+}
 
+# Example usage:
+p_spagett_ips       <- plot_data_with_average(dat_fin, "sum_ips", "Beetle counts [#]", '[a]')
+p_spagett_agg_doy   <- plot_data_with_average(dat_fin, "agg_doy", "Colonization [DOY]", '[b]')
+p_spagett_peak_doy  <- plot_data_with_average(dat_fin, "peak_doy", "Peak Growth [DOY]", '[c]')
+p_spagett_peak_diff <- plot_data_with_average(dat_fin, "peak_diff", "Peak difference [#]", '[d]')
+
+ggarrange(p_spagett_ips, 
+          p_spagett_agg_doy, 
+          p_spagett_peak_doy, 
+          p_spagett_peak_diff, ncol = 4,nrow = 1, align = 'hv')
 
 
 ## Scale predictors ================================================================================
