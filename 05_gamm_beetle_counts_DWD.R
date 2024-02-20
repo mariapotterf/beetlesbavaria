@@ -428,49 +428,43 @@ sjPlot::tab_df(summary_out,
                digits = 1) 
 
 
-# Spagetti plots: development over time ----------------------------------------
 
-# make line plots of all traps
-dat_fin %>% 
+### summary table per year: -------------------------------------------------------
+
+
+means_dat_fin_year <- 
+  dat_fin %>% 
   ungroup(.) %>% 
   filter(year %in% 2015:2021) %>% 
-  ggplot(aes(x = year,
-             y = sum_ips,
-             group = trapID)) +
-  labs(x = 'year') +
-  geom_line(alpha = 0.2) + 
- # stat_summary(aes(group = year, fun = 'mean')) +
-  stat_summary(aes(x = year,
-                   y = sum_ips,
-                   group = year), fun = mean, geom = "line", col = 'red') +
-  theme_minimal(base_size = 10) +
-  theme(aspect.ratio = 1, 
-        panel.grid.major = element_blank(), 
-        panel.grid.minor = element_blank(), 
-        panel.background = element_rect(fill = "white", colour = "black"))
+  group_by(year) %>% 
+  dplyr::reframe(mean_sum_ips   = mean(sum_ips, na.rm = T),
+                 mean_agg_doy   = mean(agg_doy, na.rm = T),
+                  mean_peak_doy  = mean(peak_doy, na.rm = T),
+                 mean_peak_diff = mean(peak_diff, na.rm = T),
+                 sd_sum_ips   = sd(sum_ips, na.rm = T),
+                 sd_agg_doy   = sd(agg_doy, na.rm = T),
+                  sd_peak_doy  = sd(peak_doy, na.rm = T),
+                 sd_peak_diff = sd(peak_diff, na.rm = T)) %>% 
+  mutate(Population_level    = stringr::str_glue("{round(mean_sum_ips,1)}±{round(sd_sum_ips,1)}"),
+         Colonization_DOY    = stringr::str_glue("{round(mean_agg_doy,1)}±{round(sd_agg_doy,1)}"),
+         Peak_growth_DOY    = stringr::str_glue("{round(mean_peak_doy,1)}±{round(sd_peak_doy,1)}"),
+         Peak_growth    = stringr::str_glue("{round(mean_peak_diff,1)}±{round(sd_peak_diff,1)}")) %>% 
+  dplyr::select(year, Population_level, Colonization_DOY, Peak_growth_DOY,Peak_growth) 
 
-  
 
-dat_fin %>%
-  ungroup() %>%
-  filter(year %in% 2015:2021) %>%
-  ggplot(aes(x = year, y = sum_ips, group = trapID)) +
-  labs(x = 'Year') +
-  geom_line(alpha = 0.2) +  # Draw individual lines for each trapID with low opacity
-  stat_summary(
-    aes(x = year, y = sum_ips, group = 1), 
-    fun = mean,  # Calculate the mean of sum_ips for each year
-    geom = "line", 
-    col = 'red',  # Draw the line in red to distinguish the average
-    size = 1  # Adjust the size as needed to make the average line prominent
-  ) +
-  theme_minimal(base_size = 10) +
-  theme(
-    aspect.ratio = 1, 
-    panel.grid.major = element_blank(), 
-    panel.grid.minor = element_blank(), 
-    panel.background = element_rect(fill = "white", colour = "black")
-  )
+(means_dat_fin_year)
+
+
+# Export as a nice table in word:
+sjPlot::tab_df(means_dat_fin_year,
+#               col.header = c(as.character(qntils), 'mean'),
+               show.rownames = TRUE,
+               file="outTable/summary_out_year.doc",
+               digits = 0) 
+
+
+# Spagetti plots: development over time ----------------------------------------
+
 
 
 plot_data_with_average <- function(data, y_var, y_label, my_title) {
@@ -482,14 +476,23 @@ plot_data_with_average <- function(data, y_var, y_label, my_title) {
     filter(year %in% 2015:2021) %>%
     ggplot(aes(x = year, y = !!y_var_sym, group = trapID)) +
     labs(x = 'Year', y = y_label, title = my_title) +
-    geom_line(alpha = 0.2) +  
+    geom_line(alpha = 0.1) +  
     stat_summary(
       aes(x = year, y = !!y_var_sym, group = 1), 
       fun = mean,  # Calculate the mean for each year
       geom = "line", 
       color = "red",  # Ensure the average line is also red
-      size = 1.2  # Make the average line slightly thicker than individual lines
+      size = 1  # Make the average line slightly thicker than individual lines
     ) +
+    # stat_summary(
+    #   aes(x = year, y = !!y_var_sym, group = 1),
+    #   fun.data = mean_sdl,  # Calculate mean and standard deviation
+    #   fun.args = list(mult = 1),  # 'mult = 1' for 1 SD, 'mult = 2' for 2 SDs, etc.
+    #   geom = "errorbar",  # Use error bars to represent the SD
+    #   width = 0.1,
+    #   col = 'red'  # SD indicators in red
+    # ) +
+    
     theme_minimal(base_size = 10) +
     theme(
       aspect.ratio = 1, 
@@ -502,13 +505,13 @@ plot_data_with_average <- function(data, y_var, y_label, my_title) {
 # Example usage:
 p_spagett_ips       <- plot_data_with_average(dat_fin, "sum_ips", "Beetle counts [#]", '[a]')
 p_spagett_agg_doy   <- plot_data_with_average(dat_fin, "agg_doy", "Colonization [DOY]", '[b]')
-p_spagett_peak_doy  <- plot_data_with_average(dat_fin, "peak_doy", "Peak Growth [DOY]", '[c]')
-p_spagett_peak_diff <- plot_data_with_average(dat_fin, "peak_diff", "Peak difference [#]", '[d]')
+p_spagett_peak_doy  <- plot_data_with_average(dat_fin, "peak_doy", "Peak population Growth [DOY]", '[c]')
+p_spagett_peak_diff <- plot_data_with_average(dat_fin, "peak_diff", "Peak population Growth [#]", '[d]')
 
 ggarrange(p_spagett_ips, 
           p_spagett_agg_doy, 
           p_spagett_peak_doy, 
-          p_spagett_peak_diff, ncol = 4,nrow = 1, align = 'hv')
+          p_spagett_peak_diff, ncol = 2,nrow = 2, align = 'hv')
 
 
 ## Scale predictors ================================================================================
@@ -2276,11 +2279,12 @@ dw_result <- dwtest(residuals(m.peak.diff2.6) ~ fitted(m.peak.diff2.6))
 
 
 # Create effect plot function with an additional argument to control y-axis labels
-create_effect_plot <- function(data, line_color = "blue", x_title = "X-axis", y_title = "Y-axis", y_lim = c(100,80000), show_y_axis = TRUE) {
+create_effect_plot <- function(data, line_color = "blue", x_title = "X-axis", y_title = "Y-axis", y_lim = c(100,80000), show_y_axis = TRUE,  my_title = '') {
   p <- ggplot(data, aes(x = x, y = predicted, ymin = conf.low, ymax = conf.high)) +
     geom_line(color = line_color) +
     geom_ribbon(alpha = 0.1, fill = line_color) +
-    labs(x = x_title) +
+    labs(x = x_title,
+         title = my_title) +
     ylim(y_lim) +
   #  scale_x_continuous(breaks = c(-2, -1, 0, 1, 2), limits = c(-2.7, 2.7)) + # Set x-axis breaks and limits
     theme_minimal(base_size = 10) +
@@ -2299,7 +2303,7 @@ create_effect_plot <- function(data, line_color = "blue", x_title = "X-axis", y_
 
 
 # change y-axis into days (from 0-1)
-create_effect_Y_trans <- function(data, line_color = "blue", x_title = "X-axis", y_title = "Y-axis", y_lim = c(0, 1), show_y_axis = TRUE) {
+create_effect_Y_trans <- function(data, line_color = "blue", x_title = "X-axis", y_title = "Y-axis", y_lim = c(0, 1), show_y_axis = TRUE, my_title = '') {
   data$predicted <- (data$predicted * (304 - 60)) + 60  # Reverse transformation for y-axis
   data$conf.low  <- (data$conf.low * (304 - 60)) + 60
   data$conf.high <- (data$conf.high * (304 - 60)) + 60
@@ -2307,7 +2311,7 @@ create_effect_Y_trans <- function(data, line_color = "blue", x_title = "X-axis",
   p<- ggplot(data, aes(x = x, y = predicted, ymin = conf.low, ymax = conf.high)) +
     geom_line(color = line_color) +
     geom_ribbon(alpha = 0.1, fill = line_color) +
-    labs(x = x_title, y = y_title) +
+    labs(x = x_title, y = y_title, title = my_title) +
     ylim(y_lim) +
   #  scale_x_continuous(breaks = c(-2, -1, 0, 1, 2), limits = c(-2.7, 2.7)) + # Set x-axis breaks and limits
     theme_minimal(base_size = 10) +
@@ -2343,10 +2347,10 @@ p2$conf.low <- p2$conf.low/100
 p2$conf.high <- p2$conf.high/100
 
 p1.counts <- create_effect_plot(p1, line_color = "red", x_title = "Temperature [z-score]", y_title = "Beetle population level (*100)", show_y_axis = TRUE, y_lim = c(80,800))
-p2.counts <- create_effect_plot(p2, line_color = "blue", x_title = "SPEI [z-score]", y_title = "", show_y_axis = FALSE, y_lim = c(80,800))
+p2.counts <- create_effect_plot(p2, line_color = "blue", x_title = "SPEI [z-score]", y_title = "Beetle population level (*100)", show_y_axis = TRUE, y_lim = c(80,800))
 
 # Arrange the plots side by side with the same size
-p.effect.counts <- ggarrange(p1.counts, p2.counts, ncol = 2, align = "v")
+p.effect.counts <- ggarrange(p1.counts, p2.counts, ncol = 1, align = "hv")
 (p.effect.counts)
 
 
@@ -2360,11 +2364,11 @@ p2 <- ggpredict(fin.m.agg, terms = "previous_spei3_2 [all]", allow.new.levels = 
 
 
 p1.agg <- create_effect_Y_trans(p1, line_color = "red", x_title = "Temperature [z-score]", y_title = "Colonization DOY", y_lim = c(80,250),show_y_axis = TRUE  )
-p2.agg <- create_effect_Y_trans(p2, line_color = "blue", x_title = "SPEI [z-score]", y_title = "Colonization DOY" , y_lim = c(80,250), show_y_axis = FALSE)
+p2.agg <- create_effect_Y_trans(p2, line_color = "blue", x_title = "SPEI [z-score]", y_title = "Colonization DOY" , y_lim = c(80,250), show_y_axis = TRUE)
 
 
 
-p.effect.agg <- ggarrange(p1.agg,p2.agg, ncol = 2, align = "v")
+p.effect.agg <- ggarrange(p1.agg,p2.agg,ncol = 1, align = "hv")
 
 (p.effect.agg)
 
@@ -2376,10 +2380,10 @@ p2 <- ggpredict(fin.m.peak, terms = "previous_spei6 [all]", allow.new.levels = T
 
 
 p1.peak <- create_effect_Y_trans(p1, line_color = "red", x_title = "Temperature [z-score]", y_title = "Peak population growth DOY", y_lim = c(130,200), show_y_axis = TRUE )
-p2.peak <-create_effect_Y_trans(p2, line_color = "blue", x_title = "SPEI [z-score]", y_title = "Peak population growth DOY", y_lim = c(130,200), show_y_axis = F)
+p2.peak <-create_effect_Y_trans(p2, line_color = "blue", x_title = "SPEI [z-score]", y_title = "Peak population growth DOY", y_lim = c(130,200), show_y_axis = TRUE)
 
 # effect plots  ----------------------------------------------------
-p.effect.peak <- ggarrange(p1.peak,p2.peak, ncol = 2, align =  'v')
+p.effect.peak <- ggarrange(p1.peak,p2.peak, ncol = 1, align = "hv")
 
 p.effect.peak
 
@@ -2392,17 +2396,18 @@ p2 <- ggpredict(fin.m.peak.diff, terms = "previous_spei3_2 [all]", allow.new.lev
 
 
 p1.peak.diff <- create_effect_plot(p1, line_color = "red", x_title = "Temperature [z-score]", y_title = "Peak difference DOY", y_lim = c(220,650), show_y_axis = TRUE)
-p2.peak.diff <-create_effect_plot(p2, line_color = "blue", x_title = "SPEI [z-score]", y_title = "Peak difference DOY", y_lim = c(220,650), show_y_axis = FALSE)
+p2.peak.diff <-create_effect_plot(p2, line_color = "blue", x_title = "SPEI [z-score]", y_title = "Peak difference DOY", y_lim = c(220,650), show_y_axis = TRUE)
 
 # effect plots Sum IPS ----------------------------------------------------
-p.effect.peak.diff <- ggarrange(p1.peak.diff,p2.peak.diff, ncol = 2, align = 'v')
+p.effect.peak.diff <- ggarrange(p1.peak.diff,p2.peak.diff, ncol = 1, align = "hv")
 
 p.effect.peak.diff
 
 
 # all Effect plots --------------------------------------------------------
-windows(5,9)
-ggarrange(p.effect.counts, p.effect.agg, p.effect.peak, p.effect.peak.diff, nrow=4 , align = 'hv', labels = 'auto')
+windows(9,5)
+ggarrange(p.effect.counts, p.effect.agg, p.effect.peak, p.effect.peak.diff, ncol=4, nrow = 1 , align = 'hv', font.label = list(size = 10, color = "black", face = "bold", family = NULL),
+          labels = c( "[a]","[b]","[c]","[d]"))
 
 
 # get characteristics
@@ -2417,6 +2422,21 @@ summary(fin.m.counts )
 summary(fin.m.agg)
 summary(fin.m.peak)
 summary(fin.m.peak.diff)
+
+
+
+# print models outputs:
+
+
+
+# export them all in one document:
+# Temporarily save tables as HTML
+sjPlot::tab_model(fin.m.counts, file = "outTable/model_counts.doc")
+sjPlot::tab_model(fin.m.agg, file = "outTable/model_agg.doc")
+sjPlot::tab_model(fin.m.peak, file = "outTable/model_peak.doc")
+sjPlot::tab_model(fin.m.peak.diff, file = "outTable/model_peak_diff.doc")
+
+
 
 
 
