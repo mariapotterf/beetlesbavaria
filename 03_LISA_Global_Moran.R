@@ -65,7 +65,7 @@ load("outData/spatial.Rdata")
 # - ips.year.sum       # sum beetles/year per trap
 
 # Vars
-n_neighbors = 10      # number of nearest neighbors
+n_neighbors = 5      # number of nearest neighbors
 
 # Spatial data: 
 # should have 158 regions (trap pairs)
@@ -111,7 +111,7 @@ get_lisa <- function(i, ...) {
                sym = TRUE)
   
   #  # Calculate LISA
-  lisa_res<-localmoran(ips_sum_sub$sum_beetle, nb2listw(nb))
+  lisa_res<-localmoran(ips_sum_sub$sum_beetle, nb2listw(nb,style="W"))
   #
   # add LISA to points:
   ips_sum_sub$Morans_I <-lisa_res[,1] # get the first column: Ii - local moran  stats
@@ -134,51 +134,74 @@ lisa_merged <- dplyr::bind_rows(lisa_out)
 
 # START sensitivity to number of neighbors ------------------------------------------
 
-#  # Slice specific year
-i = 2017
-
-ips_sum_sub <-ips_sum %>%
-  filter(year == i)
-#
-#  # Local variation analysis (LISA) per year:
-#  # Create a spatial points data frame
-coordinates(ips_sum_sub) <- ~ x + y
-#
-#  # Create queen contiguity neighbors object
-nb <- knn2nb(knearneigh(coordinates(ips_sum_sub),
-                        k = n_neighbors),  # nearest neighbor
-             sym = TRUE)
-
-
-# Define a function to calculate LISA for a given number of neighbors
-calculate_lisa_for_neighbors <- function(data, num_neighbors) {
-  lisa_results <- list()
+get_lisa_neighbours <- function(year, n_neighbors, ips_sum) {
+  # Slice specific year
+  ips_sum_sub <- ips_sum %>% filter(year == year)
   
-  for (k in 1:num_neighbors) {
-    # Create a spatial weights matrix with k neighbors
-    nb <- knn2nb(knearneigh(data))
-    
-    # Calculate Moran's I and LISA statistics
-    moran_obj <- moran.test(data$sum_beetle, listw = nb)
-    lisa_obj <- localmoran(data$sum_beetle, listw = nb)
-    
-    # Store results in a list
-    lisa_results[[paste("Neighbors =", k)]] <- list(Moran_I = moran_obj$estimate,
-                                                    LISA = lisa_obj$localmoran)
-  }
+  # Create a spatial points data frame
+  coordinates(ips_sum_sub) <- ~ x + y
   
-  return(lisa_results)
+  # Create knn neighbors object
+  nb <- knn2nb(knearneigh(coordinates(ips_sum_sub), k = n_neighbors), sym = TRUE)
+  
+  # Calculate LISA
+  lisa_res <- localmoran(ips_sum_sub$sum_beetle, nb2listw(nb, style="W"))
+  
+  # Add LISA to points
+  ips_sum_sub$Morans_I <- lisa_res[,1] # Local Moran's I statistic
+  ips_sum_sub$clust <- attributes(lisa_res)$quadr$mean  # Quadrant mean for LISA clusters
+  ips_sum_sub$n_neighbors <- n_neighbors
+  
+  # Convert to sf for plotting
+  ips_sum_sub_sf <- st_as_sf(ips_sum_sub)
+  
+  return(ips_sum_sub_sf)
 }
 
-# Specify the number of neighbors to consider (1 to 10 in this example)
-num_neighbors <- 10
+# Vector of neighbors to test
+neighbor_counts <- c(1, 3, 5, 7, 9, 11, 15, 21)
 
-# Calculate LISA statistics for different numbers of neighbors
-lisa_results <- calculate_lisa_for_neighbors(ips_sum_sub, num_neighbors)
+# Years to loop over
+years <- 2015:2021
 
-# Access the results for a specific number of neighbors (e.g., 5 neighbors)
-results_for_5_neighbors <- lisa_results[["Neighbors = 5"]]
+# Perform sensitivity analysis over years and number of neighbors
+sensitivity_results <- lapply(years, function(yr) {
+  lapply(neighbor_counts, function(n_nb) {
+    get_lisa_neighbours(yr, n_nb, ips_sum)
+  })
+})
 
+
+
+# Merge all in one sf
+sensitivity_merged <- dplyr::bind_rows(sensitivity_results)
+sensitivity_merged_df <- sensitivity_merged %>% 
+  as.data.frame()
+
+
+p.supp.neighb <- 
+sensitivity_merged_df %>% 
+  ggplot(aes(x = n_neighbors                ,  # Ensure beetle_threshold is treated as a categorical variable
+             y = Morans_I ,   #,
+             color = ifelse(n_neighbors == 5, 'thresh 5', 'Other')
+             )) + 
+  stat_summary(fun.data = mean_sd) +
+  stat_summary(fun = mean, geom = "point", size = 3) +
+
+  scale_color_manual(values = c('thresh 5' = 'red', 'Other' = 'black')) +
+  #geom_vline(xintercept = 1000, col = 'red', lty = 'dashed') +
+  theme_classic() + 
+  xlab('Nearest neighbours number threshold') + 
+  ylab('Local Morans I' ) + 
+  theme(aspect.ratio = 1,
+        text = element_text(size = 14), # Set general text size
+        axis.title = element_text(size = 14), # Set axis titles text size
+        axis.text = element_text(size = 14), # Set axis text (ticks) size
+        plot.title = element_text(size = 14)) +
+  guides(color = FALSE) # This removes the legend for color
+
+
+p.supp.neighb
 
 
  ##############END
