@@ -204,7 +204,7 @@ sensitivity_merged_df %>%
 p.supp.neighb
 
 
- ##############END
+ ##############END sensitivity analysis 
 
 
 # can MoransI explain beetle counts??? - not a meaningful predictors for beetles counts
@@ -328,60 +328,6 @@ p_lisa_freq <-
 
 
   
-# LISA single year -----------------------------------------------------------------
-# Local variation analysis (LISA):
-  # can be done per year
-  
-
-ips_sum_15 <-ips_sum %>% 
-  filter(year == 2015)
-
-
-ips_sum_20 <-ips_sum %>% 
-  filter(year == 2020)
-
-
-# Create a spatial points data frame
-coordinates(ips_sum_15) <- ~ x + y
-coordinates(ips_sum_20) <- ~ x + y
-
-# Create queen contiguity neighbors object
-nb_15 <- knn2nb(knearneigh(coordinates(ips_sum_15),
-                           k = n_neighbors),  # nearest neighbor
-                sym = TRUE)
-nb_20 <- knn2nb(knearneigh(coordinates(ips_sum_20),
-                           k = n_neighbors),  # nearest neighbor
-                sym = TRUE)
-
-
-
-lisa_res_15<-localmoran(ips_sum_15$sum_beetle, nb2listw(nb_15))
-lisa_res_20<-localmoran(ips_sum_20$sum_beetle, nb2listw(nb_20))
-
-
-# add Lisa to points:
-ips_sum_15$Morans_I <-lisa_res_15[,1] # get the first column: Ii - local moran  stats
-ips_sum_20$Morans_I <-lisa_res_20[,1] # get the first column: Ii - local moran  stats
-
-
-
-# convert to sf object:
-ips_sum_15_sf <- st_as_sf(ips_sum_15)
-ips_sum_20_sf <- st_as_sf(ips_sum_20)
-
-
-
-# get classifiued values
-ips_sum_15$cl_mean <-attributes(lisa_res_15)$quadr$mean
-ips_sum_15_sf <- st_as_sf(ips_sum_15)
-
-
-
-
-
-
-
-
 
 
 
