@@ -8,4 +8,5 @@ models.RData
 /outData
 /rawData
 /outTable
-test.csv
+outTable
+outData
