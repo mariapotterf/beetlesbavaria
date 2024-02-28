@@ -83,7 +83,9 @@ lisa_merged_df <- lisa_merged_df %>%
   mutate(falsto_name = gsub("[^A-Za-z0-9_]", "", falsto_name)) %>% 
   dplyr::rename(trapID = falsto_name,
                 sum_ips = sum_beetle) %>% 
-  dplyr::select(c(year, trapID, sum_ips, Morans_I))
+  dplyr::select(c(year, trapID, sum_ips, 
+                  Morans_I, # calculated from beetles sums 
+                  Morans_I_log)) # calculated from log(beetles sum)
 
 # lisa_merged_agg_doy_df <- 
 #   lisa_merged_agg_doy_df %>% 
@@ -106,16 +108,18 @@ dat_lag <-   dat_fin %>%
                   previous_peak_doy1 =  dplyr::lag(peak_doy , order_by = year, n = 1), 
                   previous_peak_doy2 =  dplyr::lag(peak_doy , order_by = year, n = 2),
                   previous_veg_tmp    =  dplyr::lag(veg_tmp,    order_by = year),
-                  previous_spring_tmp =  dplyr::lag(spring_tmp, order_by = year),
+                  previous_veg_tmp2    =  dplyr::lag(veg_tmp,    order_by = year, n = 2),
+                  #previous_spring_tmp =  dplyr::lag(spring_tmp, order_by = year),
                   previous_veg_prcp   =  dplyr::lag(veg_prcp,   order_by = year),
-                  previous_spei1      =  dplyr::lag(spei1,      order_by = year),
+                  #previous_spei1      =  dplyr::lag(spei1,      order_by = year),
                   previous_spei3      =  dplyr::lag(spei3,      order_by = year),
-                  previous_spei6      =  dplyr::lag(spei6,     order_by = year),
-                  previous_spei12     =  dplyr::lag(spei12,     order_by = year),
-                  previous_spei1_2    =  dplyr::lag(spei1,      order_by = year, n = 2),
+                  #previous_spei6      =  dplyr::lag(spei6,     order_by = year),
+                  #previous_spei12     =  dplyr::lag(spei12,     order_by = year),
+                  #previous_spei1_2    =  dplyr::lag(spei1,      order_by = year, n = 2),
                   previous_spei3_2    =  dplyr::lag(spei3,      order_by = year, n = 2),
-                  previous_spei6_2    =  dplyr::lag(spei6,     order_by = year, n = 2),
-                  previous_spei12_2   =  dplyr::lag(spei12,     order_by = year, n = 2)) %>% 
+                  #previous_spei6_2    =  dplyr::lag(spei6,     order_by = year, n = 2),
+                  #previous_spei12_2   =  dplyr::lag(spei12,     order_by = year, n = 2)
+                  ) %>% 
   dplyr::mutate(population_growth     = (sum_ips - previous_sum_ips) / previous_sum_ips * 100,
                 population_growth2    = dplyr::lag(population_growth, order_by = year)) %>%  # lag population growth by one more year
   left_join(df_RS_out, 
@@ -126,6 +130,8 @@ dat_lag <-   dat_fin %>%
 #            by = join_by(trapID, year, agg_doy)) %>%
     dplyr::mutate(previous_Moran       =  dplyr::lag(Morans_I , order_by = year),
                 previous_Moran2      =  dplyr::lag(Morans_I , order_by = year, n = 2),
+                previous_Moran_log1       =  dplyr::lag(Morans_I_log , order_by = year),
+                previous_Moran_log2      =  dplyr::lag(Morans_I_log , order_by = year, n = 2),
                 ) %>% 
   dplyr::mutate(trapID = as.factor(trapID)) %>%
   dplyr::filter(year %in% 2015:2021)
@@ -536,7 +542,7 @@ ggarrange(p_spagett_ips,
 additional_skip_cols <- c('trapID', 'pairID', "x", "y", 
                           'year', 'agg_doy', 'peak_doy', 'peak_diff',
                           'sum_ips', 'previous_sum_ips', 'previous_sum_ips2', 
-                          'wind_beetle', 'Morans_I')
+                          'wind_beetle', 'Morans_I', 'Morans_I_log')
 
 # Combine spei columns with additional columns to skip
 skip_col <- additional_skip_cols #c(names(dat_lag)[spei_cols], additional_skip_cols)
@@ -547,6 +553,7 @@ skip_col <- additional_skip_cols #c(names(dat_lag)[spei_cols], additional_skip_c
 dat_lag_scaled <-
   dat_lag %>%
   ungroup(.) %>% 
+ # na.omit() %>% 
   mutate(sc_sum_ips = sum_ips,  # add beetle counts as scaled values
          sc_previous_sum_ips = previous_sum_ips,
          sc_previous_sum_ips2 = previous_sum_ips2) %>% 
@@ -575,8 +582,6 @@ dat_lag_scaled_complete <-
 #### get a table for RS data --------------------
 
 # insspect beetle rate: get cumulative rates!
-
-
 skip_cols_RS <- c('trapID', 'pairID', 'year', 'wind_beetle', 'cumSum_beetlerate')
 
 
@@ -585,12 +590,15 @@ dat_lag_RS <- dat_lag %>%
     'agg_doy', 'peak_doy', 'peak_diff', 
                 'sum_ips', 'previous_sum_ips', 'previous_sum_ips2',
                 "previous_agg1" ,      "previous_agg2",
-    "previous_peak_diff1", "previous_peak_diff2", 
-     "veg_tmp", "previous_veg_tmp",  
+                "previous_peak_diff1", "previous_peak_diff2", 
+                "veg_tmp", "previous_veg_tmp",  "previous_veg_tmp2",
                 "spei3",  "previous_spei3", "previous_spei3_2",
                 "population_growth",   "population_growth2",
     "previous_Moran", "previous_Moran2", 
-    "Morans_I", "beetle_rate") %>% 
+    "Morans_I", 
+    "previous_Moran_log1", "previous_Moran_log2", 
+    "Morans_I_log",
+    "beetle_rate") %>% 
   mutate(beetle_sum2yrs = previous_sum_ips + previous_sum_ips2) %>%   # new variable having cumulative values ob beetle population per two years
   group_by(trapID) %>% 
   arrange(year) %>% 
@@ -664,6 +672,11 @@ p.spei <- dat_lag %>%
 
 
 ggarrange(p.temp, p.previous.temp, p.spei, p.ips_sum)
+
+# perform EDA: MOrans_log -----------------------------
+library(GGally)
+ggpairs(dat_lag_scaled[, c("Morans_I_log", "veg_tmp", "spei3", "previous_spei3_2")])
+
 
 ### explain Moran's I: LM ------------------------------------
 m_moran1 <- lm(Morans_I ~ poly(veg_tmp,2) + previous_sum_ips + poly(spei3,2), data = dat_lag_scaled)
@@ -968,7 +981,30 @@ dat_lag_RS_compl <- dd_RS_scaled  %>%
   dplyr::filter(Morans_I> 0) %>%  # keep only postive MOran's I values
   na.omit() #%>% 
  
+# perform EDA: MOrans_log -----------------------------
+#library(GGally)
+ggpairs(dat_lag_RS_compl[, c("wind_beetle", 
+                             "Morans_I", "previous_Moran", "previous_Moran2",
+                             "Morans_I_log", "previous_Moran_log1", "previous_Moran_log2")])
+# choose Morans_I  and previous_Moran2
 
+
+ggpairs(dat_lag_RS_compl[, c("wind_beetle", 
+                             "population_growth", "population_growth2")])
+# does not matter: choose population_growth2, +,-
+
+ggpairs(dat_lag_RS_compl[, c("wind_beetle", 
+                             "sum_ips", "previous_sum_ips", "previous_sum_ips2")])
+# sum_ips seems the best
+
+ggpairs(dat_lag_RS_compl[, c("wind_beetle", 
+                             "agg_doy", "previous_agg1", "previous_agg2")])
+
+# does not matter, signs is changing: -, +, +
+
+ggpairs(dat_lag_RS_compl[, c("wind_beetle", 
+                             "peak_diff", "previous_peak_diff1", "previous_peak_diff2")])
+# peak_diff, +,+,+
 
 hist(dat_lag_RS_compl$wind_beetle)
 mean(dat_lag_RS_compl$wind_beetle)
@@ -1000,29 +1036,51 @@ simulateResiduals(mRS01.tmb, plot = T)
 
 hist(dat_lag_RS_compl$wind_beetle)
 
-simple_model <- glm.nb(wind_beetle ~ #sum_ips + 
-                         beetle_sum2yrs +
+# decide between MOran from log or not:
+mm1 <- glm.nb(wind_beetle ~ Morans_I, dat_lag_RS_compl )
+mm1.log <- glm.nb(wind_beetle ~ Morans_I_log , dat_lag_RS_compl )
+
+mm2 <- glm.nb(wind_beetle ~ previous_Moran2, dat_lag_RS_compl )
+mm2.log <- glm.nb(wind_beetle ~ previous_Moran_log2 , dat_lag_RS_compl )
+
+AIC(mm1, mm1.log, mm2, mm2.log)
+
+simulateResiduals(mm2.log, plot = T)
+
+mm3 <- glm.nb(wind_beetle ~ previous_Moran2 + previous_sum_ips, dat_lag_RS_compl)
+
+AIC(mm3, mm2, mm4, mm5)
+
+mm4 <- glm.nb(wind_beetle ~ previous_Moran2 + previous_sum_ips2 +
+                previous_agg1, dat_lag_RS_compl)
+
+mm5 <- glm.nb(wind_beetle ~ previous_Moran2 + previous_sum_ips2 +
+                previous_agg2, dat_lag_RS_compl)
+
+# logs are worse! ise Morans from teh simple counts. Continue wit lag2, as it is more meaningful
+
+simple_model <- glm.nb(wind_beetle ~ sum_ips + 
+                         #beetle_sum2yrs +
                          previous_veg_tmp +
-                         #previous_sum_ips +
-                         #previous_sum_ips2 +
-                         #veg_tmp + 
-                         #spring_tmp + 
-                         
-                         #spei3 + 
-                         #previous_spei3 +
+                         previous_sum_ips +
+                         previous_sum_ips2 +
+                         veg_tmp + 
+                         spei3 + 
+                         previous_spei3 +
                          previous_spei3_2 +
-                         #veg_prcp + 
-  
-                         #agg_doy + # correlated with sum_ips
-                         #peak_doy +  ## correlated with sum_ips
-                         # peak_diff + # correlated with sum_ips and its lags
                          
-                         #previous_agg1 + 
-                         #previous_agg2 +
-                         #previous_peak_diff1 + 
-                         #previous_peak_diff2 +
-                         #previous_Moran +
-                         #Morans_I +    # correlated with sum_ips and its lags
+                         agg_doy + # correlated with sum_ips
+                         peak_doy +  ## correlated with sum_ips
+                          peak_diff + # correlated with sum_ips and its lags
+                         
+                         previous_agg1 + 
+                         previous_agg2 +
+                         previous_peak_diff1 + 
+                         previous_peak_diff2 +
+                         Morans_I + 
+                         previous_Moran +
+                         previous_Moran + 
+                         # +    # correlated with sum_ips and its lags
                          population_growth2,
                        na.action = 'na.fail',
                        data = dat_lag_RS_compl )
@@ -1048,23 +1106,6 @@ print(correlation_matrix)
 
 
 
-# Define the global model
-simple_model <- glm.nb(wind_beetle ~ previous_sum_ips + 
-                         beetle_sum2yrs +
-                         previous_veg_tmp +
-                         previous_spei3_2 +
-                         population_growth2,
-                       na.action = 'na.fail',
-                       data = dat_lag_RS_compl)
-
-# Run dredge to get all possible model combinations
-model_candidates <- dredge(simple_model)
-
-# Extract the top 10 models
-top_models <- head(model_candidates, 10)
-
-# Print the top 10 models
-print(top_models)
 
 
 mRS.nb1<-  glm.nb(wind_beetle ~ #previous_sum_ips + 
@@ -1114,7 +1155,7 @@ mRS.nb5<-  glm.nb(wind_beetle ~ previous_sum_ips +
 AIC(mRS.nb5,mRS.tmb5)
 
 
-
+# use mixed effects, as I have paired traps ----------------------------------
 
 # start with one variable at time
 dat_lag_RS_compl %>% 
@@ -1171,8 +1212,8 @@ mRS.tmb5<-  glmmTMB(wind_beetle ~ previous_sum_ips +
 # keep adding population characteristics
 mRS.tmb6<-  glmmTMB(wind_beetle ~ previous_sum_ips + 
                       population_growth2 +
-                      previous_agg1 +
-                      +previous_Moran2+ (1|pairID),
+                      previous_agg2 +
+                      previous_Moran2+ (1|pairID),
                     na.action = 'na.fail',
                     family = nbinom1,
                     data = dat_lag_RS_compl)
@@ -1181,7 +1222,7 @@ mRS.tmb6<-  glmmTMB(wind_beetle ~ previous_sum_ips +
 mRS.tmb7<-  glmmTMB(wind_beetle ~ previous_sum_ips + 
                       population_growth2 +
                       previous_agg1 +
-                      +previous_Moran2+ (1|pairID/trapID),
+                      previous_Moran2+ (1|pairID/trapID),
                     na.action = 'na.fail',
                     family = nbinom1,
                     data = dat_lag_RS_compl)
@@ -1190,15 +1231,15 @@ mRS.tmb7<-  glmmTMB(wind_beetle ~ previous_sum_ips +
 mRS.tmb8<-  glmmTMB(wind_beetle ~ previous_sum_ips + 
                       population_growth2 +
                       previous_agg1 +
-                      +previous_Moran2+ previous_Moran + (1|pairID/trapID),
+                      +previous_Moran2+  (1|pairID/trapID),
                     na.action = 'na.fail',
                     family = nbinom1,
                     data = dat_lag_RS_compl)
 
 mRS.tmb9<-  glmmTMB(wind_beetle ~ previous_sum_ips + 
                       population_growth2 +
-                      previous_agg1 +
-                      previous_Moran + (1|pairID/trapID),
+                      previous_agg2 +
+                      previous_Moran2 + (1|pairID/trapID),
                     na.action = 'na.fail',
                     family = nbinom1,
                     data = dat_lag_RS_compl)
@@ -1207,7 +1248,7 @@ mRS.tmb9<-  glmmTMB(wind_beetle ~ previous_sum_ips +
 mRS.tmb10<-  glmmTMB(wind_beetle ~ previous_sum_ips + 
                       population_growth2 +
                       previous_agg2 +
-                      previous_Moran + (1|pairID/trapID),
+                      previous_Moran2 + (1|pairID/trapID),
                     na.action = 'na.fail',
                     family = nbinom1,
                     data = dat_lag_RS_compl)
@@ -1269,6 +1310,18 @@ mRS.tmb17<-  glmmTMB(wind_beetle ~ previous_sum_ips +
                      na.action = 'na.fail',
                      family = nbinom1,
                      data = dat_lag_RS_compl)
+
+mRS.tmb17.int<-  glmmTMB(wind_beetle ~ previous_sum_ips + 
+                       population_growth2 +
+                       previous_agg2 +
+                         previous_sum_ips*previous_agg2 +
+                       previous_Moran2 + 
+                       #previous_Moran + 
+                       (1|year),
+                     na.action = 'na.fail',
+                     family = nbinom1,
+                     data = dat_lag_RS_compl)
+AIC(mRS.tmb17.int, mRS.tmb17)
 
 mRS.tmb17.2 <-  glmmTMB(wind_beetle ~ #previous_sum_ips + 
                        population_growth2 +
