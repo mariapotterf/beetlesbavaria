@@ -85,10 +85,13 @@ xy_df <- distinct(xy_df)
 ips_sum <- 
   dat.ips.clean %>% 
   group_by(year,falsto_name) %>% 
-  dplyr::summarize(sum_beetle = sum(fangmenge, na.rm = T)) %>% 
+  dplyr::summarize(sum_beetle = sum(fangmenge, na.rm = T),
+                   log_sum_beetle = log(sum_beetle)) %>% 
   left_join(xy_df, by = c("falsto_name", 'year')) # df_xy3035
 
+hist(ips_sum$sum_beetle)
 
+hist(ips_sum$log_sum_beetle)
 nrow(ips_sum)
 
 # Run LISA for each year separately
@@ -111,11 +114,16 @@ get_lisa <- function(i, ...) {
                sym = TRUE)
   
   #  # Calculate LISA
-  lisa_res<-localmoran(ips_sum_sub$sum_beetle, nb2listw(nb,style="W"))
+  lisa_res_log<-localmoran(ips_sum_sub$log_sum_beetle, nb2listw(nb,style="W"))
+  lisa_res    <-localmoran(ips_sum_sub$sum_beetle, nb2listw(nb,style="W"))
   #
   # add LISA to points:
   ips_sum_sub$Morans_I <-lisa_res[,1] # get the first column: Ii - local moran  stats
   ips_sum_sub$clust <-attributes(lisa_res)$quadr$mean  # get classified data
+  
+  ips_sum_sub$Morans_I_log <-lisa_res_log[,1] # get the first column: Ii - local moran  stats
+  ips_sum_sub$clust_log    <-attributes(lisa_res_log)$quadr$mean  # get classified data
+  
   #
   # convert to sf for plotting
   ips_sum_sub_sf <- st_as_sf(ips_sum_sub)
@@ -130,7 +138,42 @@ lisa_out <- lapply(years, get_lisa )
 lisa_merged <- dplyr::bind_rows(lisa_out)
 
 
+# compare the MOra's I from log and non log ips sums
+lisa_merged %>% 
+ggplot(aes(x = Morans_I,
+           y = Morans_I_log #,
+           #color = factor(year)
+           )) + 
+  geom_point() +
+ # geom_smooth() +
+  facet_wrap(~year) +
+  labs(y = "Moran's I [log(beetle sum)]",
+       x = "Moran's I [beetle sum]") +
+  theme_bw()
 
+
+
+lisa_merged %>% 
+  ggplot(aes(x = sum_beetle,
+             y = log_sum_beetle)) + 
+  geom_point()
+
+table(lisa_merged$clust, lisa_merged$clust_log )
+
+sum(table(lisa_merged$clust))
+sum(table(lisa_merged$clust_log ))
+
+lisa_merged %>% 
+  ggplot(aes(x = clust,
+             y = clust_log,
+             color = as.factor(year))) + 
+  geom_jitter() #+ 
+  geom_density_2d()
+  #facet_grid(~year)
+
+x = 1:10000
+y = log(x)
+plot(x = x, y = y)
 
 # START sensitivity to number of neighbors ------------------------------------------
 
@@ -206,6 +249,39 @@ p.supp.neighb
 
  ##############END sensitivity analysis 
 
+# plot LISA's morans on map:
+# first get new categories for point plotting
+
+lisa_merged_cl <- lisa_merged %>%
+  mutate(Morans_I_log_cat = case_when(
+    Morans_I_log < 0 ~ "dispersed",
+    Morans_I_log == 0 ~ "zero",
+    Morans_I_log > 0 & Morans_I_log <= 1 ~ "0-1",
+    Morans_I_log > 1 ~ ">1",
+    TRUE ~ NA_character_  # To handle any NA or unexpected values
+  )) %>%
+  mutate(Morans_I_log_cl = case_when(
+    Morans_I_log <= -1 ~ -1,
+    Morans_I_log > -1 & Morans_I_log < 1 ~ Morans_I_log,
+    Morans_I_log >= 1 ~ 1  # To handle any NA or unexpected values
+  )) %>%
+  mutate(Morans_I_log_cat = factor(Morans_I_log_cat, 
+                                   levels = c("dispersed", "zero", "0-1", ">1")))
+
+summary(lisa_merged_cl)
+
+p_lisa_all_cat <- ggplot() +
+  geom_sf(data = lisa_merged_cl,
+          aes(#color = clust_log,
+              size = Morans_I_log_cl), alpha = 0.5) +  # Use the new categorical variable for size
+  #scale_color_manual(breaks = c("Low-Low", "High-Low", "Low-High", "High-High"),
+  #                   values = c("blue", "grey90", "green", "red")) +
+  #scale_size_manual(values = c("dispersed" = 0.5, "zero" = 1, "0-1" = 2, ">1" = 3)) +  # Define sizes
+  facet_wrap(~year) +
+  theme_void() +
+  ggtitle('LISA: Moran I')
+
+(p_lisa_all_cat)
 
 # can MoransI explain beetle counts??? - not a meaningful predictors for beetles counts
 lisa_merged %>% 
@@ -224,27 +300,32 @@ plot(m1)
 
 p_lisa_sub <- ggplot() +
   geom_sf(data = filter(lisa_merged, 
-                        clust %in% c("Low-Low", "High-High")),
-          aes(color = clust)) +
+                        clust_log %in% c("Low-Low", "High-High")),
+          aes(color = clust_log)) +
   scale_color_manual(breaks = c("Low-Low", "High-Low", "Low-High", "High-High"),
                      values=c("blue", "grey90", "grey90", 'red')) +
   facet_wrap(year~.) +
   theme_void() +
   ggtitle('LISA: Moran I')
 
-
+# what are the morans I values by the HH, LL categories?
+lisa_merged %>% 
+  ggplot(aes(x = clust_log,
+             y = Morans_I_log)) +
+  stat_summary(geom = 'boxplot')
 
 p_lisa_all <- ggplot() +
   geom_sf(data = lisa_merged, #filter(lisa_merged, 
                         #clust %in% c("Low-Low", "High-High")),
-          aes(color = clust)) +
+          aes(color = clust_log,
+              size = Morans_I_log), alpha = 0.5) +
   scale_color_manual(breaks = c("Low-Low", "High-Low", "Low-High", "High-High"),
-                     values=c("blue", "grey90", "grey95", 'red')) +
+                     values=c("blue", "grey90", "green", 'red')) +
   facet_wrap(year~.) +
   theme_void() +
   ggtitle('LISA: Moran I')
 
-
+(p_lisa_all)
 # improve plotting: cap values 
 
 # Cap values greater than 5 to 5
