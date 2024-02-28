@@ -79,6 +79,7 @@ xy_df <- data.frame(x = sf::st_coordinates(xy_sf_expand)[,"X"],
                     falsto_name = xy_sf_expand$falsto_name)
 
 xy_df <- distinct(xy_df)
+my_crs <- crs(xy_sf_expand)
 
 
 # Get sums of IPS beetle per year/trap: March 31 to October 30
@@ -136,6 +137,8 @@ lisa_out <- lapply(years, get_lisa )
 
 # Merge all in one sf
 lisa_merged <- dplyr::bind_rows(lisa_out)
+
+st_crs(lisa_merged) <- my_crs
 
 
 # compare the MOra's I from log and non log ips sums
@@ -249,8 +252,12 @@ p.supp.neighb
 
  ##############END sensitivity analysis 
 
-# plot LISA's morans on map:
-# first get new categories for point plotting
+# plot LISA's morans on map: ----------------------------------------------------
+
+# add bavaria shp
+bav_sf <- st_read("outSpatial/bavaria.gpkg")
+
+#  get new categories for point plotting ----
 
 lisa_merged_cl <- lisa_merged %>%
   mutate(Morans_I_log_cat = case_when(
@@ -268,30 +275,193 @@ lisa_merged_cl <- lisa_merged %>%
   mutate(Morans_I_log_cat = factor(Morans_I_log_cat, 
                                    levels = c("dispersed", "zero", "0-1", ">1")))
 
+
+# Lisa averaged Moran's 
+lisa_merged_mean <- lisa_merged %>%
+  ungroup() %>% 
+  group_by(falsto_name) %>% 
+  dplyr::mutate(Morans_I_mean = median(Morans_I_log, na.rm = T)) %>% 
+  dplyr::select(falsto_name, Morans_I_mean) %>% 
+  slice(1) %>%  # select only one row
+  distinct() %>% 
+  mutate(Morans_I_mean_rsc = case_when(
+    Morans_I_mean <= -1 ~ -1,
+    Morans_I_mean > -1 & Morans_I_mean < 1 ~ Morans_I_mean,
+    Morans_I_mean >= 1 ~ 1  # To handle any NA or unexpected values
+  )) 
+  
+
+
+# create voronoi: --------------
+# convert first to terra;
+lisa_terra <- vect(lisa_merged_mean)
+bav_terra <- vect(bav_sf)
+bav_proj <- project(bav_terra, crs(lisa_terra))
+
+# Compute Voronoi polygons
+voronoi <- voronoi(lisa_terra)
+
+crs(voronoi) == crs(lisa_terra)
+crs(bav_proj) == crs(lisa_terra)
+
+
+# Clip Voronoi polygons by Bavaria
+clipped_voronoi <- crop(voronoi, bav_proj)
+
+# Plot clipped Voronoi polygons
+plot(clipped_voronoi, main="Clipped Voronoi Tessellation")
+plot(bav_proj, add=TRUE)
+plot(lisa_terra, add=TRUE)
+
+# convert back to sf object
+clipped_voronoi_sf <- st_as_sf(clipped_voronoi)
+
+
+# Plot the Voronoi polygons colored by the mean Moran's I values
+
+  
+ggplot(data = clipped_voronoi_sf) +
+  geom_sf(aes(fill = Morans_I_mean), color = NA) +
+  scale_fill_gradient2(low = "blue", 
+                        mid = "white", 
+                        high = "red", midpoint = 0) +
+  geom_sf(data = bav_sf, color = 'black', 
+          fill  = 'NA') +
+  geom_sf(data = lisa_merged_mean, color = 'black',size = 0.5, 
+          fill  = 'NA') +
+  
+  #scale_fill_viridis_c() +
+  theme_void() +
+  labs(title = "Voronoi Polygons Colored by median Moran's I",
+       fill = "MOran's I [median]")
+
+
+
+
+
+ # ake new data: calculate, how many times the plot is positive per year
+lisa_merged_synch <- lisa_merged %>%
+  mutate(positive = case_when(
+      Morans_I_log >= 0 ~ 1,  # positive autocorrelation
+      Morans_I_log < 0 ~ 0    # negative autocorrelation
+  )) 
+
+table(lisa_merged_synch$positive)
+
+# make map, show only positive values
+ggplot(
+  #bav_sf
+  ) +
+  #geom_sf(color = 'black', 
+  #        fill  = 'grey93') + 
+  #ggplot() + 
+  geom_sf(data = dplyr::filter(lisa_merged_synch,positive == '1'),
+          aes(color = factor(positive))) +  # Use the new categorical variable for size
+ facet_wrap(~year) +
+  theme_void() +
+  ggtitle('LISA: Moran I(positive)')
+
+  
+
+# merge lisa data by number of years of positive autocorr
+lisa_merged_synch_merged <- 
+  lisa_merged_synch %>% 
+    ungroup() %>% 
+  group_by(falsto_name) %>% 
+    dplyr::mutate(sum_years = sum(positive == 1)) %>% 
+  dplyr::select(falsto_name, sum_years, geometry) %>% 
+  distinct()
+
+
+# plot how often teh autocorrelatin is positive:
+
+#p_lisa_all_cat <- 
+  ggplot(bav_sf) +
+  geom_sf(color = 'black', 
+          fill  = 'grey93') + 
+  #ggplot() + 
+  geom_sf(data = lisa_merged_synch_merged,
+          aes(color = sum_years          ), alpha = 0.5) +  # Use the new categorical variable for size
+  theme_void() +
+  ggtitle('LISA: Moran I')
+
+
+
+
+
+crs(lisa_merged_cl)
 summary(lisa_merged_cl)
 
-p_lisa_all_cat <- ggplot() +
-  geom_sf(data = lisa_merged_cl,
-          aes(#color = clust_log,
-              size = Morans_I_log_cl), alpha = 0.5) +  # Use the new categorical variable for size
-  #scale_color_manual(breaks = c("Low-Low", "High-Low", "Low-High", "High-High"),
+p_lisa_all_cat <- 
+  ggplot(bav_sf) +
+  geom_sf(color = 'black', 
+          fill  = 'grey93') + 
+  #ggplot() + 
+  geom_sf(data = dplyr::filter(lisa_merged_cl,Morans_I_log_cl != 0),
+          aes(color = Morans_I_log_cl,
+              size = Morans_I_log_cat), alpha = 0.5) +  # Use the new categorical variable for size
+    scale_color_gradient2(low = "blue", 
+                          mid = "white", 
+                          high = "red", midpoint = 0) +
+   # scale_size_continuous(range = c(0.1,2)) #+  # Adjust size range as needed
+    #scale_color_manual(breaks = c("Low-Low", "High-Low", "Low-High", "High-High"),
   #                   values = c("blue", "grey90", "green", "red")) +
-  #scale_size_manual(values = c("dispersed" = 0.5, "zero" = 1, "0-1" = 2, ">1" = 3)) +  # Define sizes
+  scale_size_manual(values = c("dispersed" = 0.1, "zero" = 0.1, "0-1" = 1, ">1" = 1.5)) +  # Define sizes
   facet_wrap(~year) +
   theme_void() +
   ggtitle('LISA: Moran I')
 
+windows()
 (p_lisa_all_cat)
 
-# can MoransI explain beetle counts??? - not a meaningful predictors for beetles counts
-lisa_merged %>% 
-  as.data.frame() %>% 
-  ggplot(aes(x = Morans_I ,
-             y = sum_beetle)) +
-  geom_point()
 
-m1<-glm.nb(sum_beetle~Morans_I, lisa_merged)
-plot(m1)
+# how does MOran's I looks over years?
+p_morans_log_summary <- ggplot(lisa_merged_cl, aes(x = year,
+                           group = year,
+                           y = Morans_I_log )) +
+  stat_summary() +
+  geom_hline(yintercept = 0, lty = 'dashed') +
+  coord_cartesian(ylim = c(-0.1, 0.5)) +
+  theme_bw()#geom_boxplot()
+
+p_morans_summary <- ggplot(lisa_merged_cl, aes(x = year,
+                                                   group = year,
+                                                   y = Morans_I )) +
+  stat_summary() + geom_hline(yintercept = 0, lty = 'dashed') +
+  coord_cartesian(ylim = c(-0.1, 0.5)) +
+  theme_bw()#geom_boxplot()
+
+
+
+ggarrange(p_morans_summary, p_morans_log_summary)
+
+
+crs(bav_sf)
+crs(lisa_merged_cl)
+
+
+# how many beetles I have in each HH-LL category over years?
+lisa_merged_cl %>% 
+  ggplot(aes(x = year,
+             y = sum_beetle,
+             group = clust_log,
+             color = clust_log)) +
+  stat_summary() 
+# overall, number of beetles increases, but the number of categories is only relative within the year
+
+# plot beetle sum vs moran's I:
+lisa_merged_cl %>% 
+  ggplot(aes(x = log_sum_beetle,
+             y = Morans_I_log,
+             group = year,
+             color = year)) +
+  geom_point() +
+  facet_wrap(~year)
+
+# high MOran'sI can also have traps that have low number of beetles 
+
+
+
 #st_crs(lisa_merged) <- crs(bav_sf)
 #lisa_merged_proj <- st_crs(crs(bav_sf))
 #  st_transform(lisa_merged, projection(bav_sf))
