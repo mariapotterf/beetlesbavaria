@@ -92,6 +92,11 @@ lisa_merged_df <- lisa_merged_df %>%
 #   as.data.frame() %>% 
 #     dplyr::rename(Morans_I_agg = Morans_I) %>% 
 #   dplyr::select(year, trapID, agg_doy, Morans_I_agg)
+
+# add MOran's I values
+dat_fin <-   dat_fin %>% 
+  left_join(lisa_merged_df, 
+                       by = join_by(trapID, year, sum_ips)) #%>%
   
 
 
@@ -124,8 +129,8 @@ dat_lag <-   dat_fin %>%
                 population_growth2    = dplyr::lag(population_growth, order_by = year)) %>%  # lag population growth by one more year
   left_join(df_RS_out, 
             by = join_by(trapID, year, sum_ips)) %>%
-  left_join(lisa_merged_df, 
-            by = join_by(trapID, year, sum_ips)) %>%
+#  left_join(lisa_merged_df, 
+#            by = join_by(trapID, year, sum_ips)) %>%
 #  left_join(lisa_merged_agg_doy_df, 
 #            by = join_by(trapID, year, agg_doy)) %>%
     dplyr::mutate(previous_Moran       =  dplyr::lag(Morans_I , order_by = year),
@@ -138,6 +143,87 @@ dat_lag <-   dat_fin %>%
 
 # check morans from ips sum and agg doy:
 #pairs(Morans_I ~ Morans_I_agg, dat_lag )
+
+head(dat_fin)
+
+
+
+# Find teh most influential lag:  ----------------------------------------------
+# Load necessary libraries
+library(MASS) # For glm.nb
+library(dplyr) # For data manipulation
+library(tidyr)
+
+
+# Get negative biunomial model to identify teh most influential predictor lag 
+
+fit_models_for_lags <- function(data, predictors, lags) {
+  results <- list() # Initialize an empty list to store results
+  aic_baseline <- list() # Initialize a list to store AIC for lag 0 for comparison
+  
+  # Loop over each predictor
+  for (predictor in predictors) {
+    # Calculate and store AIC for lag 0 for each predictor
+    data_lag0 <- data %>%
+      group_by(trapID) %>%
+      arrange(year, .by_group = TRUE) %>%
+      mutate(lagged_value = lag(!!sym(predictor), n = 0, default = NA)) %>%
+      ungroup()
+    
+    model_lag0 <- glm.nb(sum_ips ~ lagged_value, data = data_lag0, na.action = na.exclude)
+    aic_baseline[[predictor]] <- AIC(model_lag0)
+    
+    # Loop over each lag value
+    for (lag in lags) {
+      # Create lagged predictor and fit model
+      temp_data <- data %>%
+        group_by(trapID) %>%
+        arrange(year, .by_group = TRUE) %>%
+        mutate(lagged_value = lag(!!sym(predictor), n = lag, default = NA)) %>%
+        ungroup()
+      
+      model <- glm.nb(sum_ips ~ lagged_value, data = temp_data, na.action = na.exclude)
+      
+      # Extract p-value for the lagged predictor
+      summary_model <- summary(model)
+      p_value <- ifelse(!is.na(coef(summary_model)["lagged_value", "Pr(>|z|)"]), coef(summary_model)["lagged_value", "Pr(>|z|)"], NA)
+      
+      # Calculate delta AIC (ΔAIC)
+      delta_aic <- AIC(model) - aic_baseline[[predictor]]
+      
+      # Store the results
+      results[[paste(predictor, "Lag", lag)]] <- data.frame(
+        Model = paste(predictor, "Lag", lag),
+        Predictor = predictor,
+        Lag = lag,
+        AIC = AIC(model),
+        P_Value = p_value,
+        Delta_AIC = delta_aic
+      )
+    }
+  }
+  
+  # Combine all results into a single data frame
+  do.call(rbind, results)
+}
+
+# Specify predictors and lags
+# List of predictors
+predictors <- c("veg_tmp", "spring_tmp", "spei3", "spei6", "peak_doy", "peak_diff", "agg_doy", "Morans_I", "Morans_I_log")
+lags <- 0:3
+#data <- dat_fin # Assuming dat_fin is your dataset
+
+# Use the function
+model_info <- fit_models_for_lags(dat_fin, predictors, lags)
+
+(model_info)
+
+
+
+
+
+
+
 
 
 ### Spearman - select SPEI --------------------------------------------------
