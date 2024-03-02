@@ -20,6 +20,12 @@
 gc()
 rm(list = ls())
 
+spring.months         = 3:5
+veg.months            = 3:10
+study.period.extended = 2012:2021
+
+
+
 
 # Read my paths -----------------------------------------------------------
 source('myPaths.R')
@@ -314,7 +320,7 @@ df_spei_ID %>%
 # spei does only up to 2021
 df_spei_veg_season <- 
   df_spei_ID %>% 
-  dplyr::filter(month %in% c(3:10)& year %in% 2013:2021) %>% 
+  dplyr::filter(month %in% veg.months & year %in% study.period.extended) %>% 
   ungroup(.) %>% 
   group_by(falsto_name, year, scale) %>% 
   summarise(spei = median(spei)) 
