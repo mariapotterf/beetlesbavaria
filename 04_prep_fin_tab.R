@@ -11,7 +11,7 @@ source('myPaths.R')
 
 spring.months         = 3:5
 veg.months            = 3:10
-study.period.extended = 2013:2021
+study.period.extended = 2012:2021
 
 
 # get libs ----------------------------------------------------------------
