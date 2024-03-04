@@ -88,12 +88,18 @@ ips_sum <-
   group_by(year,falsto_name) %>% 
   dplyr::summarize(sum_beetle = sum(fangmenge, na.rm = T),
                    log_sum_beetle = log(sum_beetle)) %>% 
-  left_join(xy_df, by = c("falsto_name", 'year')) # df_xy3035
+  left_join(xy_df, by = c("falsto_name", 'year')) %>% # df_xy3035
+  mutate(falsto_name = gsub("[^A-Za-z0-9_]", "", falsto_name)) #%>% 
 
 hist(ips_sum$sum_beetle)
 
 hist(ips_sum$log_sum_beetle)
 nrow(ips_sum)
+
+
+
+  
+
 
 # Run LISA for each year separately
 years <- 2015:2021
@@ -136,13 +142,14 @@ get_lisa <- function(i, ...) {
 lisa_out <- lapply(years, get_lisa )
 
 # Merge all in one sf
-lisa_merged <- dplyr::bind_rows(lisa_out)
+lisa_merged_sf <- dplyr::bind_rows(lisa_out)
 
-st_crs(lisa_merged) <- my_crs
+st_crs(lisa_merged_sf) <- my_crs
 
+lisa_merged_df <- as.data.frame(lisa_merged_sf)
 
 # compare the MOra's I from log and non log ips sums
-lisa_merged %>% 
+lisa_merged_df %>% 
 ggplot(aes(x = Morans_I,
            y = Morans_I_log #,
            #color = factor(year)
@@ -156,17 +163,17 @@ ggplot(aes(x = Morans_I,
 
 
 
-lisa_merged %>% 
+lisa_merged_df %>% 
   ggplot(aes(x = sum_beetle,
              y = log_sum_beetle)) + 
   geom_point()
 
-table(lisa_merged$clust, lisa_merged$clust_log )
+table(lisa_merged_df$clust, lisa_merged_df$clust_log )
 
 sum(table(lisa_merged$clust))
 sum(table(lisa_merged$clust_log ))
 
-lisa_merged %>% 
+lisa_merged_df %>% 
   ggplot(aes(x = clust,
              y = clust_log,
              color = as.factor(year))) + 
@@ -259,7 +266,7 @@ bav_sf <- st_read("outSpatial/bavaria.gpkg")
 
 #  get new categories for point plotting ----
 
-lisa_merged_cl <- lisa_merged %>%
+lisa_merged_cl <- lisa_merged_df %>%
   mutate(Morans_I_log_cat = case_when(
     Morans_I_log < 0 ~ "dispersed",
     Morans_I_log == 0 ~ "zero",
@@ -267,17 +274,25 @@ lisa_merged_cl <- lisa_merged %>%
     Morans_I_log > 1 ~ ">1",
     TRUE ~ NA_character_  # To handle any NA or unexpected values
   )) %>%
-  mutate(Morans_I_log_cl = case_when(
+  mutate(Morans_I_log_cap = case_when(
     Morans_I_log <= -1 ~ -1,
     Morans_I_log > -1 & Morans_I_log < 1 ~ Morans_I_log,
     Morans_I_log >= 1 ~ 1  # To handle any NA or unexpected values
+  )) %>%
+  mutate(sum_beetle_cap = case_when(
+    sum_beetle   < 28741   ~ sum_beetle,
+    sum_beetle >= 28741   ~ 28741  # cap values on 3rd quantile
   )) %>%
   mutate(Morans_I_log_cat = factor(Morans_I_log_cat, 
                                    levels = c("dispersed", "zero", "0-1", ">1")))
 
 
-# Lisa averaged Moran's 
-lisa_merged_mean <- lisa_merged %>%
+
+
+
+
+# Lisa averaged Moran's --------------------------------------------
+lisa_merged_mean <- lisa_merged_sf %>%
   ungroup() %>% 
   group_by(falsto_name) %>% 
   dplyr::mutate(Morans_I_mean = median(Morans_I_log, na.rm = T)) %>% 
@@ -292,7 +307,7 @@ lisa_merged_mean <- lisa_merged %>%
   
 
 
-# create voronoi: --------------
+# create voronoi: medians Moran's --------------
 # convert first to terra;
 lisa_terra <- vect(lisa_merged_mean)
 bav_terra <- vect(bav_sf)
@@ -338,8 +353,120 @@ ggplot(data = clipped_voronoi_sf) +
 
 
 
+# Voronoi: by years, beetle sums ------------------------------------------
+# create voronoi: medians Moran's --------------
+# convert first to terra;
+# slected only one point placemet (avoid trap shifts)
+lisa_merged_single <- lisa_merged_sf %>% 
+  dplyr::select(falsto_name) %>% 
+  group_by(falsto_name) %>% 
+  slice(1)
 
- # ake new data: calculate, how many times the plot is positive per year
+# get data in terra format
+lisa_terra <- vect(lisa_merged_single)
+bav_terra  <- vect(bav_sf)
+bav_proj   <- project(bav_terra, my_crs)
+
+# Compute Voronoi polygons
+voronoi <- voronoi(lisa_terra)
+
+
+# Clip Voronoi polygons by Bavaria
+clipped_voronoi <- crop(voronoi, bav_proj)
+
+# Plot clipped Voronoi polygons
+plot(clipped_voronoi, main="Clipped Voronoi Tessellation")
+plot(bav_proj, add=TRUE)
+plot(lisa_terra, add=TRUE)
+
+# convert back to sf object
+clipped_voronoi_sf <- st_as_sf(clipped_voronoi)
+st_crs(clipped_voronoi_sf) <- my_crs
+st_crs(lisa_merged_single) <- my_crs
+
+
+# add to voronoi all of teh values, per all years
+clipped_voronoi_sf2 <- clipped_voronoi_sf %>% 
+  right_join(as.data.frame(lisa_merged_cl ),by = join_by(falsto_name)) 
+  
+table(clipped_voronoi_sf2$year)
+#View(clipped_voronoi_sf2)
+anyNA(clipped_voronoi_sf2)
+
+# Plot the Voronoi polygons colored by the mean Moran's I values
+summary(clipped_voronoi_sf2)
+
+library(RColorBrewer)
+plot(clipped_voronoi_sf2[[,year ==2015]])
+
+clipped_voronoi_sf2 %>% 
+  dplyr::filter(year == 2020) %>%
+  #View()
+  #str()
+  ggplot() +
+  geom_sf() #+
+  
+# 
+windows(7,7)
+ggplot(data = clipped_voronoi_sf2) +
+  geom_sf(aes(fill = sum_beetle_cap), color = NA) +
+  scale_fill_gradientn(colors = brewer.pal(9, "YlOrRd")) +  # Use the "YlOrRd" palette
+  geom_sf(data = bav_sf, color = 'black', 
+          fill  = 'NA') +
+  theme_void() +
+  facet_wrap(~year) +
+  labs(title = "",
+       fill = "Beetle population level\n[counts]")
+
+
+ggplot(data = clipped_voronoi_sf2) +
+  geom_sf(aes(fill =  Morans_I_log_cap), color = 'NA') +
+  #scale_fill_gradientn(colors = brewer.pal(9, "YlOrRd")) +  # Use the "YlOrRd" palette
+  scale_fill_gradient2(low = "blue", 
+                        mid = "white", 
+                        high = "red", midpoint = 0) +
+  geom_sf(data = bav_sf, color = 'black', 
+          fill  = 'NA') +
+  theme_void() +
+  facet_wrap(~year) +
+  labs(title = "",
+       fill = "Morans_I [log]")
+
+
+
+
+# show beetles counts --------------------------------
+# cap beetles on some IQR
+#clipped_voronoi_sf2 <- clipped_voronoi_sf2 %>% 
+  
+ggplot(data = clipped_voronoi_sf2) +
+  geom_sf(aes(fill =  Morans_I_log_cap), color = 'NA') +
+  #scale_fill_gradientn(colors = brewer.pal(9, "YlOrRd")) +  # Use the "YlOrRd" palette
+  scale_fill_gradient2(low = "blue", 
+                       mid = "white", 
+                       high = "red", midpoint = 0) +
+  geom_sf(data = bav_sf, color = 'black', 
+          fill  = 'NA') +
+  theme_void() +
+  facet_wrap(~year) +
+  labs(title = "",
+       fill = "Morans_I [log]")
+
+
+
+
+# how beetles increase with Moran's I -------------------------------------
+lisa_merged_cl %>% 
+  ggplot(aes(x = log_sum_beetle,
+             y = Morans_I_log_cap)) +
+  geom_density_2d_filled() +
+  scale_color_gradient2(low = "blue", 
+                        mid = "white", 
+                        high = "red", midpoint = 0) #+
+
+
+
+ # make new data: calculate, how many times the plot is positive per year
 lisa_merged_synch <- lisa_merged %>%
   mutate(positive = case_when(
       Morans_I_log >= 0 ~ 1,  # positive autocorrelation
@@ -397,8 +524,8 @@ p_lisa_all_cat <-
   geom_sf(color = 'black', 
           fill  = 'grey93') + 
   #ggplot() + 
-  geom_sf(data = dplyr::filter(lisa_merged_cl,Morans_I_log_cl != 0),
-          aes(color = Morans_I_log_cl,
+  geom_sf(data = dplyr::filter(lisa_merged_cl,Morans_I_log_cap != 0),
+          aes(color = Morans_I_log_cap,
               size = Morans_I_log_cat), alpha = 0.5) +  # Use the new categorical variable for size
     scale_color_gradient2(low = "blue", 
                           mid = "white", 
