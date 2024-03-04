@@ -157,7 +157,7 @@ library(tidyr)
 
 # Get negative biunomial model to identify teh most influential predictor lag 
 
-fit_models_for_lags <- function(data, predictors, lags) {
+fit_models_for_lags_ips_counts <- function(data, predictors, lags) {
   results <- list() # Initialize an empty list to store results
   aic_baseline <- list() # Initialize a list to store AIC for lag 0 for comparison
   
@@ -209,12 +209,16 @@ fit_models_for_lags <- function(data, predictors, lags) {
 
 # Specify predictors and lags
 # List of predictors
-predictors <- c("veg_tmp", "spring_tmp", "spei3", "spei6", "peak_doy", "peak_diff", "agg_doy", "Morans_I", "Morans_I_log")
+predictors <- c("veg_tmp",  "spei3", "spei6", "peak_doy", "peak_diff", "agg_doy", "Morans_I", "Morans_I_log")
 lags <- 0:3
 #data <- dat_fin # Assuming dat_fin is your dataset
 
 # Use the function
 model_info <- fit_models_for_lags(dat_fin, predictors, lags)
+
+model_info <- model_info %>% 
+  mutate(P_Value = round(P_Value     ,3),
+         Delta_AIC = round(Delta_AIC     ,3))
 
 (model_info)
 
