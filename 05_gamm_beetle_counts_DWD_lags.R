@@ -60,11 +60,16 @@ library(RColorBrewer)
 
 library(knitr)   # for table outputs
 
+# plot labels: 
+lab_popul_level = "Population level [#]"
+lab_colonization_time = "Colonization timing [DOY]"
+lab_peak_time = "Peak timing [DOY]"
+lab_peak_growth= "Peak growth [#]"
 
 
 
 
-##### read data ----------------------------------------------------------------
+spa##### read data ----------------------------------------------------------------
 
 load(file=   "outData/final_table.Rdata")
 load(file =  "outData/buffers.Rdata")  # df_RS_out
@@ -114,54 +119,14 @@ dat_fin <-   dat_fin %>%
 dat_fin$tr_agg_doy  <- pmin(pmax(dat_fin$tr_agg_doy, 1e-4),  1 - 1e-4)
 dat_fin$tr_peak_doy <- pmin(pmax(dat_fin$tr_peak_doy, 1e-4), 1 - 1e-4)
 
-  
 
-
-# add lag: previous year counts, previous year temperature ----------------------
-dat_lag <-   dat_fin %>%
-    ungroup(.) %>% 
-   group_by(trapID) %>%
-    dplyr::mutate(previous_sum_ips    =  dplyr::lag(sum_ips,    order_by = year),
-                  previous_sum_ips2   =  dplyr::lag(sum_ips,    order_by = year, n = 2),
-                  previous_agg1       =  dplyr::lag(agg_doy ,   order_by = year, n = 1), 
-                  previous_agg2       =  dplyr::lag(agg_doy ,   order_by = year, n = 2), 
-                  previous_peak_diff1 =  dplyr::lag(peak_diff , order_by = year, n = 1), 
-                  previous_peak_diff2 =  dplyr::lag(peak_diff , order_by = year, n = 2),
-                  previous_peak_doy1 =  dplyr::lag(peak_doy , order_by = year, n = 1), 
-                  previous_peak_doy2 =  dplyr::lag(peak_doy , order_by = year, n = 2),
-                  previous_veg_tmp    =  dplyr::lag(veg_tmp,    order_by = year),
-                  previous_veg_tmp2    =  dplyr::lag(veg_tmp,    order_by = year, n = 2),
-                  #previous_spring_tmp =  dplyr::lag(spring_tmp, order_by = year),
-                  previous_veg_prcp   =  dplyr::lag(veg_prcp,   order_by = year),
-                  #previous_spei1      =  dplyr::lag(spei1,      order_by = year),
-                  previous_spei3      =  dplyr::lag(spei3,      order_by = year),
-                  #previous_spei6      =  dplyr::lag(spei6,     order_by = year),
-                  #previous_spei12     =  dplyr::lag(spei12,     order_by = year),
-                  #previous_spei1_2    =  dplyr::lag(spei1,      order_by = year, n = 2),
-                  previous_spei3_2    =  dplyr::lag(spei3,      order_by = year, n = 2),
-                  #previous_spei6_2    =  dplyr::lag(spei6,     order_by = year, n = 2),
-                  #previous_spei12_2   =  dplyr::lag(spei12,     order_by = year, n = 2)
-                  ) %>% 
-  dplyr::mutate(population_growth     = (sum_ips - previous_sum_ips) / previous_sum_ips * 100,
-                population_growth2    = dplyr::lag(population_growth, order_by = year)) %>%  # lag population growth by one more year
-  left_join(df_RS_out, 
-            by = join_by(trapID, year, sum_ips)) %>%
-#  left_join(lisa_merged_df, 
-#            by = join_by(trapID, year, sum_ips)) %>%
-#  left_join(lisa_merged_agg_doy_df, 
-#            by = join_by(trapID, year, agg_doy)) %>%
-    dplyr::mutate(previous_Moran       =  dplyr::lag(Morans_I , order_by = year),
-                previous_Moran2      =  dplyr::lag(Morans_I , order_by = year, n = 2),
-                previous_Moran_log1       =  dplyr::lag(Morans_I_log , order_by = year),
-                previous_Moran_log2      =  dplyr::lag(Morans_I_log , order_by = year, n = 2),
-                ) %>% 
-  dplyr::mutate(trapID = as.factor(trapID)) %>%
-  dplyr::filter(year %in% 2015:2021)
-
-# check morans from ips sum and agg doy:
-#pairs(Morans_I ~ Morans_I_agg, dat_lag )
-
-head(dat_fin)
+# calculate population growth
+dat_fin <- dat_fin %>% 
+  group_by(trapID) %>%
+  arrange(year, .by_group = TRUE) %>%
+  mutate(sum_ips_lag1   = lag(sum_ips, n = 3, default = NA),
+         population_growth     = (sum_ips - sum_ips_lag1) / sum_ips_lag1 * 100,
+         population_growth2    = dplyr::lag(population_growth, n = 1, order_by = year))# %>%  # lag population growth by one more year
 
 
 
@@ -356,6 +321,7 @@ fit_lags_tweedie <- function(data, predictors, lags, dependent_var) {
 
 # Specify predictors and lags
 # List of predictors
+predictors_spei <- c("spei1", "spei3","spei6", "spei12", "spei24")
 predictors_beetle_dyn <- c("veg_tmp",  "spei3")
 predictors_Morans     <- c("veg_tmp",  "spei3", "sum_ips", "peak_doy", "peak_diff", "agg_doy")
 predictors_RS         <- c("sum_ips", "peak_doy", "peak_diff", "agg_doy", "Morans_I", "Morans_I_log")
@@ -363,19 +329,11 @@ predictors_RS         <- c("sum_ips", "peak_doy", "peak_diff", "agg_doy", "Moran
 lags <- 0:3
 #data <- dat_fin # Assuming dat_fin is your dataset
 
-dat_fin <- dat_fin %>% 
-    group_by(trapID) %>%
-      arrange(year, .by_group = TRUE) %>%
-      mutate(sum_ips_lag1   = lag(sum_ips, n = 3, default = NA),
-             population_growth     = (sum_ips - sum_ips_lag1) / sum_ips_lag1 * 100,
-             population_growth2    = dplyr::lag(population_growth, n = 1, order_by = year))# %>%  # lag population growth by one more year
-  
-
 # specify individual datasets, to limit the NAs values and to scale them
 dat_fin_no_RS <- dat_fin %>% 
   dplyr::select(!wind_beetle)
 
-cols_skip <- c('trapID', 'pairID', 'Morans_I_log')
+cols_skip <- c('trapID', 'pairID', 'Morans_I_log', 'Morans_I')
 
 # export new df
 dat_fin_Moran <-  dat_fin %>% 
@@ -395,10 +353,15 @@ dat_fin_Moran_scaled <-
 
 
   
-# Get lag models, validated by AIC --------------------------------------------
+### Get lag models, validated by AIC --------------------------------------------
 model_lag_sum_ips <- fit_lags_negbin(dat_fin_no_RS, predictors  = predictors_beetle_dyn, 
                                                  lags, 
                                      dependent_var = "sum_ips")
+
+model_lag_sum_ips_spei <- fit_lags_negbin(dat_fin_no_RS, predictors  = predictors_spei, 
+                                     lags, 
+                                     dependent_var = "sum_ips")
+# spei 3, lag 2 is the best among lags
 model_lag_peak_diff <- fit_lags_negbin(dat_fin_no_RS, 
                                         predictors  = predictors_beetle_dyn, 
                                         lags, 
@@ -418,10 +381,15 @@ model_lag_RS  <- fit_lags_negbin(dat_fin,
                                  dependent_var = "wind_beetle")
 
 
-model_lag_Morans  <- fit_lags_tweedie_test(dat_fin_Moran_scaled, 
+model_lag_Morans_log  <- fit_lags_tweedie(dat_fin_Moran_scaled, 
                                  predictors  =  predictors_Morans, 
                                  lags, 
                                  dependent_var = "Morans_I_log")
+
+model_lag_Morans_old  <- fit_lags_tweedie(dat_fin_Moran_scaled, 
+                                           predictors  =  predictors_Morans, 
+                                           lags, 
+                                           dependent_var = "Morans_I")
 
 
 
@@ -512,10 +480,8 @@ m3 <- glmmTMB(sum_ips ~ veg_tmp*spei3_lag2 + (1|pairID),
               family = nbinom2,
               data = dat_fin_counts_m)
 
-allEffects(m4)
-fin.m.counts <- m4
 # add poly terms, no interaction (issuees in model fitting otherwise)
-m4 <- glmmTMB(sum_ips ~ poly(veg_tmp, 2) + poly(spei3_lag2,2) + veg_tmp:spei3_lag2 + (1|pairID),
+m4 <- glmmTMB(sum_ips ~ poly(veg_tmp, 2) + spei3_lag2 + veg_tmp:spei3_lag2 + (1|pairID),
               family = nbinom2,
               data = dat_fin_counts_m)
 
@@ -523,8 +489,10 @@ m5 <- glmmTMB(sum_ips ~ poly(veg_tmp, 2) + poly(spei3_lag2,2) + (1|pairID),
               family = nbinom2,
               data = dat_fin_counts_m)
 
+#allEffects(m4)
+fin.m.counts <- m4
 
-simulateResiduals(m3, plot = T)
+simulateResiduals(m4, plot = T)
 
 summary(m4)
 AIC(m1, m2, m3, m4, m5)
@@ -556,20 +524,20 @@ m3 <- glmmTMB(peak_diff ~ veg_tmp_lag3*spei3_lag3 + (1|pairID),
 m4 <- glmmTMB(peak_diff ~ poly(veg_tmp_lag3, 2) + poly(spei3_lag3,2) + veg_tmp_lag2:spei3_lag3 + (1|pairID),
               family = nbinom2,
               data = dat_fin_counts_m)
-# interaction of poly terms
+# interaction of poly terms - tto crazy, difficult to interpret, stay with simple interaction
 m5 <- glmmTMB(peak_diff ~ poly(veg_tmp_lag3, 2)*poly(spei3_lag3,2)+ (1|pairID),
               family = nbinom2,
               data = dat_fin_counts_m)
+summary(m4)
 
 
 
 
-
-simulateResiduals(m5, plot = T)
+#simulateResiduals(m4, plot = T)
 
 summary(m4)
 AIC(m1, m2, m3, m4, m5)
-fin.m.peak.diff <- m5
+fin.m.peak.diff <- m4
 
 
 # Assuming your model is an 'lme4' or 'glmmTMB' object
@@ -615,9 +583,9 @@ m7 <- glmmTMB(tr_agg_doy ~ poly(veg_tmp, 2)*poly(spei3_lag3,2) + (1|pairID),
 
 simulateResiduals(m3, plot = T)
 
-summary(m6)
+summary(m7)
 AIC(m1, m2, m3, m4, m5,m6, m7)
-fin.m.agg <- m6
+fin.m.agg <- m3
 
 # Assuming your model is an 'lme4' or 'glmmTMB' object
 (vif_values <- performance::check_collinearity(m1))
@@ -650,7 +618,7 @@ m6 <- glmmTMB(tr_peak_doy ~ veg_tmp_lag2 + poly(spei3_lag2,2) + veg_tmp_lag2:spe
               data = dat_fin_counts_m)
 
 
-fin.m.peak <- m5
+fin.m.peak <- m6
 
 simulateResiduals(m5, plot = T)
 
@@ -662,25 +630,28 @@ AIC(m1, m2, m3, m4, m5, m6)
 
 
 
-### MOran's I values: 3 years lag of beetle data! ----------------------------------
+### MOran's I LOG values (from log(beetle counts)): ----------------------------------
 # export new df
 # best lags: 
 # veg_tmp0, spei3_2, sum_ips0, peak_doy0,peak_diff1, agg_doy0 
 
-cols_skip <- c('trapID', 'pairID', 'year', 'Morans_I_log')
+cols_skip <- c('trapID', 'pairID', 'year','Morans_I',  'Morans_I_log', 'Morans_I_log_cap')
 
 dat_fin_Moran <-  
   dat_fin %>% 
   #dplyr::filter(Morans_I_log > 0 ) %>%
+  dplyr::mutate(Morans_I_log_cap  = case_when(Morans_I_log >= 1 ~ 1,
+                                              Morans_I_log < 1 & Morans_I_log >= -1 ~ Morans_I_log,
+                                              Morans_I_log <= -1 ~ -1)) %>%
   dplyr::select(-wind_beetle) %>% 
   # data %>%
   group_by(trapID) %>%
   arrange(year, .by_group = TRUE) %>%
   mutate(spei3_lag2   = lag(spei3, n = 2, default = NA),
-         #veg_tmp_lag2 = lag(veg_tmp, n = 2, default = NA),
-         # agg_doy_lag1   = lag(agg_doy, n = 2, default = NA),
-         #peak_doy_lag2   = lag(peak_doy, n = 2, default = NA),
-        # sum_ips_lag2   = lag(sum_ips, n = 2, default = NA),
+         veg_tmp_lag2 = lag(veg_tmp, n = 2, default = NA),
+         agg_doy_lag1   = lag(agg_doy, n = 2, default = NA),
+         peak_doy_lag2   = lag(peak_doy, n = 2, default = NA),
+         sum_ips_lag2   = lag(sum_ips, n = 2, default = NA),
          peak_diff_lag1   = lag(peak_diff, n = 1, default = NA)) %>%
   mutate(peak_diff  = as.integer(peak_diff )) %>% 
   ungroup() %>% 
@@ -699,6 +670,134 @@ dat_fin_Moran_scaled <-
 
 
 summary(dat_fin_Moran_scaled)
+
+
+
+# test with capped values (-1, 0, 1 range) -------------------------------------
+# remove negative Morans I vals
+dat_fin_Moran_scaled_positive <- dat_fin_Moran_scaled %>% 
+  dplyr::filter(Morans_I_log_cap>0)
+
+
+# put all predictors 
+m1 <- glmmTMB(Morans_I_log_cap ~ veg_tmp + spei3_lag2 + 
+                agg_doy + peak_doy + 
+                sum_ips + peak_diff_lag1 + population_growth2,
+              family = tweedie,
+              data = dat_fin_Moran_scaled)
+
+
+#heck multicollinerarity from teh all predictors
+(vif_values <- performance::check_collinearity(m1))
+summary(m1)
+# add climate intearction
+m2 <- glmmTMB(Morans_I_log_cap ~ veg_tmp*spei3_lag2 + 
+                agg_doy + peak_doy + 
+                sum_ips + peak_diff_lag1 +population_growth2,
+              family = tweedie,
+              data = dat_fin_Moran_scaled)
+
+
+# remove non significan terms and climate interaction,  add interaction with colonization
+m3 <- glmmTMB(Morans_I_log_cap ~ veg_tmp*spei3_lag2 + 
+                agg_doy + peak_doy + 
+                sum_ips + peak_diff_lag1 +population_growth2 +
+                (1|pairID)              ,
+              family = tweedie,
+              data = dat_fin_Moran_scaled)
+
+AIC(m1,m2, m3)
+simulateResiduals(m3, plot = T)
+
+#fin.m.moran <- m2
+
+# remove all intercations
+m4 <- glmmTMB(Morans_I_log ~ veg_tmp + spei3_lag2 + 
+                agg_doy + peak_doy + population_growth2 +
+                sum_ips,# + 
+              #peak_diff_lag1,
+              family = tweedie,
+              data = dat_fin_Moran_scaled)
+
+m5 <- glmmTMB(Morans_I_log ~ veg_tmp + spei3_lag2 + 
+                agg_doy + peak_doy + 
+                sum_ips + population_growth2 + (1|pairID),# + 
+              #peak_diff_lag1,
+              family = tweedie,
+              data = dat_fin_Moran_scaled)
+
+# improved model with random effects: remove peak doy - non significant
+m6 <- glmmTMB(Morans_I_log ~ veg_tmp + spei3_lag2 + 
+                agg_doy + population_growth2 + #peak_doy + 
+                sum_ips + (1|pairID),# + 
+              #peak_diff_lag1,
+              family = tweedie,
+              data = dat_fin_Moran_scaled)
+
+
+# try poly terms
+m7 <- glmmTMB(Morans_I_log ~ poly(veg_tmp,2) + poly(spei3_lag2,2) + 
+                poly(agg_doy,2) + poly(population_growth2, 2) + #peak_doy + 
+                poly(sum_ips,2) + (1|pairID),# + 
+              #peak_diff_lag1,
+              family = tweedie,
+              data = dat_fin_Moran_scaled)
+
+# simplify polyterms: remove non-significant
+m8 <- glmmTMB(Morans_I_log ~ veg_tmp + spei3_lag2 + 
+                agg_doy + #peak_doy + population_growth2
+                poly(sum_ips,2) + (1|pairID),# + 
+              #peak_diff_lag1,
+              family = tweedie,
+              data = dat_fin_Moran_scaled)
+
+
+# interaction climate
+m9 <- glmmTMB(Morans_I_log ~ veg_tmp*spei3_lag2 + 
+                agg_doy + #peak_doy + population_growth2
+                poly(sum_ips,2) + (1|pairID),# + 
+              #peak_diff_lag1,
+              family = tweedie,
+              data = dat_fin_Moran_scaled)
+
+# interaction climate
+m10 <- glmmTMB(Morans_I_log ~ veg_tmp*spei3_lag2 + 
+                 agg_doy + peak_doy + #population_growth2 +
+                 #sum_ips + 
+                 (1|pairID),# + 
+               #peak_diff_lag1,
+               family = tweedie,
+               data = dat_fin_Moran_scaled)
+
+
+
+m11 <- glmmTMB(Morans_I_log ~ veg_tmp*spei3_lag2 + 
+                 agg_doy + #peak_doy + #population_growth2 +
+                 #sum_ips + 
+                 (1|pairID),# + 
+               #peak_diff_lag1,
+               family = tweedie,
+               data = dat_fin_Moran_scaled)
+
+AIC(#m1,
+  #m2, m3, m4, m5, m6, m7, m8, m9, 
+  #m9,  
+  m10, m11)
+
+plot(allEffects(m8))
+fin.m.moran <- m11
+
+simulateResiduals(m8, plot = T)
+
+summary(m8)
+
+# Morans I log (raw)----------------------------
+
+
+
+
+
+
 
 # put all predictors 
 m1 <- glmmTMB(Morans_I_log ~ veg_tmp + spei3_lag2 + 
@@ -767,21 +866,150 @@ m8 <- glmmTMB(Morans_I_log ~ veg_tmp + spei3_lag2 +
               data = dat_fin_Moran_scaled)
 
 
-AIC(m1,m2, m3, m4, m5, m6, m7, m8)
+# interaction climate
+m9 <- glmmTMB(Morans_I_log ~ veg_tmp*spei3_lag2 + 
+                agg_doy + #peak_doy + population_growth2
+                poly(sum_ips,2) + (1|pairID),# + 
+              #peak_diff_lag1,
+              family = tweedie,
+              data = dat_fin_Moran_scaled)
+
+# interaction climate
+m10 <- glmmTMB(Morans_I_log ~ veg_tmp*spei3_lag2 + 
+                agg_doy + #peak_doy + population_growth2
+                sum_ips + (1|pairID),# + 
+              #peak_diff_lag1,
+              family = tweedie,
+              data = dat_fin_Moran_scaled)
+
+
+
+m11 <- glmmTMB(Morans_I_log ~ veg_tmp*spei3_lag2 + 
+                agg_doy + #peak_doy + population_growth2
+                #poly(sum_ips,2) + 
+                 (1|pairID),# + 
+              #peak_diff_lag1,
+              family = tweedie,
+              data = dat_fin_Moran_scaled)
+
+
+AIC(#m1,
+    #m2, m3, m4, m5, m6, m7, m8, m9, 
+  m9,  
+  m10, m11)
 
 plot(allEffects(m8))
-fin.m.moran <- m8
+#fin.m.moran <- m10
 
 simulateResiduals(m8, plot = T)
 
 summary(m8)
 
 
+#### predict MOrans_I (from raw betle counts) --------------------------------
+dat_fin_Moran_scaled_trim <- dat_fin_Moran_scaled %>% 
+  dplyr::filter(Morans_I > 0)
+
+# put all predictors 
+m1 <- glmmTMB(Morans_I ~ veg_tmp +veg_tmp_lag2 + spei3_lag2 + 
+                agg_doy + peak_doy + 
+                sum_ips + peak_diff + population_growth2,
+              family = tweedie,
+              data = dat_fin_Moran_scaled_trim)
+
+
+#heck multicollinerarity from teh all predictors
+(vif_values <- performance::check_collinearity(m1))
+summary(m1)
+# add climate intearction
+m2 <- glmmTMB(Morans_I ~ veg_tmp + veg_tmp_lag2*spei3_lag2 + 
+                agg_doy + peak_doy + 
+                sum_ips + peak_diff +population_growth2,
+              family = tweedie,
+              data = dat_fin_Moran_scaled_trim)
+
+
+m3 <- glmmTMB(Morans_I ~ veg_tmp_lag2*spei3_lag2,# + 
+                #agg_doy + peak_doy + 
+                #sum_ips + peak_diff +population_growth2,
+              family = tweedie,
+              data = dat_fin_Moran_scaled_trim)
+
+
+# remove non significan terms and climate interaction,  add interaction with colonization
+m3 <- glmmTMB(Morans_I ~ veg_tmp + spei3_lag2 + 
+                veg_tmp:agg_doy + peak_doy + population_growth2 +
+                sum_ips,# + 
+              #peak_diff_lag1,
+              family = tweedie,
+              data = dat_fin_Moran_scaled)
+# remove all intercations
+m4 <- glmmTMB(Morans_I ~ veg_tmp + spei3_lag2 + 
+                agg_doy + peak_doy + population_growth2 +
+                sum_ips,# + 
+              #peak_diff_lag1,
+              family = tweedie,
+              data = dat_fin_Moran_scaled)
+
+m5 <- glmmTMB(Morans_I ~ veg_tmp + spei3_lag2 + 
+                agg_doy + peak_doy + 
+                sum_ips + population_growth2 + (1|pairID),# + 
+              #peak_diff_lag1,
+              family = tweedie,
+              data = dat_fin_Moran_scaled)
+
+# improved model with random effects: remove peak doy - non significant
+m6 <- glmmTMB(Morans_I ~ veg_tmp + spei3_lag2 + 
+                agg_doy + population_growth2 + #peak_doy + 
+                sum_ips + (1|pairID),# + 
+              #peak_diff_lag1,
+              family = tweedie,
+              data = dat_fin_Moran_scaled)
+
+
+# try poly terms
+m7 <- glmmTMB(Morans_I ~ poly(veg_tmp,2) + poly(spei3_lag2,2) + 
+                poly(agg_doy,2) + poly(population_growth2, 2) + #peak_doy + 
+                poly(sum_ips,2) + (1|pairID),# + 
+              #peak_diff_lag1,
+              family = tweedie,
+              data = dat_fin_Moran_scaled)
+
+# simplify polyterms: remove non-significant
+m8 <- glmmTMB(Morans_I ~ veg_tmp + spei3_lag2 + 
+                agg_doy + #peak_doy + population_growth2
+                poly(sum_ips,2) + (1|pairID),# + 
+              #peak_diff_lag1,
+              family = tweedie,
+              data = dat_fin_Moran_scaled)
+
+
+# interaction climate
+m9 <- glmmTMB(Morans_I ~ veg_tmp*spei3_lag2 + 
+                agg_doy + #peak_doy + population_growth2
+                poly(sum_ips,2) + (1|pairID),# + 
+              #peak_diff_lag1,
+              family = tweedie,
+              data = dat_fin_Moran_scaled)
+
+
+AIC(m1,
+  m2, m3, m4, m5, m6, m7, m8, m9)
+
+plot(allEffects(m8))
+#fin.m.moran <- m9
+
+simulateResiduals(m8, plot = T)
+
+summary(m9)
 
 
 
-### RS beetle damage: 3 years lag of beetle data! ----------------------------------
-## always use lag of 3 years, as little difference between the models, and we wish t have more observations
+
+
+
+### RS beetle damage: 2 years lag of beetle data! ----------------------------------
+## always use lag of 2 years, as little difference between the models, and we wish t have more observations
 
 cols_skip <- c('trapID', 'pairID', 'year', 'wind_beetle')
 
@@ -797,12 +1025,11 @@ dat_fin_RS_m <-
          agg_doy_lag2   = lag(agg_doy, n = 2, default = NA),
          peak_doy_lag2   = lag(peak_doy, n = 2, default = NA),
          sum_ips_lag2   = lag(sum_ips, n = 2, default = NA),
-         sum_ips_lag1   = lag(sum_ips, n = 1, default = NA),
          peak_diff_lag2   = lag(peak_diff, n = 2, default = NA),
          Morans_I_log_lag2   = lag(Morans_I_log, n = 2, default = NA)) %>%
   #sum_ips_lag3   = lag(sum_ips, n = 3, default = NA)
   dplyr::mutate(population_growth     = (sum_ips - sum_ips_lag1) / sum_ips_lag1 * 100,
-                population_growth2    = dplyr::lag(population_growth, n = 1, order_by = year)) %>%  # lag population growth by one more year
+                population_growth2    = dplyr::lag(population_growth, n = 2, order_by = year)) %>%  # lag population growth by one more year
   
   mutate(peak_diff  = as.integer(peak_diff )) %>% 
   ungroup() %>% 
@@ -833,52 +1060,32 @@ summary(m1)
 (vif_values <- performance::check_collinearity(m1))
 
 # add intercation between climate
-m2 <- glmmTMB(wind_beetle ~ veg_tmp_lag2*spei3_lag2 + agg_doy_lag2 + peak_doy_lag2 + 
-                peak_diff_lag2 + Morans_I_log_lag2 +population_growth2+ 
-                sum_ips_lag2,# + ,
+m2 <- glmmTMB(wind_beetle ~ #veg_tmp_lag2*spei3_lag2 + 
+                agg_doy_lag2 + peak_doy_lag2 + 
+                #peak_diff_lag2 + 
+                Morans_I_log_lag2 +population_growth2+ 
+                sum_ips_lag2
+              ,# + ,
+              family = nbinom2,
+              data = dat_fin_RS_scaled)
+
+m3 <- glmmTMB(wind_beetle ~ #veg_tmp_lag2*spei3_lag2 + 
+                agg_doy_lag2 + peak_doy_lag2 + 
+                #peak_diff_lag2 + 
+                Morans_I_log_lag2 + #population_growth2+ 
+                sum_ips_lag2 + (1|pairID) 
+              ,# + ,
               family = nbinom2,
               data = dat_fin_RS_scaled)
 AIC(m1, m2, m3)
-# remove teh least important predicors (based on estimate)
-m3 <- glmmTMB(wind_beetle ~ veg_tmp_lag2*spei3_lag2 + agg_doy_lag2 + #peak_doy_lag2 + 
-                  peak_diff_lag2 + Morans_I_log_lag2 +population_growth2 +
-                sum_ips_lag2,# + ,
-                family = nbinom2,
-                data = dat_fin_RS_scaled)
-
-# test interation between temp and beetle population
-m4 <- glmmTMB(wind_beetle ~ veg_tmp_lag2*spei3_lag2 + agg_doy_lag2 + #peak_doy_lag2 + 
-                peak_diff_lag2 + Morans_I_log_lag2 +population_growth2 +
-                sum_ips_lag2 + veg_tmp_lag2:sum_ips_lag2,
-              family = nbinom2,
-              data = dat_fin_RS_scaled)
-# interaction between  temp and agg
-m5 <- glmmTMB(wind_beetle ~ veg_tmp_lag2*spei3_lag2 + agg_doy_lag2 + #peak_doy_lag2 + 
-                peak_diff_lag2 + Morans_I_log_lag2 +population_growth2 +
-                sum_ips_lag2 + veg_tmp_lag2:agg_doy_lag2,
-              family = nbinom2,
-              data = dat_fin_RS_scaled)
-
-# no interactions are important (besides the climate). add random effect)
-
-m6 <- glmmTMB(wind_beetle ~ veg_tmp_lag2*spei3_lag2 + agg_doy_lag2 + #peak_doy_lag2 + 
-                peak_diff_lag2 + Morans_I_log_lag2 +population_growth2 +
-                sum_ips_lag2,# + (1|pairID),
-              family = nbinom2,
-              data = dat_fin_RS_scaled)
-# do not use random effects
 
 
 
 
-AIC(m1, m2, m3, m4, m5, m6)
-summary(m6)
+fin.m.RS <- m3
+summary(m3)
 
-plot(allEffects(m5))
-summary(m6)
-fin.m.RS <- m6
-
-simulateResiduals(m6, plot = T)
+plot(allEffects(m2))
 
 
 
@@ -1027,88 +1234,36 @@ plot_data_with_average <- function(data, y_var, y_label, my_title) {
 }
 
 # Example usage:
-p_spagett_ips       <- plot_data_with_average(dat_fin, "sum_ips", "Beetle counts [#]", '[a]')
-p_spagett_agg_doy   <- plot_data_with_average(dat_fin, "agg_doy", "Colonization [DOY]", '[b]')
-p_spagett_peak_doy  <- plot_data_with_average(dat_fin, "peak_doy", "Peak population Growth [DOY]", '[c]')
-p_spagett_peak_diff <- plot_data_with_average(dat_fin, "peak_diff", "Peak population Growth [#]", '[d]')
+p_spagett_ips       <- plot_data_with_average(dat_fin, "sum_ips", lab_popul_level, '[a]')
+p_spagett_agg_doy   <- plot_data_with_average(dat_fin, "agg_doy", lab_colonization_time, '[b]')
+p_spagett_peak_doy  <- plot_data_with_average(dat_fin, "peak_doy", lab_peak_time, '[c]')
+p_spagett_peak_diff <- plot_data_with_average(dat_fin, "peak_diff", lab_peak_growth, '[d]')
 
-ggarrange(p_spagett_ips, 
+windows(7,6)
+p_spagetti <- ggarrange(p_spagett_ips, 
           p_spagett_agg_doy, 
           p_spagett_peak_doy, 
           p_spagett_peak_diff, ncol = 2,nrow = 2, align = 'hv')
 
+ggsave(filename = 'outFigs/Fig1.png', plot = p_spagetti, width = 7, height = 6, dpi = 300)
 
-# Scale predictors ================================================================================
-
-# skip columns if not for scaling
-#spei_cols <- grepl("spei", names(dat_lag))
-
-additional_skip_cols <- c('trapID', 'pairID', "x", "y", 
-                          'year', 'agg_doy', 'peak_doy', 'peak_diff',
-                          'sum_ips', 'previous_sum_ips', 'previous_sum_ips2', 
-                          'wind_beetle', 'Morans_I', 'Morans_I_log')
-
-# Combine spei columns with additional columns to skip
-skip_col <- additional_skip_cols #c(names(dat_lag)[spei_cols], additional_skip_cols)
-
-# scale also SPEIs
-
-# export new df
-dat_lag_scaled <-
-  dat_lag %>%
-  ungroup(.) %>% 
- # na.omit() %>% 
-  mutate(sc_sum_ips = sum_ips,  # add beetle counts as scaled values
-         sc_previous_sum_ips = previous_sum_ips,
-         sc_previous_sum_ips2 = previous_sum_ips2) %>% 
-  dplyr::select(-all_of(skip_col )) %>%
-  # Apply the scale function
-  scale(center = TRUE, scale = TRUE) %>%
-  as.data.frame() %>%
-  # Bind the unscaled columns back
-  bind_cols(dat_lag %>% dplyr::select(all_of(skip_col)), .)
-
-# #simplify, keep all columns as vectors 
-# dat_lag_scaled <- dat_lag_scaled %>% 
-#   ungroup(.) %>% 
-#   dplyr::mutate(across(where(~is.numeric(.) && is.matrix(.)), as.vector))
-
-
-# remove additionsl NAs
-dat_lag_scaled_complete <- 
-  dat_lag_scaled %>%
-  dplyr::select(-anom_wind_beetle, -anom_all_dist, - anom_harvest) %>%
-  na.omit()
-#  filter(across(everything(), ~ !is.na(.)))
-
-
-
-
-
-
-dw_result <- dwtest(residuals(m9.tmb) ~ fitted(m9.tmb))
-(dw_result)
+#dw_result <- dwtest(residuals(m9.tmb) ~ fitted(m9.tmb))
+#(dw_result)
 
 
 acf(residuals(m.agg12.3))
-
-(dw_result <- dwtest(residuals(m.agg12.3) ~ fitted(m.agg12.3)))
-
-
-summary(m.agg12.3)  # is teh winner!! m.agg12.3
-
 
 
 # save models -------------------------------------------------------------
 
 # 
 # 
-# save( dd,
-#       fin.m.agg,
-#       fin.m.counts,
-#       fin.m.peak,
-#       fin.m.peak.diff,
-#       file="outData/fin_models.Rdata")
+save( #dd,
+      fin.m.agg,
+      fin.m.counts,
+      fin.m.peak,
+      fin.m.peak.diff,
+      file="outData/fin_models.Rdata")
 # 
 # 
 # 
@@ -1121,7 +1276,7 @@ summary(m.agg12.3)  # is teh winner!! m.agg12.3
 
 
 # Create effect plot function with an additional argument to control y-axis labels
-create_effect_plot <- function(data, line_color = "blue", x_title = "X-axis", y_title = "Y-axis", y_lim = c(100,80000), show_y_axis = TRUE,  my_title = '') {
+create_effect_plot <- function(data, line_color = "blue", x_title = "X-axis", y_title = "Y-axis", y_lim = c(100,80000),  my_title = '') {
   p <- ggplot(data, aes(x = x, y = predicted, ymin = conf.low, ymax = conf.high)) +
     geom_line(color = line_color) +
     geom_ribbon(alpha = 0.1, fill = line_color) +
@@ -1130,13 +1285,14 @@ create_effect_plot <- function(data, line_color = "blue", x_title = "X-axis", y_
     ylim(y_lim) +
   #  scale_x_continuous(breaks = c(-2, -1, 0, 1, 2), limits = c(-2.7, 2.7)) + # Set x-axis breaks and limits
     theme_minimal(base_size = 10) +
-    theme(aspect.ratio = 1, panel.grid.major = element_blank(), panel.grid.minor = element_blank(), panel.background = element_rect(fill = "white", colour = "black"))
+    theme(aspect.ratio = 1, 
+          axis.ticks.y = element_line(),
+          axis.ticks.x = element_line(),
+          panel.grid.major = element_blank(), 
+          panel.grid.minor = element_blank(), 
+          panel.background = element_rect(fill = "white", colour = "black"))
   
-  if (show_y_axis) {
-    p <- p + labs(y = y_title)
-  } else {
-    p <- p + theme(axis.title.y = element_blank(), axis.text.y = element_blank())
-  }
+ 
   
   return(p)
 }
@@ -1145,7 +1301,7 @@ create_effect_plot <- function(data, line_color = "blue", x_title = "X-axis", y_
 
 
 # change y-axis into days (from 0-1)
-create_effect_Y_trans <- function(data, line_color = "blue", x_title = "X-axis", y_title = "Y-axis", y_lim = c(0, 1), show_y_axis = TRUE, my_title = '') {
+create_effect_Y_trans <- function(data, line_color = "blue", x_title = "X-axis", y_title = "Y-axis", y_lim = c(0, 1), my_title = '') {
   data$predicted <- (data$predicted * (304 - 60)) + 60  # Reverse transformation for y-axis
   data$conf.low  <- (data$conf.low * (304 - 60)) + 60
   data$conf.high <- (data$conf.high * (304 - 60)) + 60
@@ -1158,70 +1314,56 @@ create_effect_Y_trans <- function(data, line_color = "blue", x_title = "X-axis",
   #  scale_x_continuous(breaks = c(-2, -1, 0, 1, 2), limits = c(-2.7, 2.7)) + # Set x-axis breaks and limits
     theme_minimal(base_size = 10) +
     theme(aspect.ratio = 1, 
+          axis.ticks.y = element_line(),
+          axis.ticks.x = element_line(),
           panel.grid.major = element_blank(), 
           panel.grid.minor = element_blank(), 
           panel.background = element_rect(fill = "white", colour = "black"))
   
-  if (show_y_axis) {
-    p <- p + labs(y = y_title)
-  } else {
-    p <- p + theme(axis.title.y = element_blank(), 
-                   axis.text.y = element_blank())
-  }
+ }
+
+
+
+
+# plot interactions
+plot_effect_interactions <- function(data, temp_label, y_title) {
+  #library(ggplot2)
+  
+  ggplot(data, aes(x = x, y = predicted, ymin = conf.low, ymax = conf.high)) +
+    geom_ribbon(aes(ymin = conf.low, ymax = conf.high, fill = group), alpha = 0.3) +
+    geom_line(aes(color = group, linetype = group), linewidth = 1) +
+    labs(x = temp_label,
+         y = y_title,
+         fill = "SPEI\nlevels",
+         color = "SPEI\nlevels",
+         linetype = "SPEI\nlevels") +  # Fixed "y_title" to "y" for correct y-axis label argument
+    theme_minimal(base_size = 10) +
+    theme(aspect.ratio = 1, 
+          legend.position = 'bottom',
+          axis.ticks.y = element_line(),
+          axis.ticks.x = element_line(),
+          panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+          panel.background = element_rect(fill = "white", colour = "black"),
+          legend.key.size = unit(0.5, "cm"),
+          legend.text = element_text(size = 8)) +
+    guides(color = guide_legend(ncol = 1), 
+           fill = guide_legend(ncol = 1),
+           linetype = guide_legend(ncol = 1))
 }
 
 
+### Beetle counts -----------------------------------------------------------
+# plot only significant terms
 
-# Beetle counts -----------------------------------------------------------
-pred_interaction <- ggpredict(m3, terms = c("veg_tmp_lag2", "spei3_lag2"))
-pred_spei <- ggpredict(m3, terms = c("spei3_lag2"))
-pred_veg_tmp <- ggpredict(m3, terms = c("veg_tmp_lag2"))
-
-
-p1 <- ggplot(pred_spei, aes(x = x, y = predicted)) +
-  geom_ribbon(aes(ymin = conf.low, ymax = conf.high), alpha = 0.3) +
-  geom_line(linewidth = 1.2) +
-  ylim(0, 80000) +
-  labs(x = "SPEI [z score]", y = "Beetle population levels [counts]") +
-  theme(legend.position = 'none') +
-  theme_classic()
-
-p2 <- ggplot(pred_veg_tmp, aes(x = x, y = predicted, group = group)) +
-  geom_ribbon(aes(ymin = conf.low, ymax = conf.high), alpha = 0.3) +
-  geom_line(linewidth = 1.2) +
-  ylim(0, 80000) +
-  labs(x = "Seasonal Temperature [c]", y = "Beetle population levels [counts]") +
-  theme(legend.position = 'none') +
-  theme_classic()
-
-
-p3 <- ggplot(pred_interaction, aes(x = x, y = predicted, group = group)) +
-  geom_ribbon(aes(ymin = conf.low, ymax = conf.high, fill = group), alpha = 0.3) +
-  geom_line(aes(color = group, linetype = group), linewidth = 1.2) +
-  ylim(0, 80000) +
-  labs(x = "Seasonal temperature [C]", y = "Beetle population levels [counts]") +
-  theme(legend.position = 'bottom') +
-  theme_classic()
-
-# Arrange the plots side by side with the same size
-p.effect.counts <- ggarrange(p1, p2, p3, ncol = 3, align = "hv")
-(p.effect.counts)
-
-
-
-
-
-
-
-
-
-
+temp_label <- expression(paste("Temperature [", degree, "C]", sep=""))
+spei_label <- 'SPEI'
 
 
 
 # Assuming 'model' is your glm.nb model
 p1 <- ggpredict(fin.m.counts, terms = "veg_tmp [all]", allow.new.levels = TRUE)
-p2 <- ggpredict(fin.m.counts, terms = "previous_spei3_2 [all]", allow.new.levels = TRUE)
+p2 <- ggpredict(fin.m.counts, terms = "spei3_lag2 [all]", allow.new.levels = TRUE)
+p3 <- ggpredict(fin.m.counts, terms = c("veg_tmp", "spei3_lag2"), allow.new.levels = TRUE)
 
 # change the values to allow y lables to fit 
 p1$predicted <- p1$predicted/100
@@ -1232,88 +1374,250 @@ p2$predicted <- p2$predicted/100
 p2$conf.low <- p2$conf.low/100
 p2$conf.high <- p2$conf.high/100
 
-p1.counts <- create_effect_plot(p1, line_color = "red", x_title = "Temperature [z-score]", y_title = "Beetle population level (*100)", show_y_axis = TRUE, y_lim = c(80,800))
-p2.counts <- create_effect_plot(p2, line_color = "blue", x_title = "SPEI [z-score]", y_title = "Beetle population level (*100)", show_y_axis = TRUE, y_lim = c(80,800))
-
-# Arrange the plots side by side with the same size
-p.effect.counts <- ggarrange(p1.counts, p2.counts, ncol = 1, align = "hv")
-(p.effect.counts)
+p3$predicted <- p3$predicted/100
+p3$conf.low  <- p3$conf.low/100
+p3$conf.high <- p3$conf.high/100
 
 
 
+p1.count <- create_effect_plot(p1, line_color = "red", x_title = temp_label, y_title = "Counts [#*100]",  y_lim = c(80,800))
+p2.count <- create_effect_plot(p2, line_color = "blue", x_title = "SPEI [dim.]", y_title = "Counts [#*100]",  y_lim = c(80,800))
+p3.count <- plot_effect_interactions(p3, temp_label = temp_label, y_title = "Counts [#*100]")
 
+(p3.count)
 
-# DOY aggregation ---------------------------------------------------------
-
+### DOY aggregation ---------------------------------------------------------
+summary(fin.m.agg)
 p1 <- ggpredict(fin.m.agg, terms = "veg_tmp [all]", allow.new.levels = TRUE)
-p2 <- ggpredict(fin.m.agg, terms = "previous_spei3_2 [all]", allow.new.levels = TRUE)
+p2 <- ggpredict(fin.m.agg, terms = "spei3_lag3 [all]", allow.new.levels = TRUE)
+p3 <- ggpredict(fin.m.agg, terms = c("veg_tmp" ,"spei3_lag3"), allow.new.levels = TRUE)
 
 
-p1.agg <- create_effect_Y_trans(p1, line_color = "red", x_title = "Temperature [z-score]", y_title = "Colonization DOY", y_lim = c(80,250),show_y_axis = TRUE  )
-p2.agg <- create_effect_Y_trans(p2, line_color = "blue", x_title = "SPEI [z-score]", y_title = "Colonization DOY" , y_lim = c(80,250), show_y_axis = TRUE)
+p3$predicted <- (p3$predicted * (304 - 60)) + 60  # Reverse transformation for y-axis
+p3$conf.low  <- (p3$conf.low * (304 - 60)) + 60
+p3$conf.high <- (p3$conf.high * (304 - 60)) + 60
 
 
+p1.agg <- create_effect_Y_trans(p1, line_color = "red", x_title = temp_label, y_title = "DOY", y_lim = c(80,250))
+p2.agg <- create_effect_Y_trans(p2, line_color = "blue", x_title = "SPEI [dim.]", y_title = "DOY" , y_lim = c(80,250))
+p3.agg <- plot_effect_interactions(p3, temp_label = temp_label, 
+                                         y_title = "DOY")
 
-p.effect.agg <- ggarrange(p1.agg,p2.agg,ncol = 1, align = "hv")
-
-(p.effect.agg)
 
 ###### PEak Effect plots ------------------------------------------------------------
-
+summary(fin.m.peak)
 # Assuming 'model' is your glm.nb model
-p1 <- ggpredict(fin.m.peak, terms = "veg_tmp [all]", allow.new.levels = TRUE)
-p2 <- ggpredict(fin.m.peak, terms = "previous_spei6 [all]", allow.new.levels = TRUE)
+p1 <- ggpredict(fin.m.peak, terms = "veg_tmp_lag2 [all]", allow.new.levels = TRUE)
+p2 <- ggpredict(fin.m.peak, terms = "spei3_lag2 [all]", allow.new.levels = TRUE)
+p3 <- ggpredict(fin.m.peak, terms = c("veg_tmp_lag2" ,"spei3_lag2"), allow.new.levels = TRUE)
+
+p3$predicted <- (p3$predicted * (304 - 60)) + 60  # Reverse transformation for y-axis
+p3$conf.low  <- (p3$conf.low * (304 - 60)) + 60
+p3$conf.high <- (p3$conf.high * (304 - 60)) + 60
 
 
-p1.peak <- create_effect_Y_trans(p1, line_color = "red", x_title = "Temperature [z-score]", y_title = "Peak population growth DOY", y_lim = c(130,200), show_y_axis = TRUE )
-p2.peak <-create_effect_Y_trans(p2, line_color = "blue", x_title = "SPEI [z-score]", y_title = "Peak population growth DOY", y_lim = c(130,200), show_y_axis = TRUE)
 
-# effect plots  ----------------------------------------------------
-p.effect.peak <- ggarrange(p1.peak,p2.peak, ncol = 1, align = "hv")
+p1.peak <- create_effect_Y_trans(p1, line_color = "red", x_title = temp_label, 
+                                 y_title = "DOY", 
+                                 y_lim = c(130,200) )
 
-p.effect.peak
+p2.peak <-create_effect_Y_trans(p2, line_color = "blue", x_title = "SPEI [dim.]", y_title = "DOY", 
+                               y_lim = c(130,200))
+p3.peak <- plot_effect_interactions(p3, temp_label = temp_label, 
+                                         y_title = "DOY")
+
 
 
 
 ### effect plot peak dif ----------------------------------------------------
 # Assuming 'model' is your glm.nb model
-p1 <- ggpredict(fin.m.peak.diff, terms = "veg_tmp [all]", allow.new.levels = TRUE)
-p2 <- ggpredict(fin.m.peak.diff, terms = "previous_spei3_2 [all]", allow.new.levels = TRUE)
+summary(fin.m.peak.diff)
+p1 <- ggpredict(fin.m.peak.diff, terms = "veg_tmp_lag3 [all]", allow.new.levels = TRUE)
+p2 <- ggpredict(fin.m.peak.diff, terms = "spei3_lag3 [all]", allow.new.levels = TRUE)
+p3 <- ggpredict(fin.m.peak.diff, terms = c("veg_tmp_lag3", "spei3_lag3"), allow.new.levels = T)
 
 
-p1.peak.diff <- create_effect_plot(p1, line_color = "red", x_title = "Temperature [z-score]", y_title = "Peak difference DOY", y_lim = c(220,650), show_y_axis = TRUE)
-p2.peak.diff <-create_effect_plot(p2, line_color = "blue", x_title = "SPEI [z-score]", y_title = "Peak difference DOY", y_lim = c(220,650), show_y_axis = TRUE)
+p1.peak.diff <- create_effect_plot(p1, line_color = "red", x_title = temp_label, 
+                                   y_title = "Counts [#]", y_lim = c(220,3500))
+p2.peak.diff <-create_effect_plot(p2, line_color = "blue", x_title = "SPEI [dim.]", 
+                                  y_title = "Counts [#]", y_lim = c(220,1500))
+p3.peak.diff <- plot_effect_interactions(p3, temp_label = temp_label, 
+                                         y_title = "Counts [#]")
+
+
+### all Effect plots: ips vs climate --------------------------------------------------------
+
+# put together individual plots for temp spei
+p.count <- ggarrange(p1.count, p2.count, ncol = 1)
+p.agg <- ggarrange(p1.agg, p2.agg, ncol = 1)
+p.peak <- ggarrange(p1.peak, p2.peak, ncol = 1)
+p.peak.diff <- ggarrange(p1.peak.diff, p2.peak.diff, ncol = 1)
+
+p.out.clim <- ggarrange(p.count, p.agg, p.peak, p.peak.diff, 
+          ncol=4, nrow = 1 , align = 'hv', 
+          font.label = list(size = 8, color = "black", face = "plain", family = NULL),
+          labels = c( paste("[a]", lab_popul_level, sep = " "),
+                      paste("[b]", lab_colonization_time , sep = " "),
+                      paste("[c]", lab_peak_time , sep = " "),
+                      paste("[d]", lab_peak_growth, sep = " ")))
+                      
+
+windows(7,4)
+(p.out.clim)
+
+p.clim.int <- ggarrange(p3.count, p3.agg, p3.peak, p3.peak.diff, 
+          ncol=4, nrow = 1 , align = 'hv', 
+          font.label = list(size = 8, color = "black", face = "plain", family = NULL),
+          labels = c( "[a] Beetle population level",
+                      "[b] Colonization",
+                      "[c] Peak population growth",
+                      "[d] Peak difference"))
+windows(7,3.5)
+p.clim.int
+#ggsave("outFigures/clim_effects_plot.tiff", 
+ #      plot = clim.effects.plot, width = 9, height = 7, units = "in", dpi = 300)
+
+
+
+
+
+#### Effect plots RS ----------------------------------------------------------
+
+# Assuming 'model' is your glm.nb model
+p1 <- ggpredict(fin.m.RS, terms = "veg_tmp_lag1 [all]", allow.new.levels = TRUE)
+p2 <- ggpredict(fin.m.RS, terms = "spei3_lag1    [all]", allow.new.levels = TRUE)
+p3 <- ggpredict(fin.m.RS, terms = c("veg_tmp_lag1", "spei3_lag1"), allow.new.levels = TRUE)
+#p4 <- ggpredict(fin.m.RS, terms = "population_growth2 [all]", allow.new.levels = TRUE)
+
+
+p1.RS <- create_effect_plot(p1, line_color = "red", 
+                            x_title = "Temperature [dim.]", 
+                            y_title = "Tree mortality\n[# pixels]", y_lim = c(0,20), 
+                            show_y_axis = TRUE)
+p2.RS <- create_effect_plot(p2, line_color = "blue", 
+                            x_title = "SPEI [dim.]", 
+                            y_title = "Tree mortality\n[# pixels]", y_lim = c(0,20), 
+                            show_y_axis = TRUE)
+
+p3.RS <- plot_effect_interactions(p3, temp_label = temp_label, 
+                                         y_title = "Tree mortality\n[# pixels]")
+
+
+p1.RS
 
 ### effect plots Sum IPS ----------------------------------------------------
-p.effect.peak.diff <- ggarrange(p1.peak.diff,p2.peak.diff, ncol = 1, align = "hv")
+p.effect.RS <- ggarrange(p1.RS,p2.RS,p3.RS,
+                         #p4.RS, 
+                         ncol = 2, nrow = 2, align = 'hv')
 
-p.effect.peak.diff
+windows(7,7)
+p.effect.RS
 
+# effect plot MOran's I -------------------------------
+summary(fin.m.moran)
 
-### Moran's I --------------------------------------------------------------------
-# Generate predictions
-pred <- ggpredict(fin.m.moran, terms = c("previous_spei3_2", "veg_tmp"))
-
-ggplot(pred, aes(x = x, y = predicted, group = group)) +
-  
-  geom_ribbon(aes(ymin = conf.low, ymax = conf.high, fill = group), alpha = 0.3) +
-  geom_line(aes(color = group, linetype = group), linewidth = 1.2) +
-  #scale_color_manual(values = c('low' = "#00BFC4", 'mean' = "#F8766D", 'high' = "#A2C8EC")) +
-  #scale_fill_manual(values = c('low' = "#00BFC4", 'mean' = "#F8766D", 'high' = "#A2C8EC")) +
-  #scale_linetype_manual(values = c("solid", "dashed", "dotdash")) +
-  
-  labs(x = "Previous SPEI-3", y = "Predicted Moran's I") +
-  # facet_wrap(~group) + #, scales = "free"
-  theme_classic()
+# Assuming 'model' is your glm.nb model
+p1 <- ggpredict(fin.m.moran , terms = "veg_tmp  [all]", allow.new.levels = TRUE)
+p2 <- ggpredict(fin.m.moran, terms = "spei3_lag2  [all]", allow.new.levels = TRUE)
+p3 <- ggpredict(fin.m.moran, terms = "agg_doy [all]", allow.new.levels = TRUE)
+p4 <- ggpredict(fin.m.moran, terms = c("veg_tmp", "spei3_lag2"), allow.new.levels = TRUE) 
 
 
+p1.moran <- create_effect_plot(p1, line_color = "red", x_title = temp_label, y_title = "Local Moran's I",  y_lim = c(0,1))
+p2.moran <- create_effect_plot(p2, line_color = "blue", x_title = "SPEI [dim.]", y_title = "Local Moran's I",  y_lim = c(0,1))
+p3.moran <- create_effect_plot(p2, line_color = "grey", x_title = "Colonization DOY [dim.]", y_title = "Local Moran's I",  y_lim = c(0,1))
+p4.moran <- plot_effect_interactions(p4, temp_label = "Temperature [dim.]", 
+                                     y_title = "Local Moran's I")
 
 
-### all Effect plots --------------------------------------------------------
-windows(9,5)
-ggarrange(p.effect.counts, p.effect.agg, p.effect.peak, p.effect.peak.diff, ncol=4, nrow = 1 , align = 'hv', font.label = list(size = 10, color = "black", face = "bold", family = NULL),
-          labels = c( "[a]","[b]","[c]","[d]"))
+# Arrange the plots side by side with the same size
+p.effect.moran <- ggarrange(p_morans_log_summary, p1.moran, p2.moran,
+                            p3.moran,  align = 'hv',#p5.moran,
+                            ncol = 2, nrow=2,
+                            font.label = list(size = 8, color = "black", face = "plain", family = NULL),
+                            labels = c( "[a]",
+                                        "[b]",
+                                        "[c]",
+                                        "[d]"))
+windows(7, 5)
+(p.effect.moran)
 
+# test statistical differences and add to plot --------------- TBD later
+kruskal.test(Morans_I_log ~ year,dat_fin )
+
+library(dunn.test)
+posthoc_results <- dunn.test(dat_fin$Morans_I_log, dat_fin$year, method = "bonferroni")  # method can be adjusted for p-value correction
+print(posthoc_results)
+posthoc_results$P.adjusted
+
+
+# Create a vector of labels, one for each comparison
+# The length of this vector should match the number of comparisons
+labels <- ifelse(posthoc_results$P.adjusted < 0.05, "*", "")  # Assuming * for p < 0.05, adjust as needed
+
+# Extract years from comparisons for matching
+years <- as.numeric(sub(" .*", "", posthoc_results$comparisons))
+
+# Create a dataframe for annotation
+annotation_data <- data.frame(year = years, label = labels)
+
+# Now, merge this annotation data with your original data to match the labels
+dat_fin <- merge(dat_fin, annotation_data, by = "year", all.x = TRUE)
+
+# Finally, update the plot with the correct labels
+ggplot(dat_fin, aes(x = factor(year), y = Morans_I_log)) +
+  geom_boxplot() +
+  geom_text(aes(label = label), position = position_dodge(width = 0.75), vjust = -0.5, na.rm = TRUE)  # 'na.rm = TRUE' to remove NA labels
+
+
+
+
+# add significance
+glob_merged <- glob_merged %>% 
+  mutate(sign = case_when(p_val > 0.05 ~ 'n.s',
+                          p_val < 0.05 & p_val > 0.01 ~ '*',
+                          p_val < 0.01 & p_val > 0.001 ~ '**',
+                          p_val < 0.001  ~ '***'
+  )) 
+
+# Create a barplot of the values
+p_glob_moran_bar <-ggplot(glob_merged, aes(x = year,
+                                           y = stat,
+                                           label = sign)) +
+  geom_col(fill = 'lightgrey', col = 'black') +
+  xlim(2014.3,2021.6) +
+  ylab('Moran I statistic\nstandard deviate')+
+  ylim(0,13) +
+  geom_text(aes(x = year,
+                y = stat + 1 )) + #rep(12.2, 7))) +
+  theme_bw() 
+
+
+
+
+
+
+
+
+
+
+
+p_morans_log_summary <- ggplot(dat_fin, aes(x = year,
+                                                   group = year,
+                                                   y = Morans_I_log )) +
+  stat_summary() +
+  geom_hline(yintercept = 0, lty = 'dashed') +
+  labs(y = "Local Moran's I") +
+  coord_cartesian(ylim = c(-0.1, 0.5)) +
+  theme_bw() + #geom_boxplot()
+  theme(aspect.ratio = 1,
+        panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(), 
+        panel.background = element_rect(fill = "white", colour = "black")) 
+p_morans_log_summary
+
+
+# Export models summaries --------------------------------------------------
 
 # get characteristics
 r2(fin.m.counts )
@@ -1346,106 +1650,7 @@ sjPlot::tab_model(fin.m.peak.diff, file = "outTable/model_peak_diff.doc")
 sjPlot::tab_model(fin.m.moran,     file = "outTable/model_moran.doc")
 sjPlot::tab_model(fin.m.RS,        file = "outTable/model_RS.doc")
 
-
-
-
-
-# Effect plots RS ----------------------------------------------------------
-
-fin.m.RS <- mRS.tmb4
-
-# Assuming 'model' is your glm.nb model
-p1 <- ggpredict(fin.m.RS, terms = "previous_sum_ips [all]", allow.new.levels = TRUE)
-p2 <- ggpredict(fin.m.RS, terms = "previous_agg2   [all]", allow.new.levels = TRUE)
-p3 <- ggpredict(fin.m.RS, terms = "previous_Moran2   [all]", allow.new.levels = TRUE)
-#p4 <- ggpredict(fin.m.RS, terms = "population_growth2 [all]", allow.new.levels = TRUE)
-
-
-p1.RS <- create_effect_plot(p1, line_color = "red", 
-                            x_title = "Beetle population level (lag1) [z-score]", 
-                            y_title = "Tree mortality\n[# pixels]", y_lim = c(0,65), 
-                            show_y_axis = TRUE)
-p2.RS <- create_effect_plot(p2, line_color = "blue", 
-                            x_title = "Colonization DOY (lag2) [z-score]", 
-                            y_title = "Tree mortality\n[# pixels]", y_lim = c(0,65), 
-                            show_y_axis = TRUE)
-p3.RS <- create_effect_plot(p3, line_color = "yellow", 
-                            x_title = "Local Moran's I (lag2) [z-score]", 
-                            y_title = "Tree mortality\n[# pixels]", y_lim = c(0,80), show_y_axis = TRUE)
-p4.RS <- create_effect_plot(p4, line_color = "grey", 
-                            x_title = "Popul. growth (lag2) [z-score]", 
-                            y_title = "Tree mortality\n[# pixels]", 
-                            y_lim = c(0,80), show_y_axis = TRUE)
-
-
-
-# effect plots Sum IPS ----------------------------------------------------
-p.effect.RS <- ggarrange(p1.RS,p2.RS,p3.RS,
-                         #p4.RS, 
-                         ncol = 2, nrow = 2, align = 'hv')
-
-windows(7,7)
-p.effect.RS
-
-
-# calcualte DOYs for teh temp-z acroe: aggergation day
-
-# Coefficients from the model
-coef1 = -6.76424
-coef2 = -3.15288
-intercept = -0.78305
-
-# Temperature z-scores
-z_scores <- c(-2, -1, 0, 1, 2)
-
-# Function to calculate predicted DOY
-calculate_DOY <- function(z_score) {
-  # Calculate the polynomial terms
-  poly1 = z_score  # First polynomial term (linear)
-  poly2 = z_score^2  # Second polynomial term (squared)
-  
-  # Calculate the linear predictor
-  linear_predictor = intercept + coef1 * poly1 + coef2 * poly2
-  
-  # Applying logistic transformation
-  predicted_proportion = exp(linear_predictor) / (1 + exp(linear_predictor))
-  
-  # Converting the proportion back to the DOY scale
-  predicted_DOY = predicted_proportion * (304 - 60) + 60
-  return(predicted_DOY)
-}
-
-# Calculate DOY for each z-score
-predicted_DOYs <- sapply(z_scores, calculate_DOY)
-
-# Create a data frame for the table
-doys_table <- data.frame(Temperature_Z_Score = z_scores, Estimated_DOY = predicted_DOYs)
-doys_table
-
-
-# effect plot MOran's I -------------------------------
-
-
-# Assuming 'model' is your glm.nb model
-p1 <- ggpredict(fin.m.moran , terms = "previous_veg_tmp  [all]", allow.new.levels = TRUE)
-p2 <- ggpredict(fin.m.moran, terms = "previous_spei3_2 [all]", allow.new.levels = TRUE)
-p3 <- ggpredict(fin.m.moran, terms = "previous_agg2  [all]", allow.new.levels = TRUE)
-p4 <- ggpredict(fin.m.moran, terms = "population_growth2   [all]", allow.new.levels = TRUE) 
-
-
-p1.counts <- create_effect_plot(p1, line_color = "red", x_title = "Temperature (lag2) [z-score]", y_title = "Local Moran's I", show_y_axis = TRUE, y_lim = c(0,1))
-p2.counts <- create_effect_plot(p2, line_color = "blue", x_title = "SPEI (lag2) [z-score]", y_title = "Local Moran's I", show_y_axis = TRUE, y_lim = c(0,1))
-p3.counts <- create_effect_plot(p3, line_color = "orange", x_title = "Colonization  [DOY, z-score]", y_title = "Local Moran's I", show_y_axis = TRUE, y_lim = c(0,1))
-p4.counts <- create_effect_plot(p2, line_color = "grey", x_title = "Population growth [z-score]", y_title = "Local Moran's I", show_y_axis = TRUE, y_lim = c(0,1))
-
-
-
-# Arrange the plots side by side with the same size
-p.effect.moran <- ggarrange(p1.counts, p2.counts,
-                            p3.counts, p4.counts,
-                            ncol = 2, nrow=2, align = "hv")
-(p.effect.moran)
-
+sum(dat_fin$sum_ips, na.rm = T)
 
 
 
