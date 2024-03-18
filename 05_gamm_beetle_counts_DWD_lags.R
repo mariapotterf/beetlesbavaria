@@ -1276,13 +1276,16 @@ save( #dd,
 
 
 # Create effect plot function with an additional argument to control y-axis labels
-create_effect_plot <- function(data, line_color = "blue", x_title = "X-axis", y_title = "Y-axis", y_lim = c(100,80000),  my_title = '') {
+create_effect_plot <- function(data, line_color = "blue", x_title = "X-axis", 
+                               y_title = "Y-axis",  my_title = '',
+                               x_annotate = 0, lab_annotate = "lab ann") {
   p <- ggplot(data, aes(x = x, y = predicted, ymin = conf.low, ymax = conf.high)) +
     geom_line(color = line_color) +
     geom_ribbon(alpha = 0.1, fill = line_color) +
     labs(x = x_title,
-         title = my_title) +
-    ylim(y_lim) +
+         title = my_title,
+         y = y_title) +
+   # ylim(y_lim) +
   #  scale_x_continuous(breaks = c(-2, -1, 0, 1, 2), limits = c(-2.7, 2.7)) + # Set x-axis breaks and limits
     theme_minimal(base_size = 10) +
     theme(aspect.ratio = 1, 
@@ -1290,7 +1293,8 @@ create_effect_plot <- function(data, line_color = "blue", x_title = "X-axis", y_
           axis.ticks.x = element_line(),
           panel.grid.major = element_blank(), 
           panel.grid.minor = element_blank(), 
-          panel.background = element_rect(fill = "white", colour = "black"))
+          panel.background = element_rect(fill = "white", colour = "black")) +
+    annotate("text", x = x_annotate, y = Inf, label = lab_annotate, hjust = 0.5, vjust = 1.5)
   
  
   
@@ -1301,7 +1305,9 @@ create_effect_plot <- function(data, line_color = "blue", x_title = "X-axis", y_
 
 
 # change y-axis into days (from 0-1)
-create_effect_Y_trans <- function(data, line_color = "blue", x_title = "X-axis", y_title = "Y-axis", y_lim = c(0, 1), my_title = '') {
+create_effect_Y_trans <- function(data, line_color = "blue", x_title = "X-axis", y_title = "Y-axis", #y_lim = c(0, 1), 
+                                  my_title = '',
+                                  x_annotate = 0, lab_annotate = "lab ann") {
   data$predicted <- (data$predicted * (304 - 60)) + 60  # Reverse transformation for y-axis
   data$conf.low  <- (data$conf.low * (304 - 60)) + 60
   data$conf.high <- (data$conf.high * (304 - 60)) + 60
@@ -1310,7 +1316,7 @@ create_effect_Y_trans <- function(data, line_color = "blue", x_title = "X-axis",
     geom_line(color = line_color) +
     geom_ribbon(alpha = 0.1, fill = line_color) +
     labs(x = x_title, y = y_title, title = my_title) +
-    ylim(y_lim) +
+   # ylim(y_lim) +
   #  scale_x_continuous(breaks = c(-2, -1, 0, 1, 2), limits = c(-2.7, 2.7)) + # Set x-axis breaks and limits
     theme_minimal(base_size = 10) +
     theme(aspect.ratio = 1, 
@@ -1318,7 +1324,8 @@ create_effect_Y_trans <- function(data, line_color = "blue", x_title = "X-axis",
           axis.ticks.x = element_line(),
           panel.grid.major = element_blank(), 
           panel.grid.minor = element_blank(), 
-          panel.background = element_rect(fill = "white", colour = "black"))
+          panel.background = element_rect(fill = "white", colour = "black")) +
+    annotate("text", x = x_annotate, y = Inf, label = lab_annotate, hjust = 0.5, vjust = 1.5)
   
  }
 
@@ -1326,7 +1333,7 @@ create_effect_Y_trans <- function(data, line_color = "blue", x_title = "X-axis",
 
 
 # plot interactions
-plot_effect_interactions <- function(data, temp_label, y_title) {
+plot_effect_interactions <- function(data, temp_label, y_title,x_annotate = 0, lab_annotate = "lab ann") {
   #library(ggplot2)
   
   ggplot(data, aes(x = x, y = predicted, ymin = conf.low, ymax = conf.high)) +
@@ -1348,7 +1355,9 @@ plot_effect_interactions <- function(data, temp_label, y_title) {
           legend.text = element_text(size = 8)) +
     guides(color = guide_legend(ncol = 1), 
            fill = guide_legend(ncol = 1),
-           linetype = guide_legend(ncol = 1))
+           linetype = guide_legend(ncol = 1)) +
+    annotate("text", x = x_annotate, y = Inf, 
+             label = lab_annotate, hjust = 0.5, vjust = 1.5)
 }
 
 
@@ -1363,15 +1372,15 @@ spei_label <- 'SPEI'
 # Assuming 'model' is your glm.nb model
 p1 <- ggpredict(fin.m.counts, terms = "veg_tmp [all]", allow.new.levels = TRUE)
 p2 <- ggpredict(fin.m.counts, terms = "spei3_lag2 [all]", allow.new.levels = TRUE)
-p3 <- ggpredict(fin.m.counts, terms = c("veg_tmp", "spei3_lag2"), allow.new.levels = TRUE)
+p3 <- ggpredict(fin.m.counts, terms = c("veg_tmp", "spei3_lag2 [-1, 0, 1]"), allow.new.levels = TRUE)
 
 # change the values to allow y lables to fit 
 p1$predicted <- p1$predicted/100
-p1$conf.low <- p1$conf.low/100
+p1$conf.low  <- p1$conf.low/100
 p1$conf.high <- p1$conf.high/100
 
 p2$predicted <- p2$predicted/100
-p2$conf.low <- p2$conf.low/100
+p2$conf.low  <- p2$conf.low/100
 p2$conf.high <- p2$conf.high/100
 
 p3$predicted <- p3$predicted/100
@@ -1380,17 +1389,44 @@ p3$conf.high <- p3$conf.high/100
 
 
 
-p1.count <- create_effect_plot(p1, line_color = "red", x_title = temp_label, y_title = "Counts [#*100]",  y_lim = c(80,800))
-p2.count <- create_effect_plot(p2, line_color = "blue", x_title = "SPEI [dim.]", y_title = "Counts [#*100]",  y_lim = c(80,800))
-p3.count <- plot_effect_interactions(p3, temp_label = temp_label, y_title = "Counts [#*100]")
+p1.count <- 
+  create_effect_plot(p1, line_color = "red", 
+                               x_title = temp_label, 
+                               y_title = "Counts [#*100]",
+                     x_annotate = 13,
+                     lab_annotate = "*"
+                     #,  y_lim = c(80,800)
+                               ) 
+ 
+p2.count <- create_effect_plot(p2, line_color = "blue", 
+                               x_title = "SPEI [dim.]", 
+                               y_title = "Counts [#*100]", #,  y_lim = c(80,800)
+                               x_annotate = 0,
+                               lab_annotate = "n.s.") 
+p3.count <- plot_effect_interactions(p3, 
+                                     temp_label = temp_label, 
+                                     y_title = "Counts [#*100]",
+                                     x_annotate = 13,
+                                     lab_annotate = ".") 
 
 (p3.count)
+
+
+
 
 ### DOY aggregation ---------------------------------------------------------
 summary(fin.m.agg)
 p1 <- ggpredict(fin.m.agg, terms = "veg_tmp [all]", allow.new.levels = TRUE)
 p2 <- ggpredict(fin.m.agg, terms = "spei3_lag3 [all]", allow.new.levels = TRUE)
-p3 <- ggpredict(fin.m.agg, terms = c("veg_tmp" ,"spei3_lag3"), allow.new.levels = TRUE)
+#p3 <- ggpredict(fin.m.agg, terms = c("veg_tmp" ,"spei3_lag3"), allow.new.levels = TRUE)
+
+
+# Use ggpredict to get predictions for veg_tmp at the specified levels of SPEI
+p3 <- ggpredict(fin.m.agg, 
+                terms = c("veg_tmp", "spei3_lag3 [-1, 0, 1]"), 
+                #type = "re", 
+                allow.new.levels = TRUE)
+
 
 
 p3$predicted <- (p3$predicted * (304 - 60)) + 60  # Reverse transformation for y-axis
@@ -1398,18 +1434,32 @@ p3$conf.low  <- (p3$conf.low * (304 - 60)) + 60
 p3$conf.high <- (p3$conf.high * (304 - 60)) + 60
 
 
-p1.agg <- create_effect_Y_trans(p1, line_color = "red", x_title = temp_label, y_title = "DOY", y_lim = c(80,250))
-p2.agg <- create_effect_Y_trans(p2, line_color = "blue", x_title = "SPEI [dim.]", y_title = "DOY" , y_lim = c(80,250))
+p1.agg <- create_effect_Y_trans(p1, 
+                                line_color = "red", 
+                                x_title = temp_label, 
+                                y_title = "DOY",
+                                x_annotate = 13,
+                                lab_annotate = "**"#, y_lim = c(80,250)
+                                )
+p2.agg <- create_effect_Y_trans(p2, 
+                                line_color = "blue", 
+                                x_title = "SPEI [dim.]", 
+                                y_title = "DOY",
+                                x_annotate = 0,
+                                lab_annotate = "n.s."#, y_lim = c(80,250)
+                                )
 p3.agg <- plot_effect_interactions(p3, temp_label = temp_label, 
-                                         y_title = "DOY")
+                                         y_title = "DOY",
+                                   x_annotate = 13,
+                                   lab_annotate = "**")
 
-
+p3.agg
 ###### PEak Effect plots ------------------------------------------------------------
 summary(fin.m.peak)
 # Assuming 'model' is your glm.nb model
 p1 <- ggpredict(fin.m.peak, terms = "veg_tmp_lag2 [all]", allow.new.levels = TRUE)
 p2 <- ggpredict(fin.m.peak, terms = "spei3_lag2 [all]", allow.new.levels = TRUE)
-p3 <- ggpredict(fin.m.peak, terms = c("veg_tmp_lag2" ,"spei3_lag2"), allow.new.levels = TRUE)
+p3 <- ggpredict(fin.m.peak, terms = c("veg_tmp_lag2" ,"spei3_lag2 [-1, 0, 1]"), allow.new.levels = TRUE)
 
 p3$predicted <- (p3$predicted * (304 - 60)) + 60  # Reverse transformation for y-axis
 p3$conf.low  <- (p3$conf.low * (304 - 60)) + 60
@@ -1418,13 +1468,24 @@ p3$conf.high <- (p3$conf.high * (304 - 60)) + 60
 
 
 p1.peak <- create_effect_Y_trans(p1, line_color = "red", x_title = temp_label, 
-                                 y_title = "DOY", 
-                                 y_lim = c(130,200) )
+                                 y_title = "DOY",
+                                 x_annotate = 13,
+                                 lab_annotate = "**"#, 
+                                 #y_lim = c(130,200) 
+                                 )
 
-p2.peak <-create_effect_Y_trans(p2, line_color = "blue", x_title = "SPEI [dim.]", y_title = "DOY", 
-                               y_lim = c(130,200))
+p2.peak <-create_effect_Y_trans(p2, 
+                                line_color = "blue", 
+                                x_title = "SPEI [dim.]", 
+                                y_title = "DOY",
+                                x_annotate = 0,
+                                lab_annotate = "n.s."#, 
+                               #y_lim = c(130,200)
+                               )
 p3.peak <- plot_effect_interactions(p3, temp_label = temp_label, 
-                                         y_title = "DOY")
+                                         y_title = "DOY",
+                                    x_annotate = 13,
+                                    lab_annotate = "n.s.")
 
 
 
@@ -1434,15 +1495,38 @@ p3.peak <- plot_effect_interactions(p3, temp_label = temp_label,
 summary(fin.m.peak.diff)
 p1 <- ggpredict(fin.m.peak.diff, terms = "veg_tmp_lag3 [all]", allow.new.levels = TRUE)
 p2 <- ggpredict(fin.m.peak.diff, terms = "spei3_lag3 [all]", allow.new.levels = TRUE)
-p3 <- ggpredict(fin.m.peak.diff, terms = c("veg_tmp_lag3", "spei3_lag3"), allow.new.levels = T)
+p3 <- ggpredict(fin.m.peak.diff, terms = c("veg_tmp_lag3", "spei3_lag3 [-1, 0, 1]"), allow.new.levels = T)
+
+# change the values to allow y lables to fit 
+p1$predicted <- p1$predicted/10
+p1$conf.low  <- p1$conf.low/10
+p1$conf.high <- p1$conf.high/10
+
+p2$predicted <- p2$predicted/10
+p2$conf.low  <- p2$conf.low/10
+p2$conf.high <- p2$conf.high/10
+
+p3$predicted <- p3$predicted/10
+p3$conf.low  <- p3$conf.low/10
+p3$conf.high <- p3$conf.high/10
+
+
 
 
 p1.peak.diff <- create_effect_plot(p1, line_color = "red", x_title = temp_label, 
-                                   y_title = "Counts [#]", y_lim = c(220,3500))
+                                   y_title = "Counts [#*10]",
+                                   x_annotate = 13,
+                                   lab_annotate = "**"#, y_lim = c(220,3500)
+                                   )
 p2.peak.diff <-create_effect_plot(p2, line_color = "blue", x_title = "SPEI [dim.]", 
-                                  y_title = "Counts [#]", y_lim = c(220,1500))
+                                  y_title = "Counts [#*10]",
+                                  x_annotate = 0,
+                                  lab_annotate = "*"#, y_lim = c(220,1500)
+                                  )
 p3.peak.diff <- plot_effect_interactions(p3, temp_label = temp_label, 
-                                         y_title = "Counts [#]")
+                                         y_title = "Counts [#]",
+                                         x_annotate = 13,
+                                         lab_annotate = ".")
 
 
 ### all Effect plots: ips vs climate --------------------------------------------------------
@@ -1456,27 +1540,30 @@ p.peak.diff <- ggarrange(p1.peak.diff, p2.peak.diff, ncol = 1)
 p.out.clim <- ggarrange(p.count, p.agg, p.peak, p.peak.diff, 
           ncol=4, nrow = 1 , align = 'hv', 
           font.label = list(size = 8, color = "black", face = "plain", family = NULL),
-          labels = c( paste("[a]", lab_popul_level, sep = " "),
-                      paste("[b]", lab_colonization_time , sep = " "),
-                      paste("[c]", lab_peak_time , sep = " "),
-                      paste("[d]", lab_peak_growth, sep = " ")))
+          labels = c( "[a] Population level",
+                      "[b] Colonization timing",
+                      "[c] Peak timing",
+                      "[d] Peak growth"))
                       
 
 windows(7,4)
 (p.out.clim)
 
-p.clim.int <- ggarrange(p3.count, p3.agg, p3.peak, p3.peak.diff, 
-          ncol=4, nrow = 1 , align = 'hv', 
-          font.label = list(size = 8, color = "black", face = "plain", family = NULL),
-          labels = c( "[a] Beetle population level",
-                      "[b] Colonization",
-                      "[c] Peak population growth",
-                      "[d] Peak difference"))
-windows(7,3.5)
-p.clim.int
-#ggsave("outFigures/clim_effects_plot.tiff", 
- #      plot = clim.effects.plot, width = 9, height = 7, units = "in", dpi = 300)
+ggsave(filename = 'outFigs/Fig3.png', plot = p.out.clim, 
+       width = 7, height = 4, dpi = 300)
 
+
+p.clim.int <- ggarrange(p3.count, p3.agg, p3.peak, p3.peak.diff, 
+          ncol=2, nrow = 2 , align = 'hv',common.legend = TRUE, legend = 'right',
+          font.label = list(size = 8, color = "black", face = "plain", family = NULL),
+          labels = c(  "[a] Population level",
+                       "[b] Colonization timing",
+                       "[c] Peak timing",
+                       "[d] Peak growth"))
+windows(6,6)
+p.clim.int
+ggsave(filename = 'outFigs/Fig4.png', plot = p.clim.int, 
+       width = 6, height = 6, dpi = 300)
 
 
 
@@ -1484,9 +1571,10 @@ p.clim.int
 #### Effect plots RS ----------------------------------------------------------
 
 # Assuming 'model' is your glm.nb model
+summary(fin.m.RS)
 p1 <- ggpredict(fin.m.RS, terms = "veg_tmp_lag1 [all]", allow.new.levels = TRUE)
 p2 <- ggpredict(fin.m.RS, terms = "spei3_lag1    [all]", allow.new.levels = TRUE)
-p3 <- ggpredict(fin.m.RS, terms = c("veg_tmp_lag1", "spei3_lag1"), allow.new.levels = TRUE)
+p3 <- ggpredict(fin.m.RS, terms = c("veg_tmp_lag1", "spei3_lag1 [-1, 0,1]"), allow.new.levels = TRUE)
 #p4 <- ggpredict(fin.m.RS, terms = "population_growth2 [all]", allow.new.levels = TRUE)
 
 
@@ -1520,14 +1608,32 @@ summary(fin.m.moran)
 p1 <- ggpredict(fin.m.moran , terms = "veg_tmp  [all]", allow.new.levels = TRUE)
 p2 <- ggpredict(fin.m.moran, terms = "spei3_lag2  [all]", allow.new.levels = TRUE)
 p3 <- ggpredict(fin.m.moran, terms = "agg_doy [all]", allow.new.levels = TRUE)
-p4 <- ggpredict(fin.m.moran, terms = c("veg_tmp", "spei3_lag2"), allow.new.levels = TRUE) 
+p4 <- ggpredict(fin.m.moran, terms = c("veg_tmp", "spei3_lag2 [-1,0,1]"), allow.new.levels = TRUE) 
 
 
-p1.moran <- create_effect_plot(p1, line_color = "red", x_title = temp_label, y_title = "Local Moran's I",  y_lim = c(0,1))
-p2.moran <- create_effect_plot(p2, line_color = "blue", x_title = "SPEI [dim.]", y_title = "Local Moran's I",  y_lim = c(0,1))
-p3.moran <- create_effect_plot(p2, line_color = "grey", x_title = "Colonization DOY [dim.]", y_title = "Local Moran's I",  y_lim = c(0,1))
+p1.moran <- create_effect_plot(p1, line_color = "red", 
+                               x_title = temp_label, 
+                               y_title = "Local Moran's I", 
+                               x_annotate = 0,
+                               lab_annotate = "**"
+                               #y_lim = c(0,1)
+                               )
+p2.moran <- create_effect_plot(p2, line_color = "blue", 
+                               x_title = "SPEI [dim.]", 
+                               y_title = "Local Moran's I",  
+                               #y_lim = c(0,1)
+                               x_annotate = 0,
+                               lab_annotate = "."
+                               )
+p3.moran <- create_effect_plot(p2, line_color = "grey50", 
+                               x_title = "Colonization timing [dim.]", 
+                               y_title = "Local Moran's I", # y_lim = c(0,1),
+                               x_annotate = 0,
+                               lab_annotate = ".")
 p4.moran <- plot_effect_interactions(p4, temp_label = "Temperature [dim.]", 
-                                     y_title = "Local Moran's I")
+                                     y_title = "Local Moran's I",
+                                     x_annotate = 0,
+                                     lab_annotate = "n.s.")
 
 
 # Arrange the plots side by side with the same size
