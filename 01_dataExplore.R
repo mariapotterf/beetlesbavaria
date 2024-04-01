@@ -11,6 +11,8 @@
 # - globalid - trap position, one trap can have several globalids if moved
 # trap_n = 3 exlude! 
 
+# check in how many traps beetle start to swarm early?
+
 
 # Input ------------------------------------
 
@@ -324,6 +326,50 @@ ips.year.avg %>%
 # - frequent recording: 10 revisit times at least
 # - remove the '3rd' trap
 # - keep only records that have all years and all traps
+
+# check how many traps have records in March ---------------------------------
+# get first a clean dataset for the whole year
+# check how many records i have in March 
+
+# get clean data for each month in a year
+  dat.ips.clean.year <- dat %>% 
+   # filter(doy %in% veg.period) %>% 
+    filter(year > 2014) %>% 
+    filter(art == 'Buchdrucker') %>%
+    ungroup(.) %>% 
+    dplyr::filter(!falsto_name %in% low_visit_id) %>%  # remove traps with low visit time (nee to check this for year?)
+    dplyr::filter(!falsto_name %in% zero_catch_id) #%>% # exclude if zero beetles caught per whole year
+  
+library(tidyr)
+#dat.counts.month <- 
+dat.ips.clean.year %>% 
+  #filter(doy %in% veg.period) %>% 
+   ungroup(.) %>%
+  group_by(month, year) %>% 
+  summarize(n = n()) %>%
+  pivot_wider(names_from = year, values_from = n, values_fill = list(n = 0))
+
+
+dat.ips.clean.year %>% 
+  #filter(doy %in% veg.period) %>% 
+  ungroup(.) %>%
+  group_by(year, representativ) %>% 
+  summarize(n = n()) %>%
+  ungroup(.) %>% 
+  group_by(year) %>% 
+  mutate(sum = sum(n),
+         prop = n/sum*100)
+  #pivot_wider(names_from = year, values_from = n, values_fill = list(n = 0))
+
+#table(month, year)
+#View()
+#dplyr::filter(!falsto_name %in% low_visit_id) %>%  # remove traps with low visit time (nee to check this for year?)
+#dplyr::filter(!falsto_name %in% zero_catch_id) #%>% # exclude if zero beetles caught per whole year
+
+
+
+
+
 
 dat.ips.clean <- dat %>% 
   filter(doy %in% veg.period) %>% 
