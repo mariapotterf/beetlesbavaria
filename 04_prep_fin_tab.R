@@ -10,7 +10,7 @@ rm(list=ls())
 source('myPaths.R')
 
 spring.months         = 3:5
-veg.months            = 3:10
+veg.months            = 4:9  # change climate period to fit the data
 study.period.extended = 2012:2021
 
 
@@ -86,8 +86,8 @@ ggplot2::ggplot(median_spei) +
 
 # plot barplot of spei - veg season vs no veg season, temperature and precipitation
 df_spei_months <- df_spei_months %>% 
-  mutate(season = case_when(month %in% 3:10 ~ 'veg_season',
-                            month %in% c(1,2,11,12) ~ 'winter'))# %>% 
+  mutate(season = case_when(month %in% veg.months ~ 'veg_season',
+                            month %in% c(1,2, 3,10, 11, 12) ~ 'winter'))# %>% 
 
 
   
