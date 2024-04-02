@@ -42,7 +42,6 @@ library(dplyr)
 library(data.table)
 library(tidyr)
 library(raster)
-#library(rgdal)
 library(lubridate)
 library(fasterize)
 library(ggpubr)
@@ -56,7 +55,7 @@ load("outData/spatial.Rdata")
 # Read data
 disturb_year <- rast('rawData/germany114/disturbance_year_1986-2020_germany.tif')
 disturb_type <- rast('rawData/fire_wind_barkbeetle_germany.tif')
-forest_cover <- rast('rawData/germany114/forestcover_germany.tif')
+#forest_cover <- rast('rawData/germany114/forestcover_germany.tif')
 
 # tree species classification: from 2017/2018 - some disturbed areas previously can be already removed???
 #spruce_cover <- rast('C:/Users/ge45lep/Documents/2022_BarkBeetles_Bavaria/rawData/tree_species_map/spruce_bavaria_resampl30.tif')
@@ -90,51 +89,51 @@ crs(disturb_type) <- crs(disturb_year)
 # get trap data
 xy_sf_all  # all XY traps
 xy_sf_fin  # selected traps with consistent monitoring , one trap have only one XY per all years (I neglected thet they moved over years)
-
+xy_sf_expand  # 
 
 # Clean & expand trap cooordinates ------------------------------------------
-# to do: get the shifting XY per trap to work with the disturbance map data!
-trap_names = unique(xy_sf_fin$falsto_name)
-
-
-# get study period
-all_years    = 2006:2021
-study_period = 2015:2021
-
-# Expand coordinates table to have a geometry for each trap and year
-xy_sf_expand <- 
-  xy_sf_all %>% 
-  filter(falsto_name %in% trap_names ) %>% 
-    dplyr::mutate(x = sf::st_coordinates(.)[,1],
-                  y = sf::st_coordinates(.)[,2]) %>% 
-  dplyr::select(von_dat, bis_dat, falsto_name, globalid, x, y) %>% #, geometry
-  mutate(from_year = lubridate::year(dmy(von_dat)))  %>% # get the year from the starting date
-  group_by(falsto_name) %>% 
-  complete(from_year = all_years)  %>% 
-  arrange(falsto_name, from_year) %>% 
- # df %>%
-   tidyr::fill(globalid, .direction = 'down') %>%
-    tidyr::fill(x, .direction = 'down') %>%
-    tidyr::fill(y, .direction = 'down')%>%
-   # dplyr::rename(from_year = year) #%>% 
-  filter(from_year %in% study_period) %>% # filter only years 2015:2021
-    st_as_sf(coords = c("x", "y"), 
-             crs = 3035) %>% 
-  mutate(year = from_year) %>% 
-  dplyr::select(-c(from_year, von_dat, bis_dat))
-
-
-xy_sf_expand$id <- 1:nrow(xy_sf_expand)
-
-# export XZ file with shifting traps
-xy_sf_expand %>%  
-  st_write(paste(myPath, "outSpatial/xy_fin_years_3035.gpkg", sep = '/'), append=FALSE)
-
-
-# Alternatively, save only specific objects to the .Rdata file
-save(list=c("xy_sf_expand"), file="outData/spatial.Rdata")
-
-
+# # to do: get the shifting XY per trap to work with the disturbance map data!
+# trap_names = unique(xy_sf_fin$falsto_name)
+# 
+# # !!!------------!!!
+# # get study period
+# all_years    = 2006:2021
+# study_period = 2015:2021
+# 
+# # Expand coordinates table to have a geometry for each trap and year
+# xy_sf_expand <- 
+#   xy_sf_all %>% 
+#   filter(falsto_name %in% trap_names ) %>% 
+#     dplyr::mutate(x = sf::st_coordinates(.)[,1],
+#                   y = sf::st_coordinates(.)[,2]) %>% 
+#   dplyr::select(von_dat, bis_dat, falsto_name, globalid, x, y) %>% #, geometry
+#   mutate(from_year = lubridate::year(dmy(von_dat)))  %>% # get the year from the starting date
+#   group_by(falsto_name) %>% 
+#   complete(from_year = all_years)  %>% 
+#   arrange(falsto_name, from_year) %>% 
+#  # df %>%
+#    tidyr::fill(globalid, .direction = 'down') %>%
+#     tidyr::fill(x, .direction = 'down') %>%
+#     tidyr::fill(y, .direction = 'down')%>%
+#    # dplyr::rename(from_year = year) #%>% 
+#   filter(from_year %in% study_period) %>% # filter only years 2015:2021
+#     st_as_sf(coords = c("x", "y"), 
+#              crs = 3035) %>% 
+#   mutate(year = from_year) %>% 
+#   dplyr::select(-c(from_year, von_dat, bis_dat))
+# 
+# 
+# xy_sf_expand$id <- 1:nrow(xy_sf_expand)
+# 
+# # export XZ file with shifting traps
+# xy_sf_expand %>%  
+#   st_write(paste(myPath, "outSpatial/xy_fin_years_3035.gpkg", sep = '/'), append=FALSE)
+# 
+# 
+# # Alternatively, save only specific objects to the .Rdata file
+# save(list=c("xy_sf_expand"), file="outData/spatial.Rdata")
+# 
+# !!!! -------------
 
 
 #  ---------------------------------------------------------------------
@@ -179,9 +178,10 @@ buff_width = 500  # 500 m
 # filter by spruce cover (30 m)
 extract_rst_val <- function(xy, ...) {
   
-  # xy<- xy_ls[[951]]
+   #xy<- xy_ls[[951]]
   # xy<- xy_ls[[952]]
-   id <- xy$id
+   id          <- xy$id
+   falsto_name <- xy$falsto_name
    #print(id)
    
    # get buffer
@@ -214,7 +214,8 @@ extract_rst_val <- function(xy, ...) {
    df <- data.frame(year = val_year,
                     type = val_type,
                    # spruce = val_spruce,
-                    id = id) 
+                    id = id,
+                   falsto_name = falsto_name) 
    df <- df %>% 
      drop_na()
 
@@ -356,30 +357,30 @@ extract_rst_val_2 <- function(xy, buff_width) {
 
 # make a function to export df from each buffer: keep years, disturbance type and forest;
 # this forest is from 1986, and include all species
-extract_forest <- function(xy, ...) {
- # xy1<- xy_ls[[8]]
-  id <- xy$id
-  
-  # get buffer
-  buff <- buffer(xy, buff_width)
-  
-  # disturbance year
-  # crop data and then mask them to have a circle
-  forest_crop <- terra::crop(spruce_cover, buff)
-  forest_mask <- terra::mask(forest_crop, buff)
-  
-  # Get vector of values
-  val <- as.vector(values(forest_mask))
-  
-  # count number of cells:
-  df <- as.data.frame(table(val))
-  
-  # add name
-  df$id <- id
-  
-  return(df)
-  
-}
+# extract_forest <- function(xy, ...) {
+#  # xy1<- xy_ls[[8]]
+#   id <- xy$id
+#   
+#   # get buffer
+#   buff <- buffer(xy, buff_width)
+#   
+#   # disturbance year
+#   # crop data and then mask them to have a circle
+#   forest_crop <- terra::crop(spruce_cover, buff)
+#   forest_mask <- terra::mask(forest_crop, buff)
+#   
+#   # Get vector of values
+#   val <- as.vector(values(forest_mask))
+#   
+#   # count number of cells:
+#   df <- as.data.frame(table(val))
+#   
+#   # add name
+#   df$id <- id
+#   
+#   return(df)
+#   
+# }
 
 options(terra.pardegree = 1)
 
@@ -395,9 +396,9 @@ dist_df      <-do.call("rbind", out_dist_ls)
 dist_df_out <- 
   dist_df %>% 
   #mutate(year = as.numeric(as.character(year))) %>% # convert factor to numeric
-    group_by(year, type, id) %>%
+    group_by(year, type, id, falsto_name) %>%
       #dplyr::select(-spruce) %>% 
-      dplyr::summarize(Freq = n()) %>% # get count of rows
+      dplyr::summarize(Freq = n()) %>% # get count of pixels by category per buffer
      spread(type, Freq) 
   
 # rplelace NA by 0
@@ -411,7 +412,10 @@ dist_df_out[is.na(dist_df_out)] <- 0
 
 head(dist_df_out)
 
-names(dist_df_out) <- c("year" , "id",'wind_beetle', "harvest")
+names(dist_df_out) <- c("year" , "id","falsto_name", "wind_beetle", "harvest")
+
+# Issue with shifting traps: buffer analyses always covers all of teh years (1986-2020);
+# for analysis, I need to use only the the damage in that particlar year where the trap is located
 
 
 
@@ -436,7 +440,7 @@ names(dist_df_out) <- c("year" , "id",'wind_beetle', "harvest")
 # calculate remaining spruce forest, first need to expand to all years
 dist_df_exp <- 
   dist_df_out %>% 
-  group_by(id) %>% 
+  group_by(id, falsto_name) %>% 
   complete(year = 1986:2020,  # expand to all years
            fill = list(id = id))  #%>%
 
@@ -454,7 +458,7 @@ df_merge <-
          #  beetle_rate       = wind_beetle/spruce_1986,
           # harvest_rate      = harvest/spruce_1986) #%>%
 
-summary(df_merge)
+View(df_merge)
 
 # check how anomalies look like?
 ggplot(df_merge, aes(x = year,
@@ -493,14 +497,6 @@ ggplot(df_anom, aes(x = year,
  # geom_smooth() +
   geom_point()
   
- 
-  #@filter(remained_forest< 0)
-  
-df_merge %>% 
- filter(id == 8) 
-
-
-
 
 
 # Merge ips counts per year with buffer info  ---------------------------------------
@@ -511,7 +507,8 @@ df_merge %>%
 df_RS_out <- 
   xy %>% 
   as.data.frame() %>%
-  left_join(df_merge, c('id', 'year')) %>% # filter disturbance years that corresponds to trap data/year
+  #dplyr::select(-globalid) %>% 
+  left_join(df_merge, c('id', 'year', 'falsto_name')) %>% # filter disturbance years that corresponds to trap data/year
   left_join(df_anom, c('id', 'year')) %>% # filter disturbance years that corresponds to trap data/year
   right_join(ips.year.sum, by = c('falsto_name', 'year')) # %>%
  # group_by(falsto_name) %>%
@@ -522,15 +519,15 @@ df_RS_out <-
   #        lag2_beetles   = dplyr::lag(wind_beetle,      n=2)) 
 
 
-head(df_RS_out)
+View(df_RS_out)
 
 
-save(spruce_df,         # spruce cover by id, from 2017
+save(#spruce_df,         # spruce cover by id, from 2017
      dist_df_out,       # disturbances by year
      df_RS_out,            # final table with coordinates, counts and Rs disturbances and present spruce per year'
      df_anom,           # get harvest and wind anomalies per buffer                   
      xy_sf_expand,      # all xy trap coordinates (shifted over years)
-     sensitivity_final_df, # for sensitivity analysis, buffer width
+     #sensitivity_final_df, # for sensitivity analysis, buffer width
      file =  "outData/buffers.Rdata")
 
 
