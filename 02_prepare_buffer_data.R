@@ -28,7 +28,7 @@
 # xy traps
 # beetle count data
 # raster species composition: deciduous/coniferous
-
+# remove spruce species compositin - it is covering years 2017/2018, too late for my study
 rm(list=ls()) 
 
 # Read my paths -----------------------------------------------------------
@@ -59,7 +59,7 @@ disturb_type <- rast('rawData/fire_wind_barkbeetle_germany.tif')
 forest_cover <- rast('rawData/germany114/forestcover_germany.tif')
 
 # tree species classification: from 2017/2018 - some disturbed areas previously can be already removed???
-spruce_cover <- rast('C:/Users/ge45lep/Documents/2022_BarkBeetles_Bavaria/rawData/tree_species_map/spruce_bavaria_resampl30.tif')
+#spruce_cover <- rast('C:/Users/ge45lep/Documents/2022_BarkBeetles_Bavaria/rawData/tree_species_map/spruce_bavaria_resampl30.tif')
 
 
 # ID,species
@@ -85,7 +85,7 @@ crs(disturb_type)
 # 3 = harvest
 
 crs(disturb_type) <- crs(disturb_year)
-crs(spruce_cover) <- crs(disturb_year)
+#crs(spruce_cover) <- crs(disturb_year)
 
 # get trap data
 xy_sf_all  # all XY traps
@@ -202,18 +202,18 @@ extract_rst_val <- function(xy, ...) {
    
    # tree class raster
    # crop data and then mask them to have a circle
-   spruce_cover_crop <- crop(spruce_cover, buff)
-   spruce_cover_mask <- mask(spruce_cover_crop, buff)
+  # spruce_cover_crop <- crop(spruce_cover, buff)
+  # spruce_cover_mask <- mask(spruce_cover_crop, buff)
    
    # Get vector of values
    val_year <- as.vector(values(dist_year_mask))
    val_type <- as.vector(values(dist_type_mask))
-   val_spruce <- as.vector(values(spruce_cover_mask))
+   #val_spruce <- as.vector(values(spruce_cover_mask))
    
    # merge data and drop NA values
    df <- data.frame(year = val_year,
                     type = val_type,
-                    spruce = val_spruce,
+                   # spruce = val_spruce,
                     id = id) 
    df <- df %>% 
      drop_na()
@@ -252,18 +252,18 @@ extract_rst_val_2 <- function(xy, buff_width) {
   
   # tree class raster
   # crop data and then mask them to have a circle
-  spruce_cover_crop <- crop(spruce_cover, buff)
-  spruce_cover_mask <- mask(spruce_cover_crop, buff)
+  #spruce_cover_crop <- crop(spruce_cover, buff)
+  #spruce_cover_mask <- mask(spruce_cover_crop, buff)
   
   # Get vector of values
   val_year <- as.vector(values(dist_year_mask))
   val_type <- as.vector(values(dist_type_mask))
-  val_spruce <- as.vector(values(spruce_cover_mask))
+  #val_spruce <- as.vector(values(spruce_cover_mask))
   
   # merge data and drop NA values
   df <- data.frame(year = val_year,
                    type = val_type,
-                   spruce = val_spruce,
+   #                spruce = val_spruce,
                    id = id,
                    buff_width = buff_width) 
   df <- df %>% 
@@ -396,7 +396,7 @@ dist_df_out <-
   dist_df %>% 
   #mutate(year = as.numeric(as.character(year))) %>% # convert factor to numeric
     group_by(year, type, id) %>%
-      dplyr::select(-spruce) %>% 
+      #dplyr::select(-spruce) %>% 
       dplyr::summarize(Freq = n()) %>% # get count of rows
      spread(type, Freq) 
   
@@ -416,21 +416,21 @@ names(dist_df_out) <- c("year" , "id",'wind_beetle', "harvest")
 
 
 # extract spruce cover per buffer  ------------------------------------------------
-out_forest_ls <- lapply(xy_ls, extract_forest ) #extract_rst_val(xy_ls[[10]])
-
-# merge partial tables into one df
-forest_df      <-do.call("rbind", out_forest_ls)
-
-spruce_df <- forest_df %>% 
-  dplyr::rename(spruce_1986 =Freq) %>% 
-  dplyr::select(-val)
-
-
-forest_df %>% 
-  filter(id == 8)
-  
-
-
+# out_forest_ls <- lapply(xy_ls, extract_forest ) #extract_rst_val(xy_ls[[10]])
+# 
+# # merge partial tables into one df
+# forest_df      <-do.call("rbind", out_forest_ls)
+# 
+# spruce_df <- forest_df %>% 
+#   dplyr::rename(spruce_1986 =Freq) %>% 
+#   dplyr::select(-val)
+# 
+# 
+# forest_df %>% 
+#   filter(id == 8)
+#   
+# 
+# 
 
 #  Merge forest and yearly disturbances -----------------------------------
 # calculate remaining spruce forest, first need to expand to all years
@@ -447,12 +447,12 @@ df_merge <-
   dist_df_exp %>% 
   mutate(wind_beetle  = replace_na(wind_beetle , 0),
          harvest  = replace_na(harvest , 0)) %>% 
-  full_join(spruce_df, by = 'id') %>%
+ # full_join(spruce_df, by = 'id') %>%
   mutate(all_dist_sum        = wind_beetle + harvest,
-           cum_removed       = cumsum(all_dist_sum),
-           remained_spruce   = spruce_1986 - cum_removed,
-           beetle_rate       = wind_beetle/spruce_1986,
-           harvest_rate      = harvest/spruce_1986) #%>%
+           cum_removed       = cumsum(all_dist_sum) ) #,
+         #  remained_spruce   = spruce_1986 - cum_removed,
+         #  beetle_rate       = wind_beetle/spruce_1986,
+          # harvest_rate      = harvest/spruce_1986) #%>%
 
 summary(df_merge)
 
@@ -463,21 +463,25 @@ ggplot(df_merge, aes(x = year,
   geom_point()
 
 
-# calculate anomalies ----------------------------------------------------------
+# calculate anomalies in % ----------------------------------------------------------
 reference_period <- 1986:2014
 
 df_anom <- 
   df_merge %>% 
     group_by(id) %>%
   mutate(ref_all_dist       = mean(all_dist_sum[year %in% reference_period], na.rm = T),
-         anom_all_dist     = all_dist_sum / mean(all_dist_sum[year %in% reference_period], na.rm = TRUE) - 1,
+         anom_all_dist      = all_dist_sum / mean(all_dist_sum[year %in% reference_period], na.rm = TRUE) - 1,
          ref_wind_beetle    = mean(wind_beetle [year %in% reference_period], na.rm = T),
-         anom_wind_beetle  = wind_beetle  / mean(wind_beetle [year %in% reference_period], na.rm = TRUE) - 1,
+         anom_wind_beetle   = wind_beetle  / mean(wind_beetle [year %in% reference_period], na.rm = TRUE) - 1,
          ref_harvest        = mean(harvest[year %in% reference_period], na.rm = T),
-         anom_harvest      = harvest / mean(harvest[year %in% reference_period], na.rm = TRUE) - 1) %>% 
-  dplyr::select(c(id, year, ref_all_dist,anom_all_dist,
-                  ref_wind_beetle,anom_wind_beetle,
-                  ref_harvest, anom_harvest))
+         anom_harvest       = harvest / mean(harvest[year %in% reference_period], na.rm = TRUE) - 1) %>% 
+  dplyr::select(c(id, year, 
+                  ref_all_dist,
+                  anom_all_dist,
+                  ref_wind_beetle,
+                  anom_wind_beetle,
+                  ref_harvest, 
+                  anom_harvest))
       
 
 # how to handle if I have the same trap (same position) recorded over multiple buffers? if I have a set of buffer 
@@ -485,7 +489,7 @@ df_anom <-
 
 # check how anomalies look like?
 ggplot(df_anom, aes(x = year,
-                    y = wind_beetle_z)) +
+                    y = ref_wind_beetle )) +
  # geom_smooth() +
   geom_point()
   
