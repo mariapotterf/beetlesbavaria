@@ -51,8 +51,8 @@ load(paste(path, 'BoMo_2015_2021_Rohdaten.RData', sep = "/"))
 
 
 # Vars
-doy.start  =  60  # March 1st, 91 # April 1st
-doy.end    = 304 # Oct 30
+doy.start  =  91 # April 1st# 60  # March 1st, 
+doy.end    = 273  # SEpt 30  304 # Oct 30
 veg.period = doy.start:doy.end
 
 ## Read XY coordinates -----------------------------------------------------------
@@ -359,7 +359,7 @@ dat.ips.clean.year %>%
   group_by(year) %>% 
   mutate(sum = sum(n),
          prop = n/sum*100)
-  #pivot_wider(names_from = year, values_from = n, values_fill = list(n = 0))
+  pivot_wider(names_from = year, values_from = n, values_fill = list(n = 0))
 
 #table(month, year)
 #View()
