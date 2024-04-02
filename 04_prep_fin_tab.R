@@ -10,7 +10,7 @@ rm(list=ls())
 source('myPaths.R')
 
 spring.months         = 3:5
-veg.months            = 4:9  # change climate period to fit the data
+veg.months            = 4:9  # change climate period from 3:10 to fit the data
 study.period.extended = 2012:2021
 
 
