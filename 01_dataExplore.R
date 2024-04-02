@@ -73,19 +73,21 @@ head(xy)
 xy_sf <- st_as_sf(xy, coords = c('x_coord', 'y_coord' ), 
                   crs = 32632 )  # What is a coordinate system??? for forestry in bavaria?
 
-plot(xy_sf["OBJECTID"])
+#plot(xy_sf["OBJECTID"])
 #st_distance(xy_sf, by_element = TRUE)
 
 # Change projection to common european one: 3035
 xy_sf <- st_transform(xy_sf, crs = 3035)
 
-# Get the letters to upper cases - to merge with beetle counts
+
+# Change global ID and falsto names to merge them with beetle counts 
+# Get the GLOBALID letters to upper cases - to merge with beetle counts
 xy_sf <-
   xy_sf %>% 
+  mutate(falsto_name = gsub("[^A-Za-z0-9_]", "", falsto_name)) %>% #remove special characters from falsto_name 
   mutate(globalid = toupper(globalid),
-         falsto_name = gsub(' ', '_', falsto_name)) 
+         falsto_name = gsub(' ', '_', falsto_name)) #%>% 
 
-unique(xy_sf$falsto_name)
 
 
 #xy_sf %>%  
@@ -101,9 +103,6 @@ dat <- Daten_B01
 length(unique(dat$falsto_name)) # 302 regions
 
 # "Buchdrucker"   "Kupferstecher"
-
-
-#str(dat)  # datum is in POSIXct format, ut does not contain time: can convert just to date
 
 # convert to date
 dat$kont_dat <- as.Date(dat$kont_dat)
@@ -121,20 +120,20 @@ dat <- dat %>%
   dplyr::mutate(year  = lubridate::year(kont_dat), 
                 month = lubridate::month(kont_dat), 
                 day   = lubridate::day(kont_dat),
-                doy   = lubridate::yday(kont_dat) + 1)  # as POXIT data has January 1st at 0
- 
-filter(dat, year == 2014)  # I do not have trap names neither globalid for 2014 year
+                doy   = lubridate::yday(kont_dat) + 1)  #%>% # as POXIT data has January 1st at 0
+   
+#filter(dat, year == 2014)  # I do not have trap names neither globalid for 2014 year
 # get basic stats: count by beetles over year, counts by records/traps
 nrow(dat) # >73.000 rows
 
-
 # How may traps in total? falsto_name = unique trap name  
-length(unique(dat$falsto_name)) # 302 traps
+length(unique(dat2$falsto_name)) # 302 traps
 
 
 # REname falsto_name trap to merge with sf data 
 # replace all spaces by '_', get trap_pair number 
 dat <- dat %>% 
+  mutate(falsto_name = gsub("[^A-Za-z0-9_]", "", falsto_name)) %>%  #remove special characters from falsto_name 
   mutate(falsto_name = gsub(' ', '_', falsto_name)) %>% 
   mutate(trap_pair = as.numeric(str_extract(falsto_name, "[0-9]+"))) # get the trap pair number
 
@@ -306,7 +305,7 @@ low_visit_id <-
 
 # does the average number of beetles per trap differ between locations?
 # between years?
-dev.off()
+#dev.off()
 
 ips.year.avg %>%
   ggplot(aes(x = factor(year),
@@ -359,15 +358,12 @@ dat.ips.clean.year %>%
   group_by(year) %>% 
   mutate(sum = sum(n),
          prop = n/sum*100)
-  pivot_wider(names_from = year, values_from = n, values_fill = list(n = 0))
+ # pivot_wider(names_from = year, values_from = n, values_fill = list(n = 0))
 
 #table(month, year)
 #View()
 #dplyr::filter(!falsto_name %in% low_visit_id) %>%  # remove traps with low visit time (nee to check this for year?)
 #dplyr::filter(!falsto_name %in% zero_catch_id) #%>% # exclude if zero beetles caught per whole year
-
-
-
 
 
 
@@ -419,39 +415,9 @@ df.daily <-
                    "koederwechsel",
                    "monsto_name",
                    "representativ")) 
-  # filter(globalid == '0010C7C3-C8BC-44D3-8F6E-4445CB8B1DC9' & art == 'Buchdrucker') %>%
-   # select(kont_dat, fangmenge, falsto_name, cumsum,avg_day_count,
-  #         diff,
-   #        doy) %>%
-  #  arrange(year) %>%
-  #  View()
 
 
-
-# Calculate DOY at which the beetle counts overpassed the threshold?
-# need to expand the table to have all DOYs to find this info
-# example: https://stackoverflow.com/questions/76999386/r-dplyr-expand-refill-data-frame-by-values-within-group/76999522#76999522
-
-day.range = 2:12
-df <- data.frame(day = c(4, 6, 10),
-                 daily_count = c(10, 20, 30))
-
-
-# df %>% 
-#   complete(day = day.range)  %>% 
-#   fill(daily_count, .direction = "up")
-
-
-# Seems ok, ()small difference from the cumsum: for rought estimation, thr normal cumsum should be 
-# enought; no need to fill in value for every DOY
-# df.daily %>% 
-#   dplyr::select(year, doy, falsto_name, fangmenge, avg_day_count, cumsum) %>%
-#   group_by(year, falsto_name) %>% 
-#   complete(doy = veg.period)  %>% 
-#   fill(avg_day_count, .direction = "up") %>% 
-#   filter(falsto_name == 'Anzinger_Forst_1' & year == '2015') %>% 
-#   mutate(cumsum_doy = cumsum(avg_day_count)) %>% 
-#   View()
+length(unique(df.daily$falsto_name))
 
 # find DOY when the cumsum overpasses values: XX beetles per season
 # Warning levels from fovgis: 
@@ -597,7 +563,7 @@ unique(xy_sf_fin$falsto_name)
 # save as a new object
 xy_sf_all <- xy_sf
 
-rm(xy_sf)  # remove the old one
+#rm(xy_sf)  # remove the old one
 
 xy_sf_all %>%  
  st_write(paste(out_path, "outSpatial/xy_all_3035.gpkg", sep = '/'), append=FALSE)
@@ -607,6 +573,49 @@ xy_sf_fin %>%
 
 # export RAW data
 # data.table::fwrite(dat, paste(out_path, 'outSpatial/dat.csv', sep = "/"))
+
+
+
+# get study period
+all_years    = 2006:2021
+study_period = 2015:2021
+
+# Expand coordinates table to have a geometry for each trap and year
+xy_sf_expand <- 
+  xy_sf_all %>% 
+  filter(falsto_name %in% trap_names ) %>% 
+  dplyr::mutate(x = sf::st_coordinates(.)[,1],
+                y = sf::st_coordinates(.)[,2]) %>% 
+  dplyr::select(von_dat, bis_dat, falsto_name, globalid, x, y) %>% #, geometry
+  mutate(from_year = lubridate::year(dmy(von_dat)))  %>% # get the year from the starting date
+  group_by(falsto_name) %>% 
+  complete(from_year = all_years)  %>% 
+  arrange(falsto_name, from_year) %>% 
+  # df %>%
+  tidyr::fill(globalid, .direction = 'down') %>%
+  tidyr::fill(x, .direction = 'down') %>%
+  tidyr::fill(y, .direction = 'down')%>%
+  # dplyr::rename(from_year = year) #%>% 
+  filter(from_year %in% study_period) %>% # filter only years 2015:2021
+  st_as_sf(coords = c("x", "y"), 
+           crs = 3035) %>% 
+  mutate(year = from_year) %>% 
+  dplyr::select(-c(from_year, von_dat, bis_dat))
+
+
+xy_sf_expand$id <- 1:nrow(xy_sf_expand)
+
+# export XZ file with shifting traps
+xy_sf_expand %>%  
+  st_write(paste(myPath, "outSpatial/xy_fin_years_3035.gpkg", sep = '/'), append=FALSE)
+
+
+# Alternatively, save only specific objects to the .Rdata file
+#save(list=c("xy_sf_expand"), file="outData/spatial.Rdata")
+
+
+
+
 
 
 
@@ -1044,6 +1053,7 @@ save(trap_names,                 # vector of final trap names (79*2)
 # Spatial data for maps:
 save(xy_sf_all,                  # all locations (one trap has several locations!!)
      xy_sf_fin,                  # filtered trap location (one Globalid is ised for both IPS & Chalcographus!)
+     xy_sf_expand,               # all XY data for shifting traps over years
      de_sf,                      # germany shp
      bav_sf,                     # bavaria shp
      file="outData/spatial.Rdata") 
