@@ -8,6 +8,4 @@ models.RData
 /outData
 /rawData
 /outTable
-outTable
-outData
-outFigs
+/outFigs
