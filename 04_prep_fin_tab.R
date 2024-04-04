@@ -9,10 +9,6 @@ rm(list=ls())
 # Read my paths -----------------------------------------------------------
 source('myPaths.R')
 
-spring.months         = 3:5
-veg.months            = 4:9  # change climate period from 3:10 to fit the data
-study.period.extended = 2012:2021
-
 
 # get libs ----------------------------------------------------------------
 
@@ -48,9 +44,9 @@ load("outData/spatial.Rdata")
 # - xy_sf_expand  # XY as sf data, one point for trap per every year, 1106 rows
 
 # Get SPEI and clim data: they are for whole year! check only veg season? now 3-10 (includes march)
-df_clim <- fread('outTable/xy_clim_DWD.csv')
-df_spei <- fread('outTable/xy_spei_veg_season_DWD.csv')
-df_spei_months <- fread('outTable/xy_spei_all_DWD.csv')
+df_clim                <- fread('outTable/xy_clim_DWD.csv')
+df_spei                <- fread('outTable/xy_spei_veg_season_DWD.csv')
+df_spei_months         <- fread('outTable/xy_spei_all_DWD.csv')
 
 anyNA(df_spei_months)
 
@@ -75,47 +71,47 @@ median_spei <-
 
 
 # plot SPEI over different scales ----------------------------------------------
-ggplot2::ggplot(median_spei) + 
-  geom_area(aes(x = date, y = pos), fill = "blue", col = "grey8") +
-  geom_area(aes(x = date, y = neg), fill = "red",  col = "grey8") +
-   ylab("SPEI") + ggtitle("SPEI") +
-  facet_grid(scale~.) +
-  theme_bw() + theme(plot.title = element_text(hjust = 0.5))
+#ggplot2::ggplot(median_spei) + 
+  # geom_area(aes(x = date, y = pos), fill = "blue", col = "grey8") +
+  # geom_area(aes(x = date, y = neg), fill = "red",  col = "grey8") +
+  #  ylab("SPEI") + ggtitle("SPEI") +
+  # facet_grid(scale~.) +
+  # theme_bw() + theme(plot.title = element_text(hjust = 0.5))
 
 
 
 # plot barplot of spei - veg season vs no veg season, temperature and precipitation
-df_spei_months <- df_spei_months %>% 
-  mutate(season = case_when(month %in% veg.months ~ 'veg_season',
-                            month %in% c(1,2, 3,10, 11, 12) ~ 'winter'))# %>% 
+#df_spei_months <- df_spei_months %>% 
+#  mutate(season = case_when(month %in% veg.months ~ 'veg_season',
+#                            month %in% c(1,2, 3,10, 11, 12) ~ 'winter'))# %>% 
 
 
   
-mean.prcp = mean(df_clim[,year %in% 1980:2015]$prcp)
-mean.tmp = mean(df_clim$tmp)
-  
-  p.prcp <- df_clim %>%
-    filter(year %in% study.period.extended) %>% 
-    ggplot(aes(x = as.factor(year), 
-               y = prcp)) +
-    geom_boxplot() +
-    xlab('') +
-    ylab('Monthly precipitation [mm]') + 
-    theme(axis.text=element_text(angle = 90, vjust = 0, hjust = 0.5)) +
-    geom_hline(yintercept = mean.prcp, lty = 'dashed', col = "grey10" ) 
- 
-  
-  p.tmp <- df_clim %>%
-    filter(year %in% study.period.extended) %>% 
-    ggplot(aes(x = as.factor(year), 
-               y = tmp)) +
-    geom_boxplot() +
-    xlab('') +
-    ylab('Monthly temperature [C]') + 
-    theme(axis.text=element_text(angle = 90, vjust = 0, hjust = 0.5)) +
-    geom_hline(yintercept = mean.tmp, lty = 'dashed', col = "grey10" ) 
-  
- ggarrange(p.prcp, p.tmp) 
+# mean.prcp = mean(df_clim[,year %in% 1980:2015]$prcp)
+# mean.tmp = mean(df_clim$tmp)
+#   
+#   p.prcp <- df_clim %>%
+#     filter(year %in% study.period.extended) %>% 
+#     ggplot(aes(x = as.factor(year), 
+#                y = prcp)) +
+#     geom_boxplot() +
+#     xlab('') +
+#     ylab('Monthly precipitation [mm]') + 
+#     theme(axis.text=element_text(angle = 90, vjust = 0, hjust = 0.5)) +
+#     geom_hline(yintercept = mean.prcp, lty = 'dashed', col = "grey10" ) 
+#  
+#   
+#   p.tmp <- df_clim %>%
+#     filter(year %in% study.period.extended) %>% 
+#     ggplot(aes(x = as.factor(year), 
+#                y = tmp)) +
+#     geom_boxplot() +
+#     xlab('') +
+#     ylab('Monthly temperature [C]') + 
+#     theme(axis.text=element_text(angle = 90, vjust = 0, hjust = 0.5)) +
+#     geom_hline(yintercept = mean.tmp, lty = 'dashed', col = "grey10" ) 
+#   
+#  ggarrange(p.prcp, p.tmp) 
   
   
 
@@ -133,8 +129,8 @@ xy_df <- data.frame(x = sf::st_coordinates(xy_sf_expand)[,"X"],
                     year =    xy_sf_expand$year)
 
 # remove special characters
-xy_df$falsto_name <- gsub("[^A-Za-z0-9_]", "", xy_df$falsto_name) # Remove all non-alphanumeric characters except underscore
-xy_topo$falsto_name <- gsub("[^A-Za-z0-9_]", "", xy_topo$falsto_name) # Remove all non-alphanumeric characters except underscore
+#xy_df$falsto_name <- gsub("[^A-Za-z0-9_]", "", xy_df$falsto_name) # Remove all non-alphanumeric characters except underscore
+#xy_topo$falsto_name <- gsub("[^A-Za-z0-9_]", "", xy_topo$falsto_name) # Remove all non-alphanumeric characters except underscore
 
 
 # get the final subset of globalids
@@ -206,7 +202,7 @@ df_spei_wide <- df_spei_wide %>%
   )
 
 # Process predictors  data ------------------------------------
-
+unique(df_spei_wide$falsto_name)
 
 # remove duplicates for proper merging
 xy_df          <- unique(xy_df)
@@ -228,7 +224,7 @@ df_predictors <-
     left_join(xy_df, by = c('falsto_name', 'year')) %>% # add XY coordinates for each trap  and filter the data
     left_join(df_topo, by = c("falsto_name", 'globalid')) %>%
   ungroup(.) %>% 
-    dplyr::select(-c(globalid))
+    dplyr::select(-c(globalid, x, y, elev))
  
 
 unique(df_predictors$falsto_name)
@@ -236,25 +232,25 @@ unique(df_predictors$falsto_name)
 
 # add also my dependent variables: 
 # [1] sum beetles 
-ips.year.sum <- ips.year.sum %>% 
-  mutate(falsto_name = gsub("[^A-Za-z0-9_]", "", falsto_name)) 
+#ips.year.sum <- ips.year.sum %>% 
+ # mutate(falsto_name = gsub("[^A-Za-z0-9_]", "", falsto_name)) 
 
 # [2] Max Diff DOY
 max.diff.doy <- max.diff.doy %>% 
-  mutate(falsto_name = gsub("[^A-Za-z0-9_]", "", falsto_name)) %>%  # Remove all non-alphanumeric characters except underscore
+#  mutate(falsto_name = gsub("[^A-Za-z0-9_]", "", falsto_name)) %>%  # Remove all non-alphanumeric characters except underscore
   dplyr::select(c(falsto_name, year, doy, diff)) %>% 
   dplyr::rename(peak_doy = doy,
                 peak_diff = diff)
 
 # [3] Agg DOY !!!!: only 1080 rows!!! some traps dis not reached the values in time; need to increase threshold or somehow account for this!
 ips.aggreg <- ips.aggreg %>% 
-  mutate(falsto_name = gsub("[^A-Za-z0-9_]", "", falsto_name)) %>% 
+#  mutate(falsto_name = gsub("[^A-Za-z0-9_]", "", falsto_name)) %>% 
   dplyr::select(c(falsto_name, year, doy)) %>% 
   dplyr::rename(agg_doy = doy )
   
 # [4] avg number of beetles per trap/catch
 ips.year.avg <- ips.year.avg %>% 
-  mutate(falsto_name = gsub("[^A-Za-z0-9_]", "", falsto_name)) %>% 
+  #mutate(falsto_name = gsub("[^A-Za-z0-9_]", "", falsto_name)) %>% 
   ungroup(.) %>% 
   dplyr::select(c(year, falsto_name, avg_beetles_trap))
 
@@ -262,15 +258,17 @@ ips.year.avg <- ips.year.avg %>%
 # make a final table with all Ys, and all Xs to see a correlation matrix. reduce predictors to keep meaningful ones.----------
 dat_fin <- 
   df_predictors %>% 
-  left_join(ips.year.sum) %>%
-  left_join(max.diff.doy) %>%
-  left_join(ips.aggreg) %>%
+  left_join(ips.year.sum, by = join_by(year, falsto_name)) %>%
+  #View()
+  left_join(max.diff.doy,  by = join_by(year, falsto_name)) %>%
+  left_join(ips.aggreg, by = join_by(year, falsto_name)) %>%
+ # View()
   mutate(pairID = gsub('.{2}$', '', falsto_name)) %>% 
   dplyr::rename(trapID = falsto_name) %>% 
   mutate(pairID = factor(pairID),
          trapID = factor(trapID))
 
-unique(dat_fin$trapID)
+View(dat_fin)
 
 # Plots -------------------------------------------------------------------
 
@@ -431,15 +429,7 @@ df_spei %>%
 
 
 # save final table --------------------------------------------------------
-
-
 save(dat_fin, file="outData/final_table.Rdata")
-
-
-
-
-
-#
 
 
 
