@@ -88,8 +88,8 @@ ips_sum <-
   group_by(year,falsto_name) %>% 
   dplyr::summarize(sum_beetle = sum(fangmenge, na.rm = T),
                    log_sum_beetle = log(sum_beetle)) %>% 
-  left_join(xy_df, by = c("falsto_name", 'year')) %>% # df_xy3035
-  mutate(falsto_name = gsub("[^A-Za-z0-9_]", "", falsto_name)) #%>% 
+  left_join(xy_df, by = c("falsto_name", 'year')) #%>% # df_xy3035
+ # mutate(falsto_name = gsub("[^A-Za-z0-9_]", "", falsto_name)) #%>% 
 
 hist(ips_sum$sum_beetle)
 
@@ -177,10 +177,26 @@ lisa_merged_df %>%
   ggplot(aes(x = clust,
              y = clust_log,
              color = as.factor(year))) + 
-  geom_jitter() #+ 
-  geom_density_2d()
+  geom_jitter() 
   #facet_grid(~year)
 
+  
+
+
+
+# Save outputs ------------------------------------------------------------
+save(lisa_merged_df,
+     #p_lisa_sub, 
+     #   p_lisa_all,
+     #   p_lisa_freq,
+     #   glob_merged,
+     #   semi_out,
+     #  p_glob_moran_bar,
+     file = "outData/lisa.Rdata")
+
+  
+  
+  
 x = 1:10000
 y = log(x)
 plot(x = x, y = y)
@@ -458,8 +474,8 @@ ggplot(data = clipped_voronoi_sf2) +
 # how beetles increase with Moran's I -------------------------------------
 lisa_merged_cl %>% 
   ggplot(aes(x = log_sum_beetle,
-             y = Morans_I_log_cap)) +
-  geom_density_2d_filled() +
+             y = Morans_I_log_cap)) +geom_point()
+ # geom_density_2d_filled() +
   scale_color_gradient2(low = "blue", 
                         mid = "white", 
                         high = "red", midpoint = 0) #+
@@ -670,7 +686,7 @@ windows()
 (p_lisa_Morans)
 
 # convert to df 
-lisa_merged_df <- as.data.frame(lisa_merged)
+#lisa_merged_df <- as.data.frame(lisa_merged)
 
 
 # get LISA distribution
@@ -944,18 +960,6 @@ plot(variogram(log(zinc)~1, meuse))
 
 
 
-# Save outputs ------------------------------------------------------------
-
-
-
-save(lisa_merged_df,
-  p_lisa_sub, 
-     p_lisa_all,
-     p_lisa_freq,
-     glob_merged,
-     semi_out,
-     p_glob_moran_bar,
-     file = "outData/lisa.Rdata")
 
 
 
