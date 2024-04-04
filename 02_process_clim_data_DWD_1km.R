@@ -20,9 +20,9 @@
 gc()
 rm(list = ls())
 
-spring.months         = 3:5
-veg.months            = 3:10
-study.period.extended = 2012:2021
+#spring.months         = 3:5
+#veg.months            = 4:9 #3:10
+#study.period.extended = 2012:2021
 
 
 
