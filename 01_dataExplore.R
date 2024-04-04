@@ -50,11 +50,6 @@ load(paste(path, 'BoMo_2015_2021_Rohdaten.RData', sep = "/"))
 
 
 
-# Vars
-doy.start  =  91 # April 1st# 60  # March 1st, 
-doy.end    = 273  # SEpt 30  304 # Oct 30
-veg.period = doy.start:doy.end
-
 ## Read XY coordinates -----------------------------------------------------------
 # need to save the csv fil as a new file, otherwise it did not work
 # or use teh  version 3: now it worked with the original one! 
@@ -84,11 +79,12 @@ xy_sf <- st_transform(xy_sf, crs = 3035)
 # Get the GLOBALID letters to upper cases - to merge with beetle counts
 xy_sf <-
   xy_sf %>% 
-  mutate(falsto_name = gsub("[^A-Za-z0-9_]", "", falsto_name)) %>% #remove special characters from falsto_name 
   mutate(globalid = toupper(globalid),
-         falsto_name = gsub(' ', '_', falsto_name)) #%>% 
+         falsto_name = gsub(' ', '_', falsto_name)) %>%
+  mutate(falsto_name = gsub("[^A-Za-z0-9_]", "", falsto_name)) #%>% #remove special characters from falsto_name 
+  
 
-
+sort(unique(xy_sf$falsto_name))
 
 #xy_sf %>%  
 #  st_write(paste(out_path, "outSpatial/all_traps_3035.gpkg", sep = '/'), append=FALSE)
@@ -100,7 +96,7 @@ xy_sf <-
 # for dat
 dat <- Daten_B01
 
-length(unique(dat$falsto_name)) # 302 regions
+#length(unique(dat$falsto_name)) # 302 regions
 
 # "Buchdrucker"   "Kupferstecher"
 
@@ -127,14 +123,14 @@ dat <- dat %>%
 nrow(dat) # >73.000 rows
 
 # How may traps in total? falsto_name = unique trap name  
-length(unique(dat2$falsto_name)) # 302 traps
+length(unique(dat$falsto_name)) # 302 traps
 
 
 # REname falsto_name trap to merge with sf data 
 # replace all spaces by '_', get trap_pair number 
 dat <- dat %>% 
+   mutate(falsto_name = gsub(' ', '_', falsto_name)) %>% 
   mutate(falsto_name = gsub("[^A-Za-z0-9_]", "", falsto_name)) %>%  #remove special characters from falsto_name 
-  mutate(falsto_name = gsub(' ', '_', falsto_name)) %>% 
   mutate(trap_pair = as.numeric(str_extract(falsto_name, "[0-9]+"))) # get the trap pair number
 
 # remove the parantheses from globalid to merge with coordinates
@@ -1025,28 +1021,28 @@ save(trap_names,                 # vector of final trap names (79*2)
      max.diff.doy,               # max increase in beetle counts per DOY
      max.diff.doy.sf,            # sf: max increase in beetle counts per DOY
      
-    p_ips.max.diff.doy,          # barplot + med, max diff by doy
-    p_ips.max.diff,              # # barplot + med, max diff
+     #p_ips.max.diff.doy,          # barplot + med, max diff by doy
+    #p_ips.max.diff,              # # barplot + med, max diff
     
-    p_count_diff,               # plot: difference in beetle daily counts  
+#    p_count_diff,               # plot: difference in beetle daily counts  
     
     ips.aggreg,                  # beetle agregation per trap: DOY of overpassing XX beetles 
-    ips.aggreg.sf,               # sf
+  #  ips.aggreg.sf,               # sf
     
     # Vars
-    doy.start, #  =  91 # April 1st
-    doy.end, #    = 304 # Oct 30
-    veg.period,#   = doy.start:doy.end
+    #doy.start, #  =  91 # April 1st
+    #doy.end, #    = 304 # Oct 30
+    #veg.period,#   = doy.start:doy.end
     
-    p_ips.agg,                  # plot: DOY of XX beetles
+    #p_ips.agg,                  # plot: DOY of XX beetles
     
-    p_doy_max_increase,         # map: all locations
-     p_doy_max_increase150,      # map: filter early locations
-     p_diff_doy,                 # scatter plot per year
-     p_aggreg,                   # map: locations of beetle aggreg values by DOY
-    p_ips.year.sum,              # plot: sum beetles barplot per year
+   # p_doy_max_increase,         # map: all locations
+  #   p_doy_max_increase150,      # map: filter early locations
+   #  p_diff_doy,                 # scatter plot per year
+  #   p_aggreg,                   # map: locations of beetle aggreg values by DOY
+  #  p_ips.year.sum,              # plot: sum beetles barplot per year
     
-    p_lm_traps,                  # plot: linear regression between trap pairs
+   # p_lm_traps,                  # plot: linear regression between trap pairs
      file="outData/ips_counts.Rdata")
 
 
@@ -1054,6 +1050,6 @@ save(trap_names,                 # vector of final trap names (79*2)
 save(xy_sf_all,                  # all locations (one trap has several locations!!)
      xy_sf_fin,                  # filtered trap location (one Globalid is ised for both IPS & Chalcographus!)
      xy_sf_expand,               # all XY data for shifting traps over years
-     de_sf,                      # germany shp
-     bav_sf,                     # bavaria shp
+    # de_sf,                      # germany shp
+    # bav_sf,                     # bavaria shp
      file="outData/spatial.Rdata") 
