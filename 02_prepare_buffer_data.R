@@ -55,7 +55,7 @@ load("outData/spatial.Rdata")
 # Read data
 disturb_year <- rast('rawData/germany114/disturbance_year_1986-2020_germany.tif')
 disturb_type <- rast('rawData/fire_wind_barkbeetle_germany.tif')
-#forest_cover <- rast('rawData/germany114/forestcover_germany.tif')
+forest_cover <- rast('rawData/germany114/forestcover_germany.tif')
 
 # tree species classification: from 2017/2018 - some disturbed areas previously can be already removed???
 #spruce_cover <- rast('C:/Users/ge45lep/Documents/2022_BarkBeetles_Bavaria/rawData/tree_species_map/spruce_bavaria_resampl30.tif')
@@ -78,12 +78,14 @@ disturb_type <- rast('rawData/fire_wind_barkbeetle_germany.tif')
 #rast(paste(myPath, outFolder,  "disturbance14_conif.tif", sep = "/"))
 crs(disturb_year)
 crs(disturb_type)
+crs(forest_cover)
 # disturbance BIOTIC: 
 # 1 = wind & beetles
 # 2 = fire
 # 3 = harvest
 
 crs(disturb_type) <- crs(disturb_year)
+crs(forest_cover) <- crs(disturb_year)
 #crs(spruce_cover) <- crs(disturb_year)
 
 # get trap data
@@ -202,18 +204,18 @@ extract_rst_val <- function(xy, ...) {
    
    # tree class raster
    # crop data and then mask them to have a circle
-  # spruce_cover_crop <- crop(spruce_cover, buff)
-  # spruce_cover_mask <- mask(spruce_cover_crop, buff)
+   spruce_cover_crop <- crop(forest_cover, buff)
+   spruce_cover_mask <- mask(spruce_cover_crop, buff)
    
    # Get vector of values
    val_year <- as.vector(values(dist_year_mask))
    val_type <- as.vector(values(dist_type_mask))
-   #val_spruce <- as.vector(values(spruce_cover_mask))
+   val_spruce <- as.vector(values(spruce_cover_mask))
    
    # merge data and drop NA values
    df <- data.frame(year = val_year,
                     type = val_type,
-                   # spruce = val_spruce,
+                    spruce = val_spruce,
                     id = id,
                    falsto_name = falsto_name) 
    df <- df %>% 
@@ -357,30 +359,30 @@ extract_rst_val_2 <- function(xy, buff_width) {
 
 # make a function to export df from each buffer: keep years, disturbance type and forest;
 # this forest is from 1986, and include all species
-# extract_forest <- function(xy, ...) {
-#  # xy1<- xy_ls[[8]]
-#   id <- xy$id
-#   
-#   # get buffer
-#   buff <- buffer(xy, buff_width)
-#   
-#   # disturbance year
-#   # crop data and then mask them to have a circle
-#   forest_crop <- terra::crop(spruce_cover, buff)
-#   forest_mask <- terra::mask(forest_crop, buff)
-#   
-#   # Get vector of values
-#   val <- as.vector(values(forest_mask))
-#   
-#   # count number of cells:
-#   df <- as.data.frame(table(val))
-#   
-#   # add name
-#   df$id <- id
-#   
-#   return(df)
-#   
-# }
+extract_forest <- function(xy, ...) {
+ # xy1<- xy_ls[[8]]
+  id <- xy$id
+
+  # get buffer
+  buff <- buffer(xy, buff_width)
+
+  # disturbance year
+  # crop data and then mask them to have a circle
+  forest_crop <- terra::crop(forest_cover, buff)
+  forest_mask <- terra::mask(forest_crop, buff)
+
+  # Get vector of values
+  val <- as.vector(values(forest_mask))
+
+  # count number of cells:
+  df <- as.data.frame(table(val))
+
+  # add name
+  df$id <- id
+
+  return(df)
+
+}
 
 options(terra.pardegree = 1)
 
@@ -419,22 +421,25 @@ names(dist_df_out) <- c("year" , "id","falsto_name", "wind_beetle", "harvest")
 
 
 
-# extract spruce cover per buffer  ------------------------------------------------
-# out_forest_ls <- lapply(xy_ls, extract_forest ) #extract_rst_val(xy_ls[[10]])
-# 
-# # merge partial tables into one df
-# forest_df      <-do.call("rbind", out_forest_ls)
-# 
-# spruce_df <- forest_df %>% 
-#   dplyr::rename(spruce_1986 =Freq) %>% 
-#   dplyr::select(-val)
-# 
-# 
-# forest_df %>% 
-#   filter(id == 8)
-#   
-# 
-# 
+# extract forest cover per buffer  ------------------------------------------------
+out_forest_ls <- lapply(xy_ls, extract_forest ) #extract_rst_val(xy_ls[[10]])
+
+# merge partial tables into one df
+forest_df      <-do.call("rbind", out_forest_ls)
+table(out_forest_ls[[100]])
+
+# !!!! work on this later, if I wish o calculate the % of damage!
+# but with beetle numbers, the sole pixels counst can work ok
+#spruce_df <- forest_df %>%
+#  dplyr::rename(spruce_1986 =Freq) %>%
+#  dplyr::select(-val)
+
+
+#forest_df %>%
+#  filter(id == 8)
+
+
+
 
 #  Merge forest and yearly disturbances -----------------------------------
 # calculate remaining spruce forest, first need to expand to all years
@@ -449,16 +454,16 @@ dist_df_exp <-
 # Merge disturance data with spruce per buffer, to know how much spruce I have left
 df_merge <- 
   dist_df_exp %>% 
-  mutate(wind_beetle  = replace_na(wind_beetle , 0),
-         harvest  = replace_na(harvest , 0)) %>% 
+  dplyr::mutate(wind_beetle  = replace_na(wind_beetle, 0),
+         harvest     = replace_na(harvest, 0)) %>% 
  # full_join(spruce_df, by = 'id') %>%
-  mutate(all_dist_sum        = wind_beetle + harvest,
+  dplyr::mutate(all_dist_sum        = wind_beetle + harvest,
            cum_removed       = cumsum(all_dist_sum) ) #,
          #  remained_spruce   = spruce_1986 - cum_removed,
          #  beetle_rate       = wind_beetle/spruce_1986,
           # harvest_rate      = harvest/spruce_1986) #%>%
 
-View(df_merge)
+#View(df_merge)
 
 # check how anomalies look like?
 ggplot(df_merge, aes(x = year,
@@ -491,12 +496,6 @@ df_anom <-
 # how to handle if I have the same trap (same position) recorded over multiple buffers? if I have a set of buffer 
 # per year? I think it is ok, as I will just merge it with beetle counts per year
 
-# check how anomalies look like?
-ggplot(df_anom, aes(x = year,
-                    y = ref_wind_beetle )) +
- # geom_smooth() +
-  geom_point()
-  
 
 
 # Merge ips counts per year with buffer info  ---------------------------------------
