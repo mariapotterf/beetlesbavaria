@@ -53,7 +53,7 @@ hist(df_damage$damaged_volume_total_m3)
 
 # change projection
 sf_districts_trans <- st_transform(sf_districts, crs = st_crs(disturb_year))
-v_districts_trans <- vect(sf_districts_trans)
+v_districts_trans  <- vect(sf_districts_trans)
 
 
 # crop the rasters: they are for whole germany, crop to Bavaria
@@ -154,11 +154,43 @@ df_cor <- df_all %>%
   dplyr::summarize(spearm_cor_beetle = cor(damaged_volume_total_m3, RS_wind_beetle, 
                                     method = "spearman", use = "complete.obs"),
                    spearm_cor_harvest = cor(damaged_volume_total_m3, RS_harvest, 
-                                           method = "spearman", use = "complete.obs"))
+                                           method = "spearman", use = "complete.obs"),
+                   spearm_cor_sum = cor(damaged_volume_total_m3, RS_sum, 
+                                            method = "spearman", use = "complete.obs"))
 
-# to exclude  RS wind beetle in Passau 2018
+# to exclude  RS wind beetle in Passau 2018??? no!
 
-# is there any correlation, overall pattern? oevrall sum over years for damage/RS data?
+# create area plots: sum damage per year
+df_sum <- df_all %>% 
+  group_by(year) %>%
+  dplyr::summarise(RS_harvest = sum(RS_harvest, na.rm = T),
+                   RS_wind_beetle  = sum(RS_wind_beetle , na.rm = T),
+                   damaged_volume_total_m3  = sum(damaged_volume_total_m3,na.rm = T ))
+  
+
+p1 <- df_sum %>% 
+  ggplot(aes(x = year,
+             y = RS_wind_beetle*0.09)) +
+  geom_line(col = 'green', lty = 'dashed', lwd = 1.5) + 
+  labs(y = 'RS tree mortality [ha]') + 
+  theme_classic()
+
+
+p2<- df_sum %>% 
+  ggplot(aes(x = year,
+             y = damaged_volume_total_m3/10000)) +
+  geom_line(col = 'red', lwd = 1.5) +
+  labs(y = 'Reported tree damage [*10000 m^3]') + 
+  theme_classic()
+
+# df_sum
+windows(7,3)
+ggarrange(p1, p2, nrow = 1, ncol = 2, align = 'hv', labels = c('[a]', '[b]'))
+
+
+
+
+# is there any correlation, overall pattern? oevrall sum over years for damage/RS data? ----
 df_all %>% 
   ggplot(aes(x = RS_harvest,
              y= damaged_volume_total_m3)) +
@@ -207,23 +239,27 @@ sf_simpled10 <- st_simplify(sf_districts, dTolerance = 20, preserveTopology = TR
 plot(sf_simpled10, max.plot = 1)
 
 
-merged_shp <- sf_simpled10 %>% 
+cor_shp <- sf_simpled10 %>% 
   left_join(df_cor, by = c("forstrev_1" = "ID"))
+
+all_shp <- sf_simpled10 %>% 
+  left_join(df_all, by = c("forstrev_1" = "ID"))
+
 
 
 # show spearman correlation coefficient between volume damage and RS observation (wind, beetle)
 
 # wind_beetle vs damage volume 
 
-p1 <- ggplot(merged_shp) +
+p1 <- ggplot(cor_shp) +
  # geom_sf(color = 'black', 
 #          fill  = 'grey93') #+ 
-  geom_sf(data = merged_shp,
+  geom_sf(data = cor_shp,
           aes(fill = spearm_cor_beetle)) +
   scale_fill_gradient2(low = "blue", mid = "white", high = "red", 
                        midpoint = 0,  # Set the midpoint at 0 for white color
-                       limit = c(min(merged_shp$spearm_cor_beetle, na.rm = TRUE), 
-                                 max(merged_shp$spearm_cor_beetle, na.rm = TRUE)),
+                       limit = c(min(cor_shp$spearm_cor_beetle, na.rm = TRUE), 
+                                 max(cor_shp$spearm_cor_beetle, na.rm = TRUE)),
                        name = "Spearman\nCorrelation") +
   labs(title = "Spearman Correlation Coefficient",
        subtitle = "Correlation between spruce damage [m3] and RS wind-beetle [pixel counts] by region") +
@@ -234,19 +270,78 @@ p1 <- ggplot(merged_shp) +
 
 # RS harvest vs damage volume 
 
-p2 <- ggplot(merged_shp) +
+p2 <- ggplot(cor_shp) +
   # geom_sf(color = 'black', 
   #          fill  = 'grey93') #+ 
-  geom_sf(data = merged_shp,
+  geom_sf(data = cor_shp,
           aes(fill = spearm_cor_harvest)) +
   scale_fill_gradient2(low = "blue", mid = "white", high = "red", 
                        midpoint = 0,  # Set the midpoint at 0 for white color
-                       limit = c(min(merged_shp$spearm_cor_harvest, na.rm = TRUE), 
-                                 max(merged_shp$spearm_cor_harvest, na.rm = TRUE)),
+                       limit = c(min(cor_shp$spearm_cor_harvest, na.rm = TRUE), 
+                                 max(cor_shp$spearm_cor_harvest, na.rm = TRUE)),
                        name = "Spearman\nCorrelation") +
   labs(title = "Spearman Correlation Coefficient",
        subtitle = "Correlation between spruce damage [m3] and RS harvest [pixel counts] by region") +
   theme_minimal()  #
 
 
-ggarrange(p1, p2)
+
+p3 <- ggplot(cor_shp) +
+  # geom_sf(color = 'black', 
+  #          fill  = 'grey93') #+ 
+  geom_sf(data = cor_shp,
+          aes(fill = spearm_cor_sum )) +
+  scale_fill_gradient2(low = "blue", mid = "white", high = "red", 
+                       midpoint = 0,  # Set the midpoint at 0 for white color
+                       limit = c(min(cor_shp$spearm_cor_sum, na.rm = TRUE), 
+                                 max(cor_shp$spearm_cor_sum, na.rm = TRUE)),
+                       name = "Spearman\nCorrelation") +
+  labs(title = "Spearman Correlation Coefficient",
+       subtitle = "Correlation between spruce damage [m3] and RS sum damage [pixel counts] by region") +
+  theme_minimal()  #
+
+
+ggarrange(p1, p2, p3)
+
+
+
+
+# Map damage [m3] per year ------------------------------------------------
+
+summary(all_shp$damaged_volume_total_m3)
+
+# Define the 75th percentile
+damage_75 <- quantile(all_shp$damaged_volume_total_m3, probs = 0.75)
+RS_wind_beetle_75 <- quantile(all_shp$RS_wind_beetle , probs = 0.75, na.rm = T)
+
+# cap tthe values for better visualization of data
+all_shp <- all_shp %>% 
+  mutate(damaged_volume_cap = case_when(damaged_volume_total_m3 >= damage_75 ~ damage_75,
+                                        TRUE ~ damaged_volume_total_m3),
+         RS_wind_beetle_cap = case_when(RS_wind_beetle >= RS_wind_beetle_75 ~ RS_wind_beetle_75,
+                                        TRUE ~ RS_wind_beetle))
+
+
+# Plot the map
+p1<-ggplot(all_shp) +
+  geom_sf(aes(fill = damaged_volume_cap)) +
+  scale_fill_gradient(low = "yellow", high = "red", 
+                      name = expression("Tree damage [m"^3*"]"),  
+                      na.value = 'transparent') +
+  facet_wrap(. ~ year) +
+  theme(legend.position = 'bottom') +
+  theme_void() 
+
+
+p2<-ggplot(all_shp) +
+  geom_sf(aes(fill = RS_wind_beetle_cap*0.09)) +
+  scale_fill_gradient(low = "yellow", high = "red", 
+                      name = expression("RS damage [ha]"),  
+                      na.value = 'transparent') +
+  facet_wrap(. ~ year) +
+  theme(legend.position = 'bottom') +
+  theme_void() 
+
+
+ggarrange(p1, p2, labels = c('[a] Damaged volume', '[b] RS Damaged area'))
+
