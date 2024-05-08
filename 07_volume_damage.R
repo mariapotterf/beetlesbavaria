@@ -4,11 +4,15 @@
 # read tables
 # merge geometries
 # explore damage per year
-#  read ata from Cornelius: do they correlate somehow?
+#  read ata from Cornelius: do they correlate somehow? YES!
 # how to link them with beetle trap data?
+# select the respective region per year
+# do beetle counts fit over forest damage??
+
+
 
 # to do:
-# rea data
+# read data
 # expland teh geometries for teh damage data, to plot the damage with ggplot
 # how to extrapolated beetle counts from the point-base data? - create a map and overlay this with the reporte damage data
 # use a spruce layer for it
@@ -16,7 +20,7 @@
   
 
 
-# Libs
+# Libs --------------------------------------------------------------------------
 library(dplyr)
 library(raster)
 library(terra)
@@ -30,7 +34,26 @@ library(lubridate)
 library(fasterize)
 library(tidyr)
 
-# read districts shp
+
+# read beetle data -------------------------------------------------------------
+# load cleaned data
+load("outData/ips_counts.Rdata")
+load("outData/spatial.Rdata")
+
+# Get beetle counts - corrected, instead of previous 'dat'
+# - dat.ips.clean      # dat <- fread(paste(myPath, outFolder, "dat.csv", sep = "/"))
+# - max.diff.doy       # get DOY of max increase
+# - ips.aggreg         # get DOY of max increase
+# - ips.year.avg       # sum beetles/year, 
+# - df.daily           # avg/betles/year per trap
+
+# Spatial data: 
+# - xy_sf_fin  # XY as sf data, filtered to have only one globalid per trap
+# - xy_sf_expand  # XY as sf data, one point for trap per every year, 1106 rows
+
+
+
+# read districts shp ------------------------------------------------------------
 sf_districts <-  st_read('rawData/damage_volume/AELF_Revier_20240502/AELF_Revier_bis20240424_LWF_20240502.shp')
 df_damage    <-  fread('rawData/damage_volume/Bavaria_TreeDamageData_IpsTypographus_2015-2021.csv', dec = ',')
 v_districts  <-  terra::vect(sf_districts) # convert to terra
@@ -51,9 +74,12 @@ length(df_ID)
 # there is an aditiona row in the damage data with district ID 0 - I can remove that
 hist(df_damage$damaged_volume_total_m3)
 
-# change projection
+# change projection & convert to terra
 sf_districts_trans <- st_transform(sf_districts, crs = st_crs(disturb_year))
+ips_sum_sf_trans <- st_transform(ips_sum_sf, crs = st_crs(disturb_year))
+
 v_districts_trans  <- vect(sf_districts_trans)
+v_ips_sum  <- vect(ips_sum_sf_trans)
 
 
 # crop the rasters: they are for whole germany, crop to Bavaria
@@ -66,6 +92,20 @@ forest_crop    <- terra::crop(forest, v_districts_trans)
 #crs(v_districts)
 crs(disturb_type) <- crs(dist_year_crop)
 crs(forest_crop) <- crs(dist_year_crop)
+
+
+# select polygons IPS_sum -----------------------------------------------------------------
+# split beetle by years: create a list by years
+xy_ls <- terra::split(v_ips_sum, c('year')) #,# "OBJECTID" # 
+
+# extract values from polygons
+extracted_data <- terra::extract(x = v_districts_trans, y = v_ips_sum) # works, but first I need to add there a damage data!
+
+#selected_dist <- terra::intersect(v_ips_sum, v_districts_trans )
+
+plot(v_districts_trans)
+plot(v_ips_sum, add = T, col = "red")
+
 
 # convert to districts poly to raster ------------------------------------
 
@@ -109,7 +149,7 @@ df_forest <- df_disturb %>%
   dplyr::summarize(forest86 = sum(forest == 1, na.rm = TRUE),
                    area_cells = n())
 
-# get disturbances and type 2015-2020
+# RS get disturbances and type 2015-2020
 df_disturb_sum <- 
   df_disturb %>% 
   dplyr::filter(year %in% 2015:2021) %>% 
@@ -212,7 +252,31 @@ df_all %>%
 
 
 
-# plots -----------------------------------------------------------------
+
+# merge damage data with the beetle counts (IPS) ---------------------------------------------
+
+# merge counts to spatial data
+ips_sum <- 
+  dat.ips.clean %>% 
+  group_by(year,falsto_name) %>% 
+  dplyr::summarize(sum_beetle = sum(fangmenge, na.rm = T)#,
+                   #log_sum_beetle = log(sum_beetle)
+  ) #%>% 
+
+# convert to sf object
+ips_sum_sf <-  xy_sf_expand %>%  left_join(ips_sum, by = c("falsto_name", 'year')) #%>% # df_xy3035
+# mutate(falsto_name = gsub("[^A-Za-z0-9_]", "", falsto_name)) #%>% 
+
+# 3035 crs
+
+
+
+
+
+
+
+
+# RS plots -----------------------------------------------------------------
 
 
 df_damage %>%
@@ -220,7 +284,7 @@ df_damage %>%
              y = damaged_volume_total_m3/10000, 
              group = Year,
              fill = factor(Year))) + 
- # geom_violin() +
+  # geom_violin() +
   geom_boxplot()
 
 
@@ -252,8 +316,8 @@ all_shp <- sf_simpled10 %>%
 # wind_beetle vs damage volume 
 
 p1 <- ggplot(cor_shp) +
- # geom_sf(color = 'black', 
-#          fill  = 'grey93') #+ 
+  # geom_sf(color = 'black', 
+  #          fill  = 'grey93') #+ 
   geom_sf(data = cor_shp,
           aes(fill = spearm_cor_beetle)) +
   scale_fill_gradient2(low = "blue", mid = "white", high = "red", 
@@ -265,7 +329,7 @@ p1 <- ggplot(cor_shp) +
        subtitle = "Correlation between spruce damage [m3] and RS wind-beetle [pixel counts] by region") +
   theme_minimal()  #
 
- 
+
 
 
 # RS harvest vs damage volume 
@@ -344,4 +408,8 @@ p2<-ggplot(all_shp) +
 
 
 ggarrange(p1, p2, labels = c('[a] Damaged volume', '[b] RS Damaged area'))
+
+
+
+
 
