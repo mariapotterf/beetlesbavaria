@@ -41,6 +41,10 @@ library(scales)
 library(viridis)
 
 
+library(tidyr)
+
+
+
 ### get data -----------------------------------
 path = 'C:/Users/ge45lep/Documents/2022_BarkBeetles_Bavaria/rawData/Fwd__Borkenkäferforschung__Datentransfer'
 out_path = 'C:/Users/ge45lep/Documents/2022_BarkBeetles_Bavaria'
@@ -138,10 +142,6 @@ dat <- dat %>%
   mutate(globalid =  gsub("\\{|\\}", "", globalid))  
 
 
-# how to handle if one trap  has several globalids? - just select the first in the row to calculate the LISA
-# check several globalids
-# now I have XY for every year of the final trap set
-# !!!!
 dat %>% 
   filter(art == "Buchdrucker") %>% 
   group_by(falsto_name) %>% 
@@ -211,6 +211,28 @@ ips.year.avg <-
             freq_visit  = length(unique(kont_dat)),
             avg_beetles_trap = sum_beetles/freq_visit) #%>%
 
+
+# coount by weeks:
+ips.week.agg <- dat %>% 
+  filter(year > 2014) %>% 
+  dplyr::filter(art == "Buchdrucker") %>% 
+  mutate(week_number = week(kont_dat)) %>% 
+    group_by(art, year,week_number, falsto_name ) %>% 
+  dplyr::summarize(week_sum_beetles = sum(fangmenge, na.rm = T)) #%>%
+
+# gte the maximal beetle population groth per week: - can i compare with my data???
+# no necessary: I have used teh daily values to compensate for different catching interval between the data, as they are not collected regularly
+View(ips.week.agg)
+
+
+ips.week.agg %>% 
+  dplyr::filter(week_number %in% 10:40) %>% 
+  ggplot(aes(x = week_number,
+             y = week_sum_beetles,
+             group = falsto_name)) + 
+  geom_line(alpha = 0.1) + 
+  geom_hline(yintercept = 3000) + 
+  facet_wrap(~year, scales = 'free')
 
 
 # check revisit times:
@@ -335,7 +357,6 @@ ips.year.avg %>%
     dplyr::filter(!falsto_name %in% low_visit_id) %>%  # remove traps with low visit time (nee to check this for year?)
     dplyr::filter(!falsto_name %in% zero_catch_id) #%>% # exclude if zero beetles caught per whole year
   
-library(tidyr)
 #dat.counts.month <- 
 dat.ips.clean.year %>% 
   #filter(doy %in% veg.period) %>% 
