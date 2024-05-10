@@ -82,7 +82,7 @@ xy_df <- distinct(xy_df)
 my_crs <- crs(xy_sf_expand)
 
 
-# Get sums of IPS beetle per year/trap: March 31 to October 30
+# Get sums of IPS beetle per year/trap: April to September 
 ips_sum <- 
   dat.ips.clean %>% 
   group_by(year,falsto_name) %>% 
