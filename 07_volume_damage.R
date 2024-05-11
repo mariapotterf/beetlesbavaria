@@ -45,6 +45,44 @@ library(fasterize)
 library(tidyr)
 
 
+# Stats
+#library('here')
+#library('gamair')
+library('purrr')
+#library('mvnfast')
+library("tibble")
+library('cowplot')
+library('tidyr')
+library("knitr")
+
+library('readr')
+
+library(ggeffects)
+
+library(MASS)
+library(car)     # for VIF
+library(glmmTMB) # many families
+
+
+
+library(lme4) #pseudo-R2 and and mixed model functionality
+library(MuMIn) #dredge function for comparing models, AIC, marginal R^2 for mixed models
+library(sjmisc) #pseudo R^2 - but I think gets loaded as a dependency
+library(DHARMa) #model diagnostics
+library(effects) #what do my marginal effects look like?
+library(performance) #binomial model diagnostics
+library(emmeans) #post hoc for categorical predictors
+
+# test for autocorrelation
+library(lmtest)
+
+# colors
+library(RColorBrewer)
+
+#library(knitr)   # for table outputs
+
+
+
 # Data --------------------------------------------------------------------------
 ### read beetle data 
 # load cleaned data
@@ -141,57 +179,6 @@ st_is_valid(sf_simpled)
 sf_simpled = st_make_valid(sf_simpled)
 st_is_valid(sf_simpled)
 
-#plot(sf_simpled, max.plot = 1)
-
-
-# Convert damage data to raster --------------------------------------------
-
-# Assuming dist_year_crop is a SpatRaster and sf_districts_trans is an sf object
-# Convert sf object to SpatVector
-# add data to the full geometry to run teh intersection with the trap data
-v_damage <- sf_districts_trans %>% 
-  left_join(df_damage, by = c("forstrev_1" = "AELF_district_ID")) %>% 
-  vect() 
-
-
-# Assuming 'forstrev_1' in SpatVector and 'AELF_district_ID' in DataFrame are the matching join keys
-#v_damage2 <- merge(v_districts_simpl, df_damage, by.x="forstrev_1", by.y="AELF_district_ID")
-
-#plot(v_damage2)
-
-# Check if identical --------------
-identical(crs(v_damage), crs(v_damage2))  # yes
-identical(ext(v_damage), ext(v_damage2))
-
-# !!!! convert damage data to raster???? -----------------------------------------
-# maybe skip? 
-v_districts_trans <- vect(sf_districts_trans)
-
-plot(v_districts_trans)
-# Set the CRS of the vector to match the raster's CRS
-crs(v_districts_trans) <- crs(dist_year_crop)
-
-# Get the extent of the vector
-ext <- ext(v_districts_trans)
-
-# Convert extent to a SpatExtent object (if needed, usually ext() returns SpatExtent)
-ext <- as(ext, "SpatExtent")
-
-
-# Intersect the SpatVector with the extent (converted to a SpatRaster for compatibility)
-# First, create a SpatRaster from the extent using the original raster's resolution
-ext_ras <- rast(ext, nrow=nrow(dist_year_crop), 
-                ncol=ncol(dist_year_crop), crs=crs(dist_year_crop))
-
-# Rasterize the intersected vector back onto the original raster grid
-# Assuming 'forstrev_1' is a field in your vector data
-grid_damage <- rasterize(v_districts_trans, 
-                          dist_year_crop, 
-                          field="damaged_volume_total_m3")
-
-# -*----------------------------------------------------
-
-
 ###### convert districts poly to raster ------------------------------------
 
 # get extend and set correct projectipn
@@ -211,20 +198,28 @@ grid_sel     <- st_intersection(st_as_sf(sf_simpled), st_as_sf(ext))
 grid_sel_ras <- fasterize::fasterize(grid_sel, raster(dist_year_crop), field = "forstrev_1") # name the new rasters as polygon ids  #, field = "forstrev_1"
 
 # extract beetle sums positions
-ips_sum_sf_trans <- st_transform(ips_sum_sf, crs = st_crs(disturb_year))
+ips_sum_sf_trans <- st_transform(ips_sum_sf, crs = st_crs(raster(dist_year_crop)))
 
 # try of geometry fits
 plot(grid_sel_ras)
 plot(ips_sum_sf_trans ,add = T)
 
+plot(rast(grid_sel_ras))
+plot(vect(ips_sum_sf_trans) ,add = T)
 
-# extract the reviers ID (from the districts) to the beetle counts data 
-district_ID <- terra::extract(rast(grid_sel_ras), vect(ips_sum_sf_trans), df = TRUE )
 
-# merge district number data to the beetle counts  
-ips_damage_district<- cbind(district_ID, ips_sum_sf_trans)
+# check if the crs fits! YES
+st_crs(grid_sel_ras) == st_crs(ips_sum_sf_trans)
+st_crs(rast(grid_sel_ras)) == st_crs(vect(ips_sum_sf_trans))
+crs(rast(grid_sel_ras)) == crs(vect(ips_sum_sf_trans))
 
-ips_damage_district <- ips_damage_district %>% 
+
+# extract the 'reviers ID' (from the districts) to the beetle counts data 
+district_ID <- terra::extract(rast(grid_sel_ras), vect(ips_sum_sf_trans), df = TRUE, bind = TRUE )
+
+# convert to dataframe
+ips_damage_district <- district_ID %>% 
+  as.data.frame() %>% 
   rename(forstrev_1 = layer)
 
 
@@ -232,9 +227,9 @@ ips_damage_district <- ips_damage_district %>%
 ips_damage_merge <- ips_damage_district %>% 
   left_join(df_damage, by = c('forstrev_1' = 'AELF_district_ID',
                               'year' = 'Year')) %>% 
-  dplyr::select(-c(ID, id, AELF_district_name,AELF_name, AELF_ID,
+  dplyr::select(-c(id, AELF_district_name,AELF_name, AELF_ID,
                  pest_species, tree_species, unit,
-                 globalid,geometry )) %>% 
+                 globalid )) %>% 
   # lag tree damage: does beetle counts (or their lags) predict tree damage?:
   group_by(falsto_name) %>% 
   arrange(year, .by_group = TRUE) %>%
@@ -244,10 +239,16 @@ ips_damage_merge <- ips_damage_district %>%
 # remove NAs
 ips_damage_clean <- na.omit(ips_damage_merge)
 
+ips_damage_clean <- ips_damage_clean %>% 
+  mutate(pop_level = case_when(log_sum_beetle < 10 ~ 'low',
+                               log_sum_beetle >= 10 ~ 'high'
+                               )) %>% 
+  mutate(pop_level = factor(pop_level))
+
 # get log values - makes it nice for damaged volume
-ips_damage_clean$log_sum_beetle                   <- log(ips_damage_clean$sum_beetle + 1)
-ips_damage_clean$log_sum_beetle_lag1              <- log(ips_damage_clean$sum_beetle_lag1 + 1)
-ips_damage_clean$log_sum_beetle_lag2              <- log(ips_damage_clean$sum_beetle_lag2 + 1)
+ips_damage_clean$log_sum_beetle              <- log(ips_damage_clean$sum_beetle + 1)
+ips_damage_clean$log_sum_beetle_lag1         <- log(ips_damage_clean$sum_beetle_lag1 + 1)
+ips_damage_clean$log_sum_beetle_lag2         <- log(ips_damage_clean$sum_beetle_lag2 + 1)
 ips_damage_clean$log_damaged_volume_total_m3 <- log(ips_damage_clean$damaged_volume_total_m3 + 1)
 
 
@@ -258,7 +259,7 @@ cor(ips_damage_clean$sum_beetle_lag2, ips_damage_clean$damaged_volume_total_m3, 
 
 
 
-# try correlation: pearson
+# try correlation: of the log values: the same values!
 cor(ips_damage_clean$log_sum_beetle, ips_damage_clean$log_damaged_volume_total_m3)
 cor(ips_damage_clean$log_sum_beetle_lag1, ips_damage_clean$log_damaged_volume_total_m3)
 cor(ips_damage_clean$log_sum_beetle_lag2, ips_damage_clean$log_damaged_volume_total_m3)
@@ -268,8 +269,103 @@ m_lag0 <- glm(log_damaged_volume_total_m3 ~ log_sum_beetle, data = ips_damage_cl
 m_lag1 <- glm(log_damaged_volume_total_m3 ~ log_sum_beetle_lag1, data = ips_damage_clean, family = gaussian())
 m_lag2 <- glm(log_damaged_volume_total_m3 ~ log_sum_beetle_lag2, data = ips_damage_clean, family = gaussian())
 
-# 
-AIC(m_lag0,m_lag1,m_lag2)
+m_poly <- glm(formula = log_damaged_volume_total_m3 ~ log_sum_beetle + I(log_sum_beetle^2), family = gaussian(), data = ips_damage_clean)
+# the lag0 is teh best from AIC, also teh variance explained: 6% for lag0
+AIC(m_lag0,m_lag1,m_lag2,m_poly)
+BIC(m_lag0,m_lag1,m_lag2)
+#r2(m_lag0,m_lag1,m_lag2)
+summary(m_poly)
+simulateResiduals(m_poly, plot = T)
+plot(allEffects(m_poly))
+
+
+library(mgcv)
+gam_model_lag0 <- gam(log_damaged_volume_total_m3 ~ s(log_sum_beetle), family = gaussian(), data = ips_damage_clean)
+gam_model_lag1 <- gam(log_damaged_volume_total_m3 ~ s(log_sum_beetle_lag1), family = gaussian(), data = ips_damage_clean)
+gam_model_lag2 <- gam(log_damaged_volume_total_m3 ~ s(log_sum_beetle_lag2), family = gaussian(), data = ips_damage_clean)
+
+plot(gam_model_lag0)
+
+AIC(gam_model_lag0,gam_model_lag1, gam_model_lag2, m_lag0,m_lag1,m_lag2,m_poly, gam_model_lag0_6) # ,gam_model_0_6
+
+# test k size
+gam_model_lag0_3 <- gam(log_damaged_volume_total_m3 ~ s(log_sum_beetle, k =3), family = gaussian(), data = ips_damage_clean)
+gam_model_lag0_6 <- gam(log_damaged_volume_total_m3 ~ s(log_sum_beetle, k =4), family = gaussian(), data = ips_damage_clean)
+
+# try without logs - wrong! better 
+gam_model_0_6 <- gam(damaged_volume_total_m3 ~ s(sum_beetle, k =6), family = tw(), data = ips_damage_clean)
+
+plot(gam_model_lag0_3)
+plot(gam_model_lag0_6)
+plot(gam_model_0_6)
+summary(gam_model_0_6)
+
+AIC(gam_model_0_6,gam_model_lag0_6 )
+summary(gam_model_lag0_6) # the best!!!
+
+library(ggplot2)
+# Assuming you are using `plot()` from `mgcv`
+plot_gam <- plot(gam_model_lag0_6, select = 1, se = TRUE, main = "Effect of Log Sum Beetle on Log Damaged Volume")
+plot_gam + ylab("Effect on Log Damaged Volume (m^3)") + xlab("Log Sum Beetle")
+
+# plot using ggeffects:
+p1 <- ggpredict(gam_model_lag0_6, terms = "log_sum_beetle [all]", allow.new.levels = TRUE)
+
+ggplot(p1, aes(x = x, y = predicted, ymin = conf.low, ymax = conf.high)) +
+  geom_line(color = 'blue') +
+  geom_ribbon(alpha = 0.1, fill = "blue") +
+  labs(y = "Effect on Log Damaged Volume (m^3)", x = "Log Sum Beetle") +
+  theme_classic()
+#pred_effects <- ggpredict(gam_model_lag0_6, terms = "log_sum_beetle")
+
+#p <- plot(pred_effects) + 
+#  labs(y = "Effect on Log Damaged Volume (m^3)", x = "Log Sum Beetle") +
+#  ggtitle("Predicted Effects of Log Sum Beetle on Tree Damage Volume")
+#print(p)
+
+# Function to convert log values to original scale and interpret
+interpret_effect <- function(log_beetle) {
+  beetle_count <- exp(log_beetle)
+  damaged_volume <- exp(predict(gam_model_lag0_6, newdata = data.frame(log_sum_beetle = log_beetle)))
+  cat("With a beetle count of", round(beetle_count), "we predict a tree damage volume of approximately", round(damaged_volume), "cubic meters.\n")
+}
+
+# Example usage
+interpret_effect(8)
+
+
+library(lme4)
+mixed_model <- lmer(log_damaged_volume_total_m3 ~ log_sum_beetle + (1 | falsto_name  ) + (1 | year), data = ips_damage_clean)
+mixed_model_poly <- lmer(log_damaged_volume_total_m3 ~ poly(log_sum_beetle,2) + (1 | falsto_name  ) + (1 | year), data = ips_damage_clean)
+
+#mixed_model_poly <- lmer(log_damaged_volume_total_m3 ~ log_sum_beetle*falsto_name + (1 | falsto_name  ), data = ips_damage_clean)
+
+
+summary(mixed_model_poly)
+r2(mixed_model_poly)
+plot(mixed_model)
+plot(allEffects(mixed_model_poly))
+AIC(mixed_model,gam_model_lag0_6,mixed_model_poly)
+
+# try glm again with teh factor
+m_level_lag0 <- glm(log_damaged_volume_total_m3 ~ log_sum_beetle +  pop_level, data = ips_damage_clean, family = gaussian())
+m_level_poly <- glm(log_damaged_volume_total_m3 ~ poly(log_sum_beetle,2) +  pop_level, data = ips_damage_clean, family = gaussian())
+m_level_poly2 <- glm(log_damaged_volume_total_m3 ~ poly(log_sum_beetle,2), data = ips_damage_clean, family = gaussian())
+
+
+summary(m_level_lag0)
+plot(allEffects(m_level_poly2))
+
+AIC(m_level_poly,m_level_lag0,m_level_poly2)
+
+boxplot(ips_damage_clean$log_sum_beetle)
+# check relationship by years
+ips_damage_clean %>% 
+  ggplot(aes(x = log_sum_beetle,
+             y = log_damaged_volume_total_m3)) +
+  geom_point() +
+  geom_smooth() #+
+  #facet_wrap(.~year)
 
 
 # use a gamma to predictthe tree damage (continuous,positive)
@@ -279,9 +375,30 @@ gamma_m_lag1 <- glm(damaged_volume_total_m3 ~ sum_beetle_lag1, family = Gamma(li
 gamma_m_lag2 <- glm(damaged_volume_total_m3 ~ sum_beetle_lag2, family = Gamma(link = "log"), data = ips_damage_clean)
 
 AIC(gamma_m_lag0, gamma_m_lag1, gamma_m_lag2)
+simulateResiduals(gamma_m_lag0, plot = T)
+
 # r2(gamma_m_lag0, gamma_m_lag1, gamma_m_lag2)
 
 # try tweedie???
+ips_damage_clean$sum_beetle_scaled <- scale(ips_damage_clean$sum_beetle)
+ips_damage_clean$sum_beetle_lag1_scaled <- scale(ips_damage_clean$sum_beetle_lag1)
+ips_damage_clean$sum_beetle_lag2_scaled <- scale(ips_damage_clean$sum_beetle_lag2)
+
+# run without scaling: running into convergence issues; too long runnning time
+tw_lag0 <- glmmTMB(damaged_volume_total_m3 ~ sum_beetle_scaled, family = tweedie(link = "log"), 
+                   data = ips_damage_clean, 
+                      na.action = na.exclude)
+tw_lag1 <- glmmTMB(damaged_volume_total_m3 ~ sum_beetle_lag1_scaled, family = tweedie(link = "log"), 
+                   data = ips_damage_clean, 
+                   na.action = na.exclude)
+tw_lag2 <- glmmTMB(damaged_volume_total_m3 ~ sum_beetle_lag2_scaled, family = tweedie(link = "log"), 
+                   data = ips_damage_clean, 
+                   na.action = na.exclude)
+
+AIC(tw_lag0, tw_lag1,tw_lag2)
+simulateResiduals(gamma_m_lag0, plot = T)
+plot(allEffects(m3))
+
 
 # get variance explained: for Gamma distribution, this is a pseudo r2
 
@@ -386,6 +503,27 @@ df_cor <- df_all %>%
                    spearm_cor_sum = cor(damaged_volume_total_m3, RS_sum, 
                                             method = "spearman", use = "complete.obs"))
 
+
+# correlations per location: beetle counts vs damage
+df_cor_counts_damage <- 
+  ips_damage_clean %>% 
+  #dplyr::filter(!ID %in% c(0, 50104, 60613,62705)) %>% # exlude if there is missing data
+  group_by(falsto_name       ) %>% 
+  dplyr::summarize(spearm_cor_lag0 = cor(damaged_volume_total_m3, sum_beetle, 
+                                           method = "spearman", use = "complete.obs"),
+                   spearm_cor_lag1 = cor(damaged_volume_total_m3, sum_beetle_lag1 , 
+                                            method = "spearman", use = "complete.obs"),
+                   spearm_cor_lag2 = cor(damaged_volume_total_m3, sum_beetle_lag2 , 
+                                        method = "spearman", use = "complete.obs"))
+
+df_cor_counts_damage_long <- df_cor_counts_damage %>% 
+  pivot_longer(-falsto_name)
+
+df_cor_counts_damage_long %>% 
+  ggplot(aes(y = value, group =factor(name), fill = name)) +
+  geom_boxplot()
+
+
 # to exclude  RS wind beetle in Passau 2018??? no!
 
 # create area plots: sum damage per year
@@ -427,11 +565,12 @@ all_shp <- sf_simpled %>%
   left_join(df_all, by = c("forstrev_1" = "ID"))
 
 # add data to the full geometry to run teh intersection with the trap data
-all_shp_complex <- sf_districts_trans %>% 
-  left_join(df_all, by = c("forstrev_1" = "ID"))
+#all_shp_complex <- sf_districts_trans %>% 
+#  left_join(df_all, by = c("forstrev_1" = "ID"))
 
-# split by years
-all_shp_complex_list <- split(all_shp_complex, all_shp_complex$year)
+cor_shp <- sf_simpled %>% 
+  left_join(df_cor, by = c("forstrev_1" = "ID"))
+
 
 
 
