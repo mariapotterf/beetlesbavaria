@@ -83,12 +83,10 @@ load(file =  "outData/lisa.Rdata")     # read LISA Moran's I stats
 # prepare data RS --------------------------------------------
 df_RS_out <- df_RS_out %>% 
   dplyr::select(-c(globalid, id)) %>% 
- # mutate(falsto_name = gsub("[^A-Za-z0-9_]", "", falsto_name)) %>% 
   dplyr::rename(trapID = falsto_name)
 
 # change column names
 lisa_merged_df <- lisa_merged_df %>% 
-  #mutate(falsto_name = gsub("[^A-Za-z0-9_]", "", falsto_name)) %>% 
   dplyr::rename(trapID = falsto_name,
                 sum_ips = sum_beetle) %>% 
   dplyr::select(c(year, trapID, sum_ips, 
@@ -97,11 +95,6 @@ lisa_merged_df <- lisa_merged_df %>%
 
 unique(lisa_merged_df$trapID)
 unique(df_RS_out$trapID)
-# lisa_merged_agg_doy_df <- 
-#   lisa_merged_agg_doy_df %>% 
-#   as.data.frame() %>% 
-#     dplyr::rename(Morans_I_agg = Morans_I) %>% 
-#   dplyr::select(year, trapID, agg_doy, Morans_I_agg)
 
 # add MOran's I values, transform the agg doy and peak doy between 0-1
 dat_fin <-   dat_fin %>% 
