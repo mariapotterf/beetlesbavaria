@@ -38,8 +38,6 @@ library(MASS)
 library(car)     # for VIF
 library(glmmTMB) # many families
 
-
-
 library(lme4) #pseudo-R2 and and mixed model functionality
 library(MuMIn) #dredge function for comparing models, AIC, marginal R^2 for mixed models
 library(sjmisc) #pseudo R^2 - but I think gets loaded as a dependency
@@ -47,6 +45,9 @@ library(DHARMa) #model diagnostics
 library(effects) #what do my marginal effects look like?
 library(performance) #binomial model diagnostics
 library(emmeans) #post hoc for categorical predictors
+
+
+library(mgcv)  # for gams
 
 # test for autocorrelation
 library(lmtest)
@@ -129,7 +130,7 @@ dat_fin <- dat_fin %>%
          population_growth2    = dplyr::lag(population_growth, n = 1, order_by = year))# %>%  # lag population growth by one more year
 
 
-View(dat_fin2)
+#View(dat_fin2)
 
 # !!!what is teh problem?? and why is teh lag = 3??
 
@@ -445,7 +446,7 @@ sjPlot::tab_df(model_lag_RS,
 
 
 
-# rerun models based on teh most important lags!! -------------------------------
+# Run the models based on teh most important lags!! -------------------------------
 # follow rules: test for intividual effects, poly tersm and interactions of teh most 
 # imortant redictors
 # for the most important model
@@ -453,6 +454,59 @@ sjPlot::tab_df(model_lag_RS,
 
 
 # IPS_counts test based on teh most important lags: lag 2 for spei3 and veg_tmp --------------
+
+# check correlation between trap counts: does it explains anything?
+# need to conevert to wide format for correlation
+df_wide <- dat_fin_counts_m %>%
+  dplyr::select(year, trapID, pairID, sum_ips) %>%
+  mutate(trap_number = str_sub(trapID, -1, -1)) %>%
+  dplyr::select(-trapID) %>% 
+  pivot_wider(
+    names_from = trap_number,
+    values_from = sum_ips,
+    names_prefix = "trap_"
+  ) %>% 
+  # calculkate difference between two traps
+  mutate(abs_trap_diff = trap_1 - trap_2,
+         ratio = trap_1/trap_2) # larger number shows higher difference
+
+
+df_corr <- df_wide %>%
+  group_by(pairID) %>%
+  mutate(
+    cor = cor(trap_1, trap_2, method = 'spearman', use = "complete.obs")  ) 
+
+
+
+df_wide %>% 
+  na.omit() %>% 
+  ggplot(aes(x = trap_1, y = trap_2)) + 
+  geom_point() + 
+  geom_smooth()
+
+
+plot(df_wide$trap_1, df_wide$trap_2 )
+
+
+df_corr %>% 
+  ggplot(aes(x = trap_1, y = trap_2)) + 
+  geom_point() + 
+  geom_smooth(method = 'lm') + 
+  facet_wrap(.~pairID, scale = 'free')
+
+
+df_corr %>% 
+  ggplot(aes(x = trap_1, y = trap_2)) + 
+  geom_point() + 
+  geom_smooth(method = 'loess') + 
+  facet_wrap(.~year, scale = 'free')
+
+
+  library(stringr)
+  a <- 'my_name_1'
+
+  str_sub(a,-1,-1)
+  
 dat_fin_counts_m <- 
   dat_fin %>% 
   dplyr::select(-wind_beetle) %>% 
@@ -467,10 +521,24 @@ dat_fin_counts_m <-
  # View()
   ungroup() %>%
   #View()
-  na.omit()
+  na.omit() %>% 
+  mutate(sum_ips_log = log(sum_ips +1))
+
+
+# do small values correlate with high values??
+x = c(1,5,4,70,8)
+y = c(10,10,30,50,40)
+
+cor(x,y)
+plot(x,y)
+# check which data are outliers
 
 #data_filtered <- data %>% 
  # na.omit() # This removes rows with any NAs across all columns
+
+# check outliers in beetle counts
+boxplot(dat_fin_counts_m$sum_ips)
+boxplot(log(dat_fin_counts_m$sum_ips))
 
 ### SUM_IPS -----------------------------------------
 
@@ -486,6 +554,18 @@ m3 <- glmmTMB(sum_ips ~ veg_tmp*spei3_lag2 + (1|pairID),
               family = nbinom2,
               data = dat_fin_counts_m)
 
+m3.time <- glmmTMB(sum_ips ~ veg_tmp*spei3_lag2 + (1|year),
+              family = nbinom2,
+              data = dat_fin_counts_m)
+
+AIC(m1,m2,m3,m3.time, m4.poly, m4)
+
+# exclue random effect
+m4.poly <- glmmTMB(sum_ips ~ poly(veg_tmp, 2) + spei3_lag2 + veg_tmp:spei3_lag2,# + (1|pairID),
+              family = nbinom2,
+              data = dat_fin_counts_m)
+
+
 # add poly terms, no interaction (issuees in model fitting otherwise)
 m4 <- glmmTMB(sum_ips ~ poly(veg_tmp, 2) + spei3_lag2 + veg_tmp:spei3_lag2 + (1|pairID),
               family = nbinom2,
@@ -494,6 +574,43 @@ m4 <- glmmTMB(sum_ips ~ poly(veg_tmp, 2) + spei3_lag2 + veg_tmp:spei3_lag2 + (1|
 m5 <- glmmTMB(sum_ips ~ poly(veg_tmp, 2) + poly(spei3_lag2,2) + (1|pairID),
               family = nbinom2,
               data = dat_fin_counts_m)
+
+# test gamm: 
+m.gam1 <- gam(sum_ips ~ s(veg_tmp, k = 4) + s(spei3_lag2, k = 4), 
+              family = nb(),method ='ML', # (use ML methos if wish to compare model with glmmTMB by AIC)  "REML", 
+              data = dat_fin_counts_m)
+
+# specify random effect of site (pairID)
+m.gam2 <- gam(sum_ips ~ s(veg_tmp, k = 4) + s(spei3_lag2, k = 4) + s(pairID, bs= 're'), 
+              family = nb(),method = 'ML', # 
+              data = dat_fin_counts_m)
+
+# add interaction between the two
+m.gam3 <- gam(sum_ips ~ s(veg_tmp, k = 4) + s(spei3_lag2, k = 4) + ti(veg_tmp, spei3_lag2) + 
+                s(pairID, bs= 're') , 
+              family = nb(),method = 'ML', #"REML", 
+              data = dat_fin_counts_m)
+
+summary(m.gam3)
+plot(m.gam3, page = 1)
+
+
+
+# Test based on Dominik;s examples: ---------------------
+# get teh feeling about how stable the fixed effects area - if they are not hindered by random effects
+
+#The random effect is really dominating your variance explained… I am wondering if the random effect somehow clouds the fixed effects, although I think what you are doing makes a lot of sense. I would test the following alternatives:
+  
+#  -	Omit the random effect
+#-	Change the random effect structure (random slope and intercept)
+#-	Add site as fixed effect
+#-	Use x and y coordinates instead of random effect
+
+
+
+
+#AIC(m.gam1, REML = FALSE)
+AIC(m4,m.gam1,m.gam2,m.gam3)
 
 #allEffects(m4)
 fin.m.counts <- m4
