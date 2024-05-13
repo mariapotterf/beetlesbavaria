@@ -1041,29 +1041,7 @@ save(trap_names,                 # vector of final trap names (79*2)
      dat.ips.clean,              # cleaned IPS counts (only consisten trap selected, checked for revisit time,...)
      max.diff.doy,               # max increase in beetle counts per DOY
      max.diff.doy.sf,            # sf: max increase in beetle counts per DOY
-     
-     #p_ips.max.diff.doy,          # barplot + med, max diff by doy
-    #p_ips.max.diff,              # # barplot + med, max diff
-    
-#    p_count_diff,               # plot: difference in beetle daily counts  
-    
     ips.aggreg,                  # beetle agregation per trap: DOY of overpassing XX beetles 
-  #  ips.aggreg.sf,               # sf
-    
-    # Vars
-    #doy.start, #  =  91 # April 1st
-    #doy.end, #    = 304 # Oct 30
-    #veg.period,#   = doy.start:doy.end
-    
-    #p_ips.agg,                  # plot: DOY of XX beetles
-    
-   # p_doy_max_increase,         # map: all locations
-  #   p_doy_max_increase150,      # map: filter early locations
-   #  p_diff_doy,                 # scatter plot per year
-  #   p_aggreg,                   # map: locations of beetle aggreg values by DOY
-  #  p_ips.year.sum,              # plot: sum beetles barplot per year
-    
-   # p_lm_traps,                  # plot: linear regression between trap pairs
      file="outData/ips_counts.Rdata")
 
 
