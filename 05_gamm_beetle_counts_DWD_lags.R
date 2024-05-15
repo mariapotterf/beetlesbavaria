@@ -20,6 +20,7 @@ library(ggplot2)
 library(ggpubr)
 library(ggpmisc)  # add equation to plots smooth 
 
+
 # Stats
 library('here')
 library('gamair')
@@ -33,6 +34,10 @@ library("knitr")
 library('readr')
 
 library(ggeffects)
+library(stringr)
+
+
+library(performance)  # Chek for multicollinearity
 
 library(MASS)
 library(car)     # for VIF
@@ -67,9 +72,9 @@ library(knitr)   # for table outputs
 
 # plot labels: 
 lab_popul_level       = "Population level [#]"
-lab_colonization_time = "Colonization timing [DOY]"
-lab_peak_time         = "Peak timing [DOY]"
-lab_peak_growth       = "Peak growth [#]"
+lab_colonization_time = "Aggregation timing [DOY]"
+lab_peak_time         = "Peak swarming\ntiming [DOY]"
+lab_peak_growth       = "Peak swarming\intensity [#]"
 
 
 
@@ -130,11 +135,33 @@ dat_fin <- dat_fin %>%
          population_growth2    = dplyr::lag(population_growth, n = 1, order_by = year))# %>%  # lag population growth by one more year
 
 
-#View(dat_fin2)
-
-# !!!what is teh problem?? and why is teh lag = 3??
-
 # Find teh most influential time lag :  0,1,2,3----------------------------------------------
+
+
+# prepare tables
+
+# specify individual datasets, to limit the NAs values and to scale them
+dat_fin_no_RS <- dat_fin %>% 
+  dplyr::select(!wind_beetle)
+
+cols_skip <- c('trapID', 'pairID', 'Morans_I_log', 'Morans_I')
+
+# export new df
+dat_fin_Moran <-  dat_fin %>% 
+  #  dplyr::filter(Morans_I_log > 0 & year %in% 2018:2021) %>%
+  dplyr::select(-wind_beetle)
+
+dat_fin_Moran_scaled <-
+  dat_fin_Moran %>% 
+  ungroup(.) %>% 
+  # na.omit() %>% 
+  dplyr::select(-all_of(cols_skip )) %>%
+  # Apply the scale function
+  scale(center = TRUE, scale = TRUE) %>%
+  as.data.frame() %>%
+  # Bind the unscaled columns back
+  bind_cols(dat_fin_Moran %>% dplyr::select(all_of(cols_skip)), .)
+
 
 
 
@@ -333,29 +360,6 @@ predictors_RS         <- c("spring_tmp", "veg_tmp", "spei3", "sum_ips", "peak_do
 lags <- 0:3
 #data <- dat_fin # Assuming dat_fin is your dataset
 
-# specify individual datasets, to limit the NAs values and to scale them
-dat_fin_no_RS <- dat_fin %>% 
-  dplyr::select(!wind_beetle)
-
-cols_skip <- c('trapID', 'pairID', 'Morans_I_log', 'Morans_I')
-
-# export new df
-dat_fin_Moran <-  dat_fin %>% 
-#  dplyr::filter(Morans_I_log > 0 & year %in% 2018:2021) %>%
-  dplyr::select(-wind_beetle)
-
-dat_fin_Moran_scaled <-
-  dat_fin_Moran %>% 
-  ungroup(.) %>% 
- # na.omit() %>% 
-    dplyr::select(-all_of(cols_skip )) %>%
-  # Apply the scale function
-  scale(center = TRUE, scale = TRUE) %>%
-  as.data.frame() %>%
-  # Bind the unscaled columns back
-  bind_cols(dat_fin_Moran %>% dplyr::select(all_of(cols_skip)), .)
-
-
   
 ### Get lag models, validated by AIC --------------------------------------------
 model_lag_sum_ips <- fit_lags_negbin(dat_fin_no_RS, predictors  = predictors_beetle_dyn, 
@@ -455,6 +459,26 @@ sjPlot::tab_df(model_lag_RS,
 
 # IPS_counts test based on teh most important lags: lag 2 for spei3 and veg_tmp --------------
 
+  
+dat_fin_counts_m <- 
+  dat_fin %>% 
+  dplyr::select(-wind_beetle) %>% 
+  # data %>%
+  group_by(trapID) %>%
+  arrange(year, .by_group = TRUE) %>%
+  mutate(spei3_lag2 = lag(spei3, n = 2, default = NA),
+         spei3_lag3 = lag(spei3, n = 3, default = NA),
+         veg_tmp_lag2 = lag(veg_tmp, n = 2, default = NA),
+         veg_tmp_lag3 = lag(veg_tmp, n = 3, default = NA)) %>%
+  mutate(peak_diff  = as.integer(peak_diff )) %>%
+ # View()
+  ungroup() %>%
+  #View()
+  na.omit() %>% 
+  mutate(sum_ips_log = log(sum_ips +1))
+
+
+###### check correlation between traps -------------------------- 
 # check correlation between trap counts: does it explains anything?
 # need to conevert to wide format for correlation
 df_wide <- dat_fin_counts_m %>%
@@ -491,8 +515,8 @@ plot(df_wide$trap_1, df_wide$trap_2 )
 df_corr %>% 
   ggplot(aes(x = trap_1, y = trap_2)) + 
   geom_point() + 
-  geom_smooth(method = 'lm') + 
-  facet_wrap(.~pairID, scale = 'free')
+  geom_smooth(method = 'lm') #+ 
+  #facet_wrap(.~pairID, scale = 'free')
 
 
 df_corr %>% 
@@ -502,36 +526,6 @@ df_corr %>%
   facet_wrap(.~year, scale = 'free')
 
 
-  library(stringr)
-  a <- 'my_name_1'
-
-  str_sub(a,-1,-1)
-  
-dat_fin_counts_m <- 
-  dat_fin %>% 
-  dplyr::select(-wind_beetle) %>% 
-  # data %>%
-  group_by(trapID) %>%
-  arrange(year, .by_group = TRUE) %>%
-  mutate(spei3_lag2 = lag(spei3, n = 2, default = NA),
-         spei3_lag3 = lag(spei3, n = 3, default = NA),
-         veg_tmp_lag2 = lag(veg_tmp, n = 2, default = NA),
-         veg_tmp_lag3 = lag(veg_tmp, n = 3, default = NA)) %>%
-  mutate(peak_diff  = as.integer(peak_diff )) %>%
- # View()
-  ungroup() %>%
-  #View()
-  na.omit() %>% 
-  mutate(sum_ips_log = log(sum_ips +1))
-
-
-# do small values correlate with high values??
-x = c(1,5,4,70,8)
-y = c(10,10,30,50,40)
-
-cor(x,y)
-plot(x,y)
-# check which data are outliers
 
 #data_filtered <- data %>% 
  # na.omit() # This removes rows with any NAs across all columns
@@ -545,6 +539,10 @@ boxplot(log(dat_fin_counts_m$sum_ips))
 m1 <- glmmTMB(sum_ips ~ veg_tmp + spei3_lag2,
               family = nbinom2,
               data = dat_fin_counts_m)
+m1.nb <- glm.nb(sum_ips ~ veg_tmp + spei3_lag2,
+             # family = nbinom2,
+              data = dat_fin_counts_m)
+
 # veg_tmp s slightly better then veg_tmp_lag2, proceed with veg_tmp
 m2 <- glmmTMB(sum_ips ~ veg_tmp*spei3_lag2,
               family = nbinom2,
@@ -558,18 +556,20 @@ m3.time <- glmmTMB(sum_ips ~ veg_tmp*spei3_lag2 + (1|year),
               family = nbinom2,
               data = dat_fin_counts_m)
 
-AIC(m1,m2,m3,m3.time, m4.poly, m4)
 
 # exclue random effect
-m4.poly <- glmmTMB(sum_ips ~ poly(veg_tmp, 2) + spei3_lag2 + veg_tmp:spei3_lag2,# + (1|pairID),
-              family = nbinom2,
+m4.poly <- glm.nb(sum_ips ~ poly(veg_tmp, 2) + spei3_lag2 + veg_tmp:spei3_lag2,# + (1|pairID),
+             # family = nbinom2,
               data = dat_fin_counts_m)
 
+#AIC(m1,m1.nb, m2,m3,m3.time, m4.poly, m4)
 
 # add poly terms, no interaction (issuees in model fitting otherwise)
 m4 <- glmmTMB(sum_ips ~ poly(veg_tmp, 2) + spei3_lag2 + veg_tmp:spei3_lag2 + (1|pairID),
               family = nbinom2,
               data = dat_fin_counts_m)
+AIC(m1,m1.nb, m2,m3,m3.time, m4.poly, m4)
+
 
 m5 <- glmmTMB(sum_ips ~ poly(veg_tmp, 2) + poly(spei3_lag2,2) + (1|pairID),
               family = nbinom2,
@@ -592,11 +592,11 @@ m.gam3 <- gam(sum_ips ~ s(veg_tmp, k = 4) + s(spei3_lag2, k = 4) + ti(veg_tmp, s
               data = dat_fin_counts_m)
 
 summary(m.gam3)
-plot(m.gam3, page = 1)
+plot(m.gam3, page = 1, shade = T)
 
+AIC(m4, m1.nb, m.gam3)
 
-
-# Test based on Dominik;s examples: ---------------------
+########## Test based on Dominik;s examples: ---------------------
 # get teh feeling about how stable the fixed effects area - if they are not hindered by random effects
 
 #The random effect is really dominating your variance explained… I am wondering if the random effect somehow clouds the fixed effects, although I think what you are doing makes a lot of sense. I would test the following alternatives:
@@ -610,18 +610,18 @@ plot(m.gam3, page = 1)
 
 
 #AIC(m.gam1, REML = FALSE)
-AIC(m4,m.gam1,m.gam2,m.gam3)
+AIC(m4,m1.nb, m.gam1,m.gam2,m.gam3)
 
 #allEffects(m4)
-fin.m.counts <- m4
+#fin.m.counts <- m4
+fin.m.counts <- m.gam3
 
 simulateResiduals(m4, plot = T)
 
 summary(m4)
 AIC(m1, m2, m3, m4, m5)
 
-# Chek for multicollinearity
-library(performance)
+
 
 # Assuming your model is an 'lme4' or 'glmmTMB' object
 (vif_values <- performance::check_collinearity(m1))
@@ -1196,7 +1196,7 @@ m1 <- glmmTMB(wind_beetle ~ veg_tmp_lag2 + spei3_lag2 + agg_doy_lag2 + peak_doy_
                 sum_ips_lag2 + peak_diff_lag2 + Morans_I_log_lag2 + population_growth2,
               family = nbinom2,
               data = dat_fin_RS_scaled)
-summary(m2)
+summary(m1)
 # Assuming your model is an 'lme4' or 'glmmTMB' object, check from additive model
 (vif_values <- performance::check_collinearity(m1))
 
@@ -1209,6 +1209,23 @@ m1.2 <- glmmTMB(wind_beetle ~ veg_tmp_lag2*spei3_lag2 +
               family = nbinom2,
               data = dat_fin_RS_scaled)
 
+# only spei is significant here, add interaction with climate
+m1.2.1 <- glmmTMB(wind_beetle ~ veg_tmp_lag2*spei3_lag2 + 
+                  agg_doy_lag2 + peak_doy_lag2, # + 
+                 # sum_ips_lag2 + peak_diff_lag2 + 
+                  # Morans_I_log_lag2 + population_growth2,
+                family = nbinom2,
+                data = dat_fin_RS_scaled)
+
+
+m1.2.1.re <- glmmTMB(wind_beetle ~ veg_tmp_lag2*spei3_lag2 + 
+                    agg_doy_lag2 + peak_doy_lag2  +  (1|pairID),
+                  # sum_ips_lag2 + peak_diff_lag2 + 
+                  # Morans_I_log_lag2 + population_growth2,
+                  family = nbinom2,
+                  data = dat_fin_RS_scaled)
+
+AIC(m3,m1.2.1,m1.2.1.re)
 
 # keep only beetle pop predictors 
 m2 <- glmmTMB(wind_beetle ~ #veg_tmp_lag2*spei3_lag2 + 
@@ -1228,16 +1245,25 @@ m3 <- glmmTMB(wind_beetle ~ #veg_tmp_lag2*spei3_lag2 +
               ,# + ,
               family = nbinom2,
               data = dat_fin_RS_scaled)
-AIC(m1, m2, m3)
 
+# remove random effects
+m4 <- glm.nb(wind_beetle ~ #veg_tmp_lag2*spei3_lag2 + 
+                agg_doy_lag2, #+ # + peak_doy_lag2 + 
+                #peak_diff_lag2 + 
+                #Morans_I_log_lag2 + #population_growth2+ 
+                #sum_ips_lag2,# + (1|pairID) 
+             # ,# + ,
+            #  family = nbinom2,
+              data = dat_fin_RS_scaled)
 
-
+AIC(m1, m1.2, m2, m3, m4)
+r2(m4)
 
 fin.m.RS <- m3
-summary(m3)
+summary(fin.m.RS)
 
-plot(allEffects(m2))
-
+plot(allEffects(m4))
+r2(m4)
 
 
 
@@ -1520,6 +1546,8 @@ summary(fin.m.counts)
 p1 <- ggpredict(fin.m.counts, terms = "veg_tmp [all]", allow.new.levels = TRUE)
 p2 <- ggpredict(fin.m.counts, terms = "spei3_lag2 [all]", allow.new.levels = TRUE)
 p3 <- ggpredict(fin.m.counts, terms = c("veg_tmp", "spei3_lag2 [-1, 0, 1]"), allow.new.levels = TRUE)
+#p3 <- ggpredict(m.gam3, terms = c("veg_tmp", "spei3_lag2 [-1, 0, 1]"), allow.new.levels = TRUE)
+
 
 # change the values to allow y lables to fit 
 p1$predicted <- p1$predicted/100
@@ -1551,10 +1579,10 @@ p2.count <- create_effect_plot(p2, line_color = "blue",
                                x_annotate = 0,
                                lab_annotate = ".") 
 p3.count <- plot_effect_interactions(p3, 
-                                     temp_label = temp_label, 
+                                     temp_label = "temp",#''temp_label, 
                                      y_title = "Counts [#*100]",
                                      x_annotate = 13,
-                                     lab_annotate = "*") 
+                                     lab_annotate = "n.s.") 
 
 (p3.count)
 
@@ -1882,7 +1910,7 @@ sjPlot::tab_model(fin.m.agg,       file = "outTable/model_agg.doc")
 sjPlot::tab_model(fin.m.peak,      file = "outTable/model_peak.doc")
 sjPlot::tab_model(fin.m.peak.diff, file = "outTable/model_peak_diff.doc")
 sjPlot::tab_model(fin.m.moran,     file = "outTable/model_moran.doc")
-sjPlot::tab_model(fin.m.RS,        file = "outTable/model_RS.doc")
+sjPlot::tab_model(fin.m.RS,        file = "outTable/model_RS_3.doc")
 
 sum(dat_fin$sum_ips, na.rm = T)
 

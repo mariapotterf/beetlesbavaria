@@ -34,6 +34,7 @@ rm(list=ls())
 # Read my paths -----------------------------------------------------------
 source('myPaths.R')
 
+# from May 13 - clip on the spruce area from 2017-2018, as I am using 2-years lags
 
 # Read libs  --------------------------------------------------------------
 
@@ -58,8 +59,8 @@ disturb_type <- rast('rawData/fire_wind_barkbeetle_germany.tif')
 forest_cover <- rast('rawData/germany114/forestcover_germany.tif')
 
 # tree species classification: from 2017/2018 - some disturbed areas previously can be already removed???
-#spruce_cover <- rast('C:/Users/ge45lep/Documents/2022_BarkBeetles_Bavaria/rawData/tree_species_map/spruce_bavaria_resampl30.tif')
-
+# used to clip disturbances to study area
+spruce_cover <- rast('C:/Users/ge45lep/Documents/2022_BarkBeetles_Bavaria/rawData/tree_species_map/spruce_bavaria_resampl30.tif')
 
 # ID,species
 # 2,Birch
@@ -86,7 +87,7 @@ crs(forest_cover)
 
 crs(disturb_type) <- crs(disturb_year)
 crs(forest_cover) <- crs(disturb_year)
-#crs(spruce_cover) <- crs(disturb_year)
+crs(spruce_cover) <- crs(disturb_year)
 
 # get trap data
 xy_sf_all  # all XY traps
@@ -204,7 +205,7 @@ extract_rst_val <- function(xy, ...) {
    
    # tree class raster
    # crop data and then mask them to have a circle
-   spruce_cover_crop <- crop(forest_cover, buff)
+   spruce_cover_crop <- crop(spruce_cover, buff)
    spruce_cover_mask <- mask(spruce_cover_crop, buff)
    
    # Get vector of values
@@ -255,18 +256,18 @@ extract_rst_val_2 <- function(xy, buff_width) {
   
   # tree class raster
   # crop data and then mask them to have a circle
-  #spruce_cover_crop <- crop(spruce_cover, buff)
-  #spruce_cover_mask <- mask(spruce_cover_crop, buff)
+  spruce_cover_crop <- crop(spruce_cover, buff)
+  spruce_cover_mask <- mask(spruce_cover_crop, buff)
   
   # Get vector of values
   val_year <- as.vector(values(dist_year_mask))
   val_type <- as.vector(values(dist_type_mask))
-  #val_spruce <- as.vector(values(spruce_cover_mask))
+  val_spruce <- as.vector(values(spruce_cover_mask))
   
   # merge data and drop NA values
   df <- data.frame(year = val_year,
                    type = val_type,
-   #                spruce = val_spruce,
+                  spruce = val_spruce,
                    id = id,
                    buff_width = buff_width) 
   df <- df %>% 
@@ -368,7 +369,7 @@ extract_forest <- function(xy, ...) {
 
   # disturbance year
   # crop data and then mask them to have a circle
-  forest_crop <- terra::crop(forest_cover, buff)
+  forest_crop <- terra::crop(forest_cover, buff) # from corneliuses database, covering 1986-2020
   forest_mask <- terra::mask(forest_crop, buff)
 
   # Get vector of values
@@ -454,8 +455,8 @@ dist_df_exp <-
 # Merge disturance data with spruce per buffer, to know how much spruce I have left
 df_merge <- 
   dist_df_exp %>% 
-  dplyr::mutate(wind_beetle  = replace_na(wind_beetle, 0),
-         harvest     = replace_na(harvest, 0)) %>% 
+  dplyr::mutate(wind_beetle  = tidyr::replace_na(wind_beetle, 0),
+         harvest     = tidyr::replace_na(harvest, 0)) %>% 
  # full_join(spruce_df, by = 'id') %>%
   dplyr::mutate(all_dist_sum        = wind_beetle + harvest,
            cum_removed       = cumsum(all_dist_sum) ) #,
