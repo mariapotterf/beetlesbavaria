@@ -177,7 +177,7 @@ xy_ls <- terra::split(xy, c('id')) #,# "OBJECTID" #
 
 buff_width = 500  # 500 m
 
-# make a function to export df from each buffer: keep years, disturbance type and forest:
+# make a function to export df from each buffer: keep years & disturbance type and forest:
 # filter by spruce cover (30 m)
 extract_rst_val <- function(xy, ...) {
   
@@ -226,6 +226,58 @@ extract_rst_val <- function(xy, ...) {
    return(df)
   
   }
+
+
+# compare with and without spruce mask:
+# make a function to export df from each buffer: keep years & disturbance type and forest:
+# filter by spruce cover (30 m)
+extract_rst_val_no_spruce <- function(xy, ...) {
+  
+  #xy<- xy_ls[[951]]
+  # xy<- xy_ls[[952]]
+  id          <- xy$id
+  falsto_name <- xy$falsto_name
+  #print(id)
+  
+  # get buffer
+  buff <- buffer(xy, buff_width)
+  #print('buff')
+  
+  # disturbance year
+  # crop data and then mask them to have a circle
+  dist_year_crop <- crop(disturb_year, buff)
+  dist_year_mask <- mask(dist_year_crop, buff)
+  #print('2')
+  
+  
+  # disturbance type: harvest, fire, beetle
+  dist_type_crop <- crop(disturb_type, buff)
+  dist_type_mask <- mask(dist_type_crop, buff)
+  #print('3')
+  
+  # tree class raster
+  # crop data and then mask them to have a circle
+  #spruce_cover_crop <- crop(spruce_cover, buff)
+  #spruce_cover_mask <- mask(spruce_cover_crop, buff)
+  
+  # Get vector of values
+  val_year <- as.vector(values(dist_year_mask))
+  val_type <- as.vector(values(dist_type_mask))
+  #val_spruce <- as.vector(values(spruce_cover_mask))
+  
+  # merge data and drop NA values
+  df <- data.frame(year = val_year,
+                   type = val_type,
+   #                spruce = val_spruce,
+                   id = id,
+                   falsto_name = falsto_name) 
+  df <- df %>% 
+    drop_na()
+  
+  
+  return(df)
+  
+}
 
 
 # sensitivit  analysis -+------------------------------------------------------
@@ -387,6 +439,35 @@ extract_forest <- function(xy, ...) {
 
 options(terra.pardegree = 1)
 
+
+# Test for no spruce clipped; --------------------------------------------------
+
+# run over all locations
+# extract disturbances
+out_dist_ls_no_spruce <- lapply(xy_ls, extract_rst_val_no_spruce) #extract_rst_val(xy_ls[[10]])
+
+# merge partial tables into one df
+dist_df_no_spruce      <-do.call("rbind", out_dist_ls_no_spruce)
+
+
+# pre-process table, calculate individual pixels into categories
+dist_df_out_no_spruce <- 
+  dist_df %>% 
+  #mutate(year = as.numeric(as.character(year))) %>% # convert factor to numeric
+  group_by(year, type, id, falsto_name) %>%
+  #dplyr::select(-spruce) %>% 
+  dplyr::summarize(Freq = n()) %>% # get count of pixels by category per buffer
+  spread(type, Freq) 
+
+# rplelace NA by 0
+dist_df_out_no_spruce[is.na(dist_df_out_no_spruce)] <- 0
+
+
+# -------------------------------------------------------------------------------
+
+
+
+
 # run over all locations
 # extract disturbances
 out_dist_ls <- lapply(xy_ls, extract_rst_val) #extract_rst_val(xy_ls[[10]])
@@ -407,6 +488,19 @@ dist_df_out <-
 # rplelace NA by 0
 dist_df_out[is.na(dist_df_out)] <- 0
   
+# compare differences between clipped with spruce, without spruce --------------
+
+head(dist_df)
+head(dist_df_no_spruce)
+
+nrow(dist_df)
+nrow(dist_df_no_spruce)
+
+
+hist(dist_df$year)
+hist(dist_df_no_spruce$year)
+
+
 # output needed: for every year, I need how many cells was disturbed by what agent
 # coding
 # 1 = wind & beetles
@@ -519,7 +613,7 @@ df_RS_out <-
   #        lag2_beetles   = dplyr::lag(wind_beetle,      n=2)) 
 
 
-View(df_RS_out)
+#View(df_RS_out)
 
 
 save(#spruce_df,         # spruce cover by id, from 2017
