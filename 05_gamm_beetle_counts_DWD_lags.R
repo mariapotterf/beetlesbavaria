@@ -547,7 +547,7 @@ m1.nb <- glm.nb(sum_ips ~ veg_tmp + spei3_lag2,
 m2 <- glmmTMB(sum_ips ~ veg_tmp*spei3_lag2,
               family = nbinom2,
               data = dat_fin_counts_m)
-# add raodom effects
+# add random effects
 m3 <- glmmTMB(sum_ips ~ veg_tmp*spei3_lag2 + (1|pairID),
               family = nbinom2,
               data = dat_fin_counts_m)
@@ -577,18 +577,18 @@ m5 <- glmmTMB(sum_ips ~ poly(veg_tmp, 2) + poly(spei3_lag2,2) + (1|pairID),
 
 # test gamm: 
 m.gam1 <- gam(sum_ips ~ s(veg_tmp, k = 4) + s(spei3_lag2, k = 4), 
-              family = nb(),method ='ML', # (use ML methos if wish to compare model with glmmTMB by AIC)  "REML", 
+              family = nb(),method ='REML', # (use ML methos if wish to compare model with glmmTMB by AIC)  "REML", 
               data = dat_fin_counts_m)
 
 # specify random effect of site (pairID)
 m.gam2 <- gam(sum_ips ~ s(veg_tmp, k = 4) + s(spei3_lag2, k = 4) + s(pairID, bs= 're'), 
-              family = nb(),method = 'ML', # 
+              family = nb(),method = 'REML', # 
               data = dat_fin_counts_m)
 
 # add interaction between the two
 m.gam3 <- gam(sum_ips ~ s(veg_tmp, k = 4) + s(spei3_lag2, k = 4) + ti(veg_tmp, spei3_lag2, k = 4) + 
                 s(pairID, bs= 're') , 
-              family = nb(),method = 'ML', #"REML", 
+              family = nb(),method = 'REML', #"REML", 
               data = dat_fin_counts_m)
 
 summary(m.gam3)
@@ -615,6 +615,7 @@ m.gam_random_slopes <- gam(sum_ips ~ s(veg_tmp, k = 4) +
                              s(veg_tmp, pairID, bs = "re") + 
                              s(spei3_lag2, pairID, bs = "re"),
                            family = nb(),
+                           method = 'REML',
                            data = dat_fin_counts_m)
 
 m.gam_random_slopes_int <- gam(sum_ips ~ s(veg_tmp, k = 4) + 
@@ -624,6 +625,7 @@ m.gam_random_slopes_int <- gam(sum_ips ~ s(veg_tmp, k = 4) +
                              s(veg_tmp, pairID, bs = "re") +  # random slope
                              s(spei3_lag2, pairID, bs = "re"), # random slope
                            family = nb(),
+                           method = 'REML',
                            data = dat_fin_counts_m)
 # play with k
 m.gam_random_slopes_int_k53 <- gam(sum_ips ~ s(veg_tmp, k =5) + 
@@ -633,20 +635,13 @@ m.gam_random_slopes_int_k53 <- gam(sum_ips ~ s(veg_tmp, k =5) +
                                  s(veg_tmp, pairID, bs = "re") +  # random slope
                                  s(spei3_lag2, pairID, bs = "re"), # random slope
                                family = nb(),
+                               method = 'REML',
                                data = dat_fin_counts_m)
 
 
-m.gam_random_slopes_int_k52 <- gam(sum_ips ~ s(veg_tmp, k =5) + 
-                                    s(spei3_lag2, k = 2) + 
-                                    ti(veg_tmp, spei3_lag2, k = 4) +
-                                    s(pairID, bs = "re") +  # random intercept: ifferent baseline for pairs
-                                    s(veg_tmp, pairID, bs = "re") +  # random slope
-                                    s(spei3_lag2, pairID, bs = "re"), # random slope
-                                  family = nb(),
-                                  data = dat_fin_counts_m)
 
 
-AIC(m.gam_random_slopes_int, m.gam_random_slopes_int_k53, m.gam_random_slopes_int_k52)
+AIC(m.gam_random_slopes_int, m.gam_random_slopes_int_k53)
 # the random effect of locationis now not significant
 m.gam_random_slopes_int_no_RE <- gam(sum_ips ~ s(veg_tmp, k = 4) + 
                                  s(spei3_lag2, k = 4) + 
@@ -655,6 +650,7 @@ m.gam_random_slopes_int_no_RE <- gam(sum_ips ~ s(veg_tmp, k = 4) +
                                  s(veg_tmp, pairID, bs = "re") + 
                                  s(spei3_lag2, pairID, bs = "re"),
                                family = nb(),
+                               method = 'REML',
                                data = dat_fin_counts_m)
 
 
@@ -667,7 +663,7 @@ m.gam_random_slopes_int_RE_pair <- gam(sum_ips ~ s(veg_tmp, k = 4) +
                                  s(spei3_lag2, pairID, bs = "re") + # random slope
                                  ti(veg_tmp, spei3_lag2, pairID, bs = "re"), # random slope
                                family = nb(),
-                             #  method = "REML",
+                               method = "REML",
                                data = dat_fin_counts_m)
 
 
@@ -729,7 +725,7 @@ deviance_explained_spei3_lag2
 
 #allEffects(m4)
 #fin.m.counts <- m4
-fin.m.counts <- m.gam_random_slopes_int # m.gam3
+fin.m.counts <-  m.gam_random_slopes_int_k53# m.gam_random_slopes_int # m.gam3
 
 simulateResiduals(m4, plot = T)
 
