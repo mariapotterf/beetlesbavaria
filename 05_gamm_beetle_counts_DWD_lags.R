@@ -522,7 +522,7 @@ df_corr %>%
 df_corr %>% 
   ggplot(aes(x = trap_1, y = trap_2)) + 
   geom_point() + 
-  geom_smooth(method = 'loess') + 
+  geom_smooth(method = 'gam', formula = y ~ s(x, bs = "cs", k = 4)) + 
   facet_wrap(.~year, scale = 'free')
 
 
@@ -586,7 +586,7 @@ m.gam2 <- gam(sum_ips ~ s(veg_tmp, k = 4) + s(spei3_lag2, k = 4) + s(pairID, bs=
               data = dat_fin_counts_m)
 
 # add interaction between the two
-m.gam3 <- gam(sum_ips ~ s(veg_tmp, k = 4) + s(spei3_lag2, k = 4) + ti(veg_tmp, spei3_lag2) + 
+m.gam3 <- gam(sum_ips ~ s(veg_tmp, k = 4) + s(spei3_lag2, k = 4) + ti(veg_tmp, spei3_lag2, k = 4) + 
                 s(pairID, bs= 're') , 
               family = nb(),method = 'ML', #"REML", 
               data = dat_fin_counts_m)
@@ -594,27 +594,142 @@ m.gam3 <- gam(sum_ips ~ s(veg_tmp, k = 4) + s(spei3_lag2, k = 4) + ti(veg_tmp, s
 summary(m.gam3)
 plot(m.gam3, page = 1, shade = T)
 
-AIC(m4, m1.nb, m.gam3)
+
 
 ########## Test based on Dominik;s examples: ---------------------
 # get teh feeling about how stable the fixed effects area - if they are not hindered by random effects
 
 #The random effect is really dominating your variance explained… I am wondering if the random effect somehow clouds the fixed effects, although I think what you are doing makes a lot of sense. I would test the following alternatives:
   
-#  -	Omit the random effect
+#  -random effect  of trapspairs (eg allowing for different intercept - difernt starting point) - improves model a lot! Omit the random effect
 #-	Change the random effect structure (random slope and intercept)
 #-	Add site as fixed effect
 #-	Use x and y coordinates instead of random effect
 
+# Test random slopes
+
+# Model with random slopes for veg_tmp and spei3_lag2 by pairID
+m.gam_random_slopes <- gam(sum_ips ~ s(veg_tmp, k = 4) + 
+                             s(spei3_lag2, k = 4) + 
+                             s(pairID, bs = "re") + 
+                             s(veg_tmp, pairID, bs = "re") + 
+                             s(spei3_lag2, pairID, bs = "re"),
+                           family = nb(),
+                           data = dat_fin_counts_m)
+
+m.gam_random_slopes_int <- gam(sum_ips ~ s(veg_tmp, k = 4) + 
+                             s(spei3_lag2, k = 4) + 
+                             ti(veg_tmp, spei3_lag2, k = 4) +
+                             s(pairID, bs = "re") +  # random intercept: ifferent baseline for pairs
+                             s(veg_tmp, pairID, bs = "re") +  # random slope
+                             s(spei3_lag2, pairID, bs = "re"), # random slope
+                           family = nb(),
+                           data = dat_fin_counts_m)
+# play with k
+m.gam_random_slopes_int_k53 <- gam(sum_ips ~ s(veg_tmp, k =5) + 
+                                 s(spei3_lag2, k = 3) + 
+                                 ti(veg_tmp, spei3_lag2, k = 4) +
+                                 s(pairID, bs = "re") +  # random intercept: ifferent baseline for pairs
+                                 s(veg_tmp, pairID, bs = "re") +  # random slope
+                                 s(spei3_lag2, pairID, bs = "re"), # random slope
+                               family = nb(),
+                               data = dat_fin_counts_m)
+
+
+m.gam_random_slopes_int_k52 <- gam(sum_ips ~ s(veg_tmp, k =5) + 
+                                    s(spei3_lag2, k = 2) + 
+                                    ti(veg_tmp, spei3_lag2, k = 4) +
+                                    s(pairID, bs = "re") +  # random intercept: ifferent baseline for pairs
+                                    s(veg_tmp, pairID, bs = "re") +  # random slope
+                                    s(spei3_lag2, pairID, bs = "re"), # random slope
+                                  family = nb(),
+                                  data = dat_fin_counts_m)
+
+
+AIC(m.gam_random_slopes_int, m.gam_random_slopes_int_k53, m.gam_random_slopes_int_k52)
+# the random effect of locationis now not significant
+m.gam_random_slopes_int_no_RE <- gam(sum_ips ~ s(veg_tmp, k = 4) + 
+                                 s(spei3_lag2, k = 4) + 
+                                 ti(veg_tmp, spei3_lag2, k = 4) +
+                               #  s(pairID, bs = "re") + 
+                                 s(veg_tmp, pairID, bs = "re") + 
+                                 s(spei3_lag2, pairID, bs = "re"),
+                               family = nb(),
+                               data = dat_fin_counts_m)
+
+
+# allowing interaction to vary among traps (random slopes) did not improved the model
+m.gam_random_slopes_int_RE_pair <- gam(sum_ips ~ s(veg_tmp, k = 4) + 
+                                 s(spei3_lag2, k = 4) + 
+                                 ti(veg_tmp, spei3_lag2, k = 4) +
+                               #  s(pairID, bs = "re") + 
+                                 s(veg_tmp, pairID, bs = "re") + # random slope for tmp
+                                 s(spei3_lag2, pairID, bs = "re") + # random slope
+                                 ti(veg_tmp, spei3_lag2, pairID, bs = "re"), # random slope
+                               family = nb(),
+                             #  method = "REML",
+                               data = dat_fin_counts_m)
 
 
 
-#AIC(m.gam1, REML = FALSE)
-AIC(m4,m1.nb, m.gam1,m.gam2,m.gam3)
+
+# Summary of the model
+summary(m.gam_random_slopes_int_k53   )
+plot(m.gam_random_slopes_int_k53   , page = 1)
+
+AIC(#m4, m1.nb,
+    m.gam1, m.gam2, m.gam3, m.gam_random_slopes, m.gam_random_slopes_int,
+    m.gam_random_slopes_int_no_RE, m.gam_random_slopes_int_RE_pair)
+
+
+
+# How much variance is explained by individual terms????? -----------
+# Full model
+m.gam_random_slopes_int <- gam(sum_ips ~ s(veg_tmp, k = 4) + 
+                                 s(spei3_lag2, k = 4) + 
+                                 ti(veg_tmp, spei3_lag2, k = 4) +
+                                 s(pairID, bs = "re") +  # random intercept: ifferent baseline for pairs
+                                 s(veg_tmp, pairID, bs = "re") +  # random slope
+                                 s(spei3_lag2, pairID, bs = "re"), # random slope
+                               family = nb(),
+                               data = dat_fin_counts_m)
+
+# Model without veg_tmp
+m_no_veg_tmp <- gam(sum_ips ~ s(spei3_lag2, k = 4) + 
+                      ti(veg_tmp, spei3_lag2, k = 4) +
+                      s(spei3_lag2, pairID, bs = "re"),
+                    family = nb(),
+                    data = dat_fin_counts_m)
+
+# Model without spei3_lag2
+m_no_spei3_lag2 <- gam(sum_ips ~ s(veg_tmp, k = 4) + 
+                         ti(veg_tmp, spei3_lag2, k = 4) +
+                         s(veg_tmp, pairID, bs = "re"),
+                       family = nb(),
+                       data = dat_fin_counts_m)
+
+# Full model deviance explained
+dev_full <- summary(m.gam_random_slopes_int)$dev.expl
+
+# Reduced models deviance explained
+dev_no_veg_tmp <- summary(m_no_veg_tmp)$dev.expl
+dev_no_spei3_lag2 <- summary(m_no_spei3_lag2)$dev.expl
+
+# Deviance explained by each predictor
+deviance_explained_veg_tmp <- dev_full - dev_no_veg_tmp
+deviance_explained_spei3_lag2 <- dev_full - dev_no_spei3_lag2
+
+# Print results
+deviance_explained_veg_tmp
+deviance_explained_spei3_lag2
+
+
+
+
 
 #allEffects(m4)
 #fin.m.counts <- m4
-fin.m.counts <- m.gam3
+fin.m.counts <- m.gam_random_slopes_int # m.gam3
 
 simulateResiduals(m4, plot = T)
 
@@ -1584,7 +1699,7 @@ p3.count <- plot_effect_interactions(p3,
                                      x_annotate = 13,
                                      lab_annotate = "n.s.") 
 
-(p3.count)
+ggarrange(p1.count,p2.count, p3.count)
 
 
 
@@ -1905,7 +2020,7 @@ summary(fin.m.RS)
 
 
 # export all models
-sjPlot::tab_model(fin.m.counts,    file = "outTable/model_counts.doc")
+sjPlot::tab_model(fin.m.counts,    file = "outTable/gam_counts.doc")
 sjPlot::tab_model(fin.m.agg,       file = "outTable/model_agg.doc")
 sjPlot::tab_model(fin.m.peak,      file = "outTable/model_peak.doc")
 sjPlot::tab_model(fin.m.peak.diff, file = "outTable/model_peak_diff.doc")
