@@ -817,23 +817,6 @@ check_collinearity(m.gam.spei_tmp_re_slope45_temp_int)
 
 
 
-fin.m <- m.gam.spei_tmp_re_slope45_temp_int
-#!!! --------------------------------------------
-# plot in easy way how tdoes the k value affect interaction
-p1 <- ggpredict(fin.m, terms = "veg_tmp [all]", allow.new.levels = TRUE)
-p2 <- ggpredict(fin.m, terms = "spei3_lag2 [all]", allow.new.levels = TRUE)
-p3 <- ggpredict(fin.m, terms = c("veg_tmp", "spei3_lag2 [-1, 0, 1]"), allow.new.levels = TRUE)
-#p3 <- ggpredict(m.gam3, terms = c("veg_tmp", "spei3_lag2 [-1, 0, 1]"), allow.new.levels = TRUE)
-
-
-
-# test simple plot:
-ggplot(p2, aes(x = x , y = predicted , ymin = conf.low, ymax = conf.high)) +
-  geom_ribbon(aes(ymin = conf.low, ymax = conf.high, fill = group), alpha = 0.3) +
-  geom_line(aes(color = group, linetype = group), linewidth = 1) 
-
-
-
 ###### How much variance is explained by individual terms????? -----------
 # Full model
 m.gam_random_slopes_int77
@@ -880,7 +863,98 @@ fin.m.counts <-   m.gam.spei_tmp_re_slope45_temp_int #m.gam_random_slopes_int77 
 
 
 ### Peak difference --------------------------------------------------
-# best lags: veg_tmp_lag3 + spei3_lag3
+
+# test gam: use the save variables for spei and veg_tmp as for sum_ips
+m1 <- gam(peak_diff ~ s(spei3_lag2, k = 4) + 
+                                             s(veg_tmp, k = 5) +
+                                             ti(spei3_lag2, veg_tmp, k = 4) +
+                                             s(pairID, bs= 're') +
+                                             s(spei3_lag2, pairID, bs = "re") +
+                                             s(veg_tmp, pairID, bs = "re"), #+ ,
+                                           family = nb(),method ='REML', # (use ML methos if wish to compare model with glmmTMB by AIC)  "REML", 
+                                           data = dat_fin_counts_m_scaled)
+
+# test gam: use the save variables for spei and veg_tmp as for sum_ips
+m2 <- gam(peak_diff ~ s(spei3_lag2, k = 4) + 
+            s(veg_tmp_lag2, k = 5) +
+            ti(spei3_lag2, veg_tmp_lag2, k = 4) +
+            s(pairID, bs= 're') +
+            s(spei3_lag2, pairID, bs = "re") +
+            s(veg_tmp, pairID, bs = "re"), #+ ,
+          family = nb(),method ='REML', # (use ML methos if wish to compare model with glmmTMB by AIC)  "REML", 
+          data = dat_fin_counts_m_scaled)
+
+
+check_collinearity(m2)
+summary(m2)
+plot(m2, page = 1, shade = T)
+
+fin.m.peak.diff <- m1
+
+
+#########################################################
+# maybe use???
+# !!!!
+
+library(mgcv)
+
+# Initialize a data frame to store AIC values
+aic_values <- data.frame(Predictor = character(), Dependent = character(), AIC = numeric())
+
+# List of dependent variables
+dependent_vars <- c("sum_ips", "other_dependent_var1", "other_dependent_var2")  # add your dependent variables here
+
+# Loop over each dependent variable
+for (dep in dependent_vars) {
+  # Loop over each predictor
+  for (pred in names(selected_predictors)) {
+    # Fit the model
+    formula <- as.formula(paste(dep, "~ s(", pred, ", k = 4) + s(pairID, bs = 're')"))
+    model <- gam(formula, family = nb(), method = 'REML', data = dat_fin_counts_m)
+    
+    # Store the AIC value
+    aic_values <- rbind(aic_values, data.frame(Predictor = pred, Dependent = dep, AIC = AIC(model)))
+  }
+}
+
+# View the AIC values
+aic_values
+
+# Select the best predictor for each dependent variable based on the lowest AIC
+best_predictors <- aic_values %>% group_by(Dependent) %>% slice(which.min(AIC))
+
+# View the best predictors
+best_predictors
+
+# ##############################################################################
+
+
+
+
+fin.m <- fin.m.peak.diff
+#!!! --------------------------------------------
+# plot in easy way how tdoes the k value affect interaction
+p1 <- ggpredict(fin.m, terms = "veg_tmp [all]", allow.new.levels = TRUE)
+p2 <- ggpredict(fin.m, terms = "spei3_lag2 [all]", allow.new.levels = TRUE)
+p3 <- ggpredict(fin.m, terms = c("veg_tmp", "spei3_lag2 [-1, 0, 1]"), allow.new.levels = TRUE)
+#p3 <- ggpredict(m.gam3, terms = c("veg_tmp", "spei3_lag2 [-1, 0, 1]"), allow.new.levels = TRUE)
+
+
+
+# test simple plot:
+ggplot(p3, aes(x = x , y = predicted , ymin = conf.low, ymax = conf.high)) +
+  geom_ribbon(aes(ymin = conf.low, ymax = conf.high, fill = group), alpha = 0.3) +
+  geom_line(aes(color = group, linetype = group), linewidth = 1) 
+
+
+
+
+
+#OLD:  best lags: veg_tmp_lag3 + spei3_lag3
+
+
+
+
 
 m1 <- glmmTMB(peak_diff  ~ veg_tmp_lag3 + spei3_lag3,
               family = nbinom2,
@@ -924,7 +998,7 @@ summary(m6)
 
 summary(m4)
 AIC(m1, m2, m3, m4, m5)
-fin.m.peak.diff <- m4
+#fin.m.peak.diff <- #m4
 
 
 # Assuming your model is an 'lme4' or 'glmmTMB' object
