@@ -31,10 +31,12 @@
 
 # Libs --------------------------------------------------------------------------
 library(dplyr)
+
+library(sf)
 library(raster)
 library(terra)
 
-library(sf)
+
 library(data.table)
 library(ggplot2)
 library(ggpubr)
@@ -116,15 +118,12 @@ crs(disturb_year) <- "EPSG:3035"
 sf_ID   <- unique(sf_districts$forstrev_1)  # 336 districts numbers
 df_ID   <- unique(df_damage$AELF_district_ID)  # 337 district numbers
 
-length(sf_ID)
-length(df_ID)
+#length(sf_ID)
+#length(df_ID)
 
 
-# Process rasters ------------------------------------------------------------
-# there is an aditiona row in the damage data with district ID 0 - I can remove that
-hist(df_damage$damaged_volume_total_m3)
 
-
+#### Process beetle sums/year/trap --------------------------------------------
 # add beetle counts to trap locations per year 
 ips_sum <- 
   dat.ips.clean %>% 
@@ -159,11 +158,18 @@ v_districts_simpl <- simplifyGeom(v_districts, tolerance=20, preserveTopology=TR
 v_ips_sum_simpl   <- simplifyGeom(v_ips_sum, tolerance=20, preserveTopology=TRUE, makeValid=TRUE)
 
 
+writeVector(v_ips_sum_simpl, 'outSpatial/XY_beetle_sum_years.gpkg', overwrite=TRUE) 
+
 #  does simplification work? yes!!
 plot(v_districts_simpl)
 plot(v_ips_sum_simpl, add = T, col = 'red')
 
 identical(crs(v_districts_simpl), crs(v_ips_sum_simpl))
+
+
+# Process rasters ------------------------------------------------------------
+# there is an aditiona row in the damage data with district ID 0 - I can remove that
+
 
 ###### crop the rasters: they are for whole germany, crop to Bavaria --------------------------
 dist_year_crop <- terra::crop(disturb_year, v_districts_simpl)
@@ -178,11 +184,7 @@ crs(forest_crop)  <- crs(dist_year_crop)
 # Simplify the df districts geometry -------------------------------
 sf_simpled <- st_as_sf(v_districts_simpl) #st_simplify(sf_districts_trans, dTolerance = 20, preserveTopology = TRUE)
 
-# check validity
-st_is_valid(sf_simpled)
-
-sf_simpled = st_make_valid(sf_simpled)
-st_is_valid(sf_simpled)
+identical(crs(sf_simpled), crs(v_districts_simpl))
 
 ###### convert districts poly to raster ------------------------------------
 
@@ -190,21 +192,29 @@ st_is_valid(sf_simpled)
 ext <- as(extent(sf_simpled), 'SpatialPolygons')  # treat raster as from raster, not terra package
 ext <- st_as_sf(ext)
 
+identical(crs(ips_sum_sf_trans), crs(ext))
+
 # efine teh crs first - it was NA
 st_crs(ext) <- my_crs# st_crs(raster(disturb_year))
 
-ext  <- st_transform(ext, crs = my_crs)
+#ext  <- st_transform(ext, crs = my_crs)
 
 st_crs(sf_simpled) == st_crs(ext) 
 st_crs(disturb_year) == st_crs(ext) 
 st_crs(ips_sum_sf_trans) == st_crs(ext) 
 
+# create a base raster to rasteroize to it
+base_raster = raster(dist_year_crop)
+
 # Create grid index for each pixel
-grid_sel     <- st_intersection(st_as_sf(sf_simpled), st_as_sf(ext))
-grid_sel_ras <- fasterize::fasterize(grid_sel, raster(dist_year_crop), field = "forstrev_1") # name the new rasters as polygon ids  #, field = "forstrev_1"
+grid_sel     <- st_intersection(sf_simpled, ext)
+grid_sel_ras <- fasterize::fasterize(grid_sel,
+                                     base_raster,
+                                     #raster(dist_year_crop), 
+                                     field = "forstrev_1") # name the new rasters as polygon ids  #, field = "forstrev_1"
 
 
-#ips_sum_sf_trans  <- st_transform(ips_sum_sf_trans, crs = my_crs)
+#ips_sum_sf_trans2  <- st_transform(ips_sum_sf_trans, crs = my_crs)
 # try of geometry fits - does not fit!!!
 plot(grid_sel_ras)
 plot(ips_sum_sf_trans ,add = T)
@@ -212,12 +222,21 @@ plot(ips_sum_sf_trans ,add = T)
 plot(rast(grid_sel_ras))
 plot(vect(ips_sum_sf_trans) ,add = T)
 
-# assigne the crs manually! 
+# assigne the crs manually! differet assigenement for vector and raster
 crs(grid_sel_ras)              <- crs(sf_simpled)
 st_crs(ips_sum_sf_trans)       <- crs(sf_simpled)
 
-# Checks CRS
-identical(crs(grid_sel_ras), crs(ips_sum_sf_trans))
+
+#ips_sum_sf_trans <- st_transform(ips_sum_sf_trans, crs_raster@projargs)
+
+
+# Extract CRS again after transformation
+crs_raster <- crs(grid_sel_ras)
+crs_vector <- st_crs(ips_sum_sf_trans)
+
+# Confirm they are now the same
+identical(as.character(crs_raster), crs_vector$wkt)  # Should return TRUE
+
 
 # check if the crs fits! YES
 st_crs(grid_sel_ras)       == st_crs(sf_simpled)
@@ -433,19 +452,83 @@ ips_damage_clean$sum_beetle_lag2_scaled <- scale(ips_damage_clean$sum_beetle_lag
 
 # Kriging -----------------------------------------------------------------------
 
+# rasterzie
+xv <- rasterize(v_districts_simpl, dist_year_crop, fun=sum)
+plot(xv)
+
+# convert spatRast to raster format
+back_rst <- raster(xv)
+
+plot(v_ips_sum_simpl, add = T )
+plot(v_ips_sum_2015, add = T , col = 'red')
+
+
+plot(back_rst )
+plot(trap_data, add = T , col = 'red')
+
+
+
+# test kriging: chat gpt
+
+# Load necessary libraries
+library(terra)
+library(gstat)
+
+# Create some sample spatial data
+set.seed(123)
+coords <- cbind(runif(50, 0, 10), runif(50, 0, 10))
+values <- sin(coords[,1]) + cos(coords[,2]) + rnorm(50, 0, 0.1)
+
+# Create a SpatVector object with the sample data
+sp_data <- vect(data.frame(x = coords[,1], y = coords[,2], z = values), geom = c("x", "y"))
+
+# Convert to SpatialPointsDataFrame
+sp_data_spdf <- as(sp_data, "Spatial")
+
+# Create a raster template
+rast_template <- rast(xmin=0, xmax=10, ymin=0, ymax=10, resolution=0.1)
+
+# Convert raster template to SpatialPixelsDataFrame
+rast_template_spdf <- as(rast_template, "Spatial")
+
+# Create a gstat object for ordinary kriging
+g <- gstat(id="z", formula=z~1, data=sp_data_spdf)
+
+# Compute and fit variogram
+vgm_model <- variogram(z~1, sp_data_spdf)
+fit_vgm <- fit.variogram(vgm_model, model=vgm("Sph"))
+
+# Perform kriging
+krig_result <- predict(g, newdata=rast_template_spdf, model=fit_vgm)
+
+# Convert the result to a SpatRaster
+krig_raster <- rast(krig_result)
+
+# Plot the result
+plot(krig_raster, main="Kriging Interpolation")
+points(sp_data, col="red", pch=16)
+
+
+
+
+
 # interpolate the beetle trap ata overBavaria/ year
 # link better with the reported damage data on teh district levels
 library(gstat)
-# create a variogram
-# subset only one year:
-sf_ips_sum_2015 <- ips_sum_sf_trans  %>% 
-  dplyr::filter(year == 2015) %>% 
-  dplyr::select(year, falsto_name, sum_beetle)
 
-trap_data <- sf_ips_sum_2015
+v_ips_sum_2015 <- v_ips_sum[v_ips_sum$year == 2015, ]
 
-# Create a variogram
+#convert to sf object
+trap_data <- st_as_sf(v_ips_sum_2015)
+
+
+
+interpolate(p, tps)
+
+
+# Create a vast_as_sf()# Create a variogram
 vgm_model <- variogram(sum_beetle ~ 1, trap_data)
+
 
 # Fit a variogram model
 fit_model1 <- fit.variogram(vgm_model, model = vgm(psill=1, model="Exp", range=1, nugget=0.1))
@@ -454,11 +537,12 @@ fit_model1 <- fit.variogram(vgm_model, model = vgm(psill=1, model="Exp", range=1
 fit_model2 <- fit.variogram(vgm_model, model = vgm(psill = 8e7, model = "Exp", range = 100000, nugget = 2e7))
 
 #grid_sel_ras_sf <- raster::raster(grid_sel_ras)
-grid_spdf <- as(grid_sel_ras, "SpatialPixelsDataFrame")
-
+#grid_spdf <- as(grid_sel_ras, "SpatialPixelsDataFrame")
+#crs(grid_spdf) <- crs(raster(dist_year_crop))
+#identical(crs(grid_spdf), crs(raster(dist_year_crop)))
 
 # Step 2: Perform Kriging
-kriging_result <- krige(count ~ 1, trap_data, newdata = grid_spdf, model = fit_model2)
+kriging_result <- krige(sum_beetle                 ~ 1, trap_data, newdata = back_rst, model = fit_model2)
 
 # Optional: Convert kriging result back to RasterLayer if needed
 kriging_raster <- raster(kriging_result)
