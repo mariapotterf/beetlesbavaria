@@ -685,6 +685,8 @@ m3.time <- glmmTMB(sum_ips ~ veg_tmp*spei3_lag2 + (1|year),
 m4.poly <- glm.nb(sum_ips ~ poly(veg_tmp, 2) + spei3_lag2 + veg_tmp:spei3_lag2,# + (1|pairID),
              # family = nbinom2,
               data = dat_fin_counts_m)
+check_collinearity(m4.poly)
+
 
 #AIC(m1,m1.nb, m2,m3,m3.time, m4.poly, m4)
 
@@ -699,27 +701,128 @@ m5 <- glmmTMB(sum_ips ~ poly(veg_tmp, 2) + poly(spei3_lag2,2) + (1|pairID),
               family = nbinom2,
               data = dat_fin_counts_m)
 
+
+# scale all varaibles:
+
+# Scale all the variables except 'sum_ips', 'peak_doy', and 'peak_diff'
+dat_fin_counts_m_scaled <- dat_fin_counts_m %>%
+  mutate(across(.cols = -c(sum_ips, peak_doy, peak_diff, pairID, trapID), 
+                .fns = ~ scale(.), 
+                .names = "{.col}_scaled"))
+
+
 # test gamm: 
+m.gam.spei <- gam(sum_ips ~ s(spei3_lag2, k = 4), 
+              family = nb(),method ='REML', # (use ML methos if wish to compare model with glmmTMB by AIC)  "REML", 
+              data = dat_fin_counts_m_scaled)
+
+m.gam.spei_re <- gam(sum_ips ~ s(spei3_lag2, k = 4) + 
+                       s(pairID, bs= 're'),
+                  family = nb(),method ='REML', # (use ML methos if wish to compare model with glmmTMB by AIC)  "REML", 
+                  data = dat_fin_counts_m_scaled)
+
+# add random slopes:
+m.gam.spei_re_slope <- gam(sum_ips ~ s(spei3_lag2, k = 4) + 
+                       #s(pairID, bs= 're') +
+                         s(spei3_lag2, pairID, bs = "re"), #+ ,
+                     family = nb(),method ='REML', # (use ML methos if wish to compare model with glmmTMB by AIC)  "REML", 
+                     data = dat_fin_counts_m_scaled)
+
+# add temp - if spei is by use as random effect, multicoll is low
+# for now this one is the best one! 05/27/2024!
+m.gam.spei_tmp_re_slope <- gam(sum_ips ~ s(spei3_lag2, k = 4) + s(veg_tmp, k = 4) +
+                            # s(pairID, bs= 're') +
+                             s(spei3_lag2, pairID, bs = "re"), #+ ,
+                           family = nb(),method ='REML', # (use ML methos if wish to compare model with glmmTMB by AIC)  "REML", 
+                           data = dat_fin_counts_m_scaled)
+
+# try different k if it will help to explain deviance?
+m.gam.spei_tmp_re_slope77 <- gam(sum_ips ~ s(spei3_lag2, k = 7) + s(veg_tmp, k = 7) +
+                                 # s(pairID, bs= 're') +
+                                 s(spei3_lag2, pairID, bs = "re"), #+ ,
+                               family = nb(),method ='REML', # (use ML methos if wish to compare model with glmmTMB by AIC)  "REML", 
+                               data = dat_fin_counts_m_scaled)
+
+# lower k for tmp as moederate correlation
+m.gam.spei_tmp_re_slope75 <- gam(sum_ips ~ s(spei3_lag2, k = 7) + s(veg_tmp, k = 5) +
+                                   # s(pairID, bs= 're') +
+                                   s(spei3_lag2, pairID, bs = "re"), #+ ,
+                                 family = nb(),method ='REML', # (use ML methos if wish to compare model with glmmTMB by AIC)  "REML", 
+                                 data = dat_fin_counts_m_scaled)
+
+# lower k for tmp and spei as moederate correlation
+m.gam.spei_tmp_re_slope55 <- gam(sum_ips ~ s(spei3_lag2, k = 5) + s(veg_tmp, k = 5) +
+                                   # s(pairID, bs= 're') +
+                                   s(spei3_lag2, pairID, bs = "re"), #+ ,
+                                 family = nb(),method ='REML', # (use ML methos if wish to compare model with glmmTMB by AIC)  "REML", 
+                                 data = dat_fin_counts_m_scaled)
+
+
+m.gam.spei_tmp_re_slope45 <- gam(sum_ips ~ s(spei3_lag2, k = 4) + s(veg_tmp, k = 5) +
+                                   # s(pairID, bs= 're') +
+                                   s(spei3_lag2, pairID, bs = "re"), #+ ,
+                                 family = nb(),method ='REML', # (use ML methos if wish to compare model with glmmTMB by AIC)  "REML", 
+                                 data = dat_fin_counts_m_scaled)
+
+# add interaction? - it is working!
+m.gam.spei_tmp_re_slope45_int <- gam(sum_ips ~ s(spei3_lag2, k = 4) + s(veg_tmp, k = 5) +
+                                       ti(spei3_lag2, veg_tmp, k = 4) +
+                                   # s(pairID, bs= 're') +
+                                   s(spei3_lag2, pairID, bs = "re"), #+ ,
+                                 family = nb(),method ='REML', # (use ML methos if wish to compare model with glmmTMB by AIC)  "REML", 
+                                 data = dat_fin_counts_m_scaled)
+
+# add random slope again for temp
+# the best one!!
+m.gam.spei_tmp_re_slope45_temp_int <- gam(sum_ips ~ s(spei3_lag2, k = 4) + s(veg_tmp, k = 5) +
+                                       ti(spei3_lag2, veg_tmp, k = 4) +
+                                       # s(pairID, bs= 're') +
+                                       s(spei3_lag2, pairID, bs = "re") +
+                                         s(veg_tmp, pairID, bs = "re"), #+ ,
+                                     family = nb(),method ='REML', # (use ML methos if wish to compare model with glmmTMB by AIC)  "REML", 
+                                     data = dat_fin_counts_m_scaled)
+
+# add random interacept (pairs as ranndom effects)
+m.gam.spei_tmp_re_slope45_temp_int2 <- gam(sum_ips ~ s(spei3_lag2, k = 4) + s(veg_tmp, k = 5) +
+                                            ti(spei3_lag2, veg_tmp, k = 4) +
+                                             s(pairID, bs= 're') +
+                                            s(spei3_lag2, pairID, bs = "re") +
+                                            s(veg_tmp, pairID, bs = "re"), #+ ,
+                                          family = nb(),method ='REML', # (use ML methos if wish to compare model with glmmTMB by AIC)  "REML", 
+                                          data = dat_fin_counts_m_scaled)
+
+
+AIC(m.gam.spei_tmp_re_slope, 
+    m.gam.spei_tmp_re_slope45_int, 
+    m.gam.spei_tmp_re_slope45_temp_int,
+    m.gam.spei_tmp_re_slope45_temp_int2)
+
+
+check_collinearity(m.gam.spei_tmp_re_slope45_temp_int2)
+
+
+# old --------------------------------
 m.gam1 <- gam(sum_ips ~ s(veg_tmp, k = 4) + s(spei3_lag2, k = 4), 
               family = nb(),method ='REML', # (use ML methos if wish to compare model with glmmTMB by AIC)  "REML", 
-              data = dat_fin_counts_m)
+              data = dat_fin_counts_m_scaled)
+check_collinearity(m.gam2)
 
 # specify random effect of site (pairID)
-m.gam2 <- gam(sum_ips ~ s(veg_tmp, k = 4) + s(spei3_lag2, k = 4) + s(pairID, bs= 're'), 
+m.gam2 <- gam(sum_ips ~ s(veg_tmp, k = 4) + s(spei3_lag2, k = 4) + s(pairID, bs= 're', k =5), 
               family = nb(),method = 'REML', # 
-              data = dat_fin_counts_m)
+              data = dat_fin_counts_m_scaled)
 
 # add interaction between the two
 m.gam3 <- gam(sum_ips ~ s(veg_tmp, k = 4) + s(spei3_lag2, k = 4) + ti(veg_tmp, spei3_lag2, k = 4) + 
                 s(pairID, bs= 're') , 
               family = nb(),method = 'REML', #"REML", 
-              data = dat_fin_counts_m)
+              data = dat_fin_counts_m_scaled)
 
 
 m.gam4 <- gam(sum_ips ~ s(veg_tmp, k = 4) + s(spei12_lag1, k = 4) + ti(veg_tmp_lag2, spei12_lag1, k = 4) + 
                 s(pairID, bs= 're') , 
               family = nb(),method = 'REML', #"REML", 
-              data = dat_fin_counts_m)
+              data = dat_fin_counts_m_scaled)
 
 
 
@@ -729,21 +832,16 @@ plot(m.gam4, page = 1, shade = T)
 performance::check_collinearity(m.gam4)
 
 
-
-# Scale the variables
-dat_fin_counts_m$veg_tmp_scaled    <- scale(dat_fin_counts_m$veg_tmp)
-dat_fin_counts_m$spei3_lag2_scaled <- scale(dat_fin_counts_m$spei3_lag2)
-
 # Fit the model with scaled variables
 m.gam1 <- gam(sum_ips ~ s(veg_tmp_scaled, k = 4) + s(spei3_lag2_scaled, k = 4) +
                 ti(veg_tmp_scaled, spei3_lag2_scaled, k = 4) + 
                 s(pairID, bs= 're') ,
-              family = nb(), method = 'REML', data = dat_fin_counts_m)
+              family = nb(), method = 'REML', data = dat_fin_counts_m_scaled)
 
 m.gam2 <- gam(sum_ips ~ s(veg_tmp_scaled, k = 4) + s(spei3_lag2_scaled, k = 4) +
                 ti(veg_tmp_scaled, spei3_lag2_scaled, k = 4), #+ 
                # s(pairID, bs= 're') ,
-              family = nb(), method = 'REML', data = dat_fin_counts_m)
+              family = nb(), method = 'REML', data = dat_fin_counts_m_scaled)
 
 summary(m.gam2)
 
