@@ -466,6 +466,52 @@ sjPlot::tab_df(model_lag_RS,
 
 
 
+# alternative: 
+#########################################################
+# maybe use???
+# !!!!
+
+# Initialize a data frame to store AIC values and deviance explained
+model_metrics <- data.frame(Predictor = character(), Dependent = character(), AIC = numeric(), DevianceExplained = numeric())
+
+# List of dependent variables and predictors
+selected_predictors <- c("veg_tmp", "veg_tmp_lag1", "veg_tmp_lag2","spei3", "spei3_lag1", "spei3_lag2","spei12", "spei12_lag1", "spei12_lag2")
+dependent_vars <-  c("sum_ips", "peak_diff")
+
+# Loop over each dependent variable
+for (dep in dependent_vars) {
+  #print(dep)
+  # Loop over each predictor
+  for (pred in selected_predictors) {
+    #print(pred)
+    # Fit the model
+    #formula <- as.formula(paste(dep, "~ s(", pred, ", k = 4) + s(pairID, bs = 're')"))
+    formula <- as.formula(paste(dep, "~ s(", pred, ", k = 4)"))
+    #print(formula)
+    model <- gam(formula, family = nb(), method = 'REML', data = dat_fin_counts_m)
+    
+    # Extract model summary
+    model_summary <- summary(model)
+    
+    # Store the AIC value and deviance explained
+    model_metrics <- rbind(model_metrics, data.frame(Predictor = pred, Dependent = dep, AIC = AIC(model), DevianceExplained = round(model_summary$dev.expl*100,1)))
+  }
+}
+
+# View the AIC values and deviance explained
+print(model_metrics)
+
+# Select the best predictor for each dependent variable based on the lowest AIC
+best_predictors <- model_metrics %>% group_by(Dependent) %>% slice(which.min(AIC))
+
+# View the best predictors
+print(best_predictors)# ##############################################################################
+
+
+
+
+
+
 
 
 
@@ -833,62 +879,31 @@ m1 <- gam(peak_diff ~ s(spei3_lag2, k = 4) +
 
 # test gam: use the save variables for spei and veg_tmp as for sum_ips
 m2 <- gam(peak_diff ~ s(spei3_lag2, k = 4) + 
-            s(veg_tmp_lag2, k = 5) +
-            ti(spei3_lag2, veg_tmp_lag2, k = 4) +
+            s(veg_tmp, k = 7) +
+            ti(spei3_lag2, veg_tmp, k = 4) +
             s(pairID, bs= 're') +
             s(spei3_lag2, pairID, bs = "re") +
             s(veg_tmp, pairID, bs = "re"), #+ ,
           family = nb(),method ='REML', # (use ML methos if wish to compare model with glmmTMB by AIC)  "REML", 
           data = dat_fin_counts_m_scaled)
 
+# increased k in spei just makes collinearity explode!!! if spei, k = 5!
+# keep k low for spei
+m3 <- gam(peak_diff ~ s(spei3_lag2, k = 4) + 
+            s(veg_tmp, k = 7) +
+            ti(spei3_lag2, veg_tmp, k = 4) +
+            #s(pairID, bs= 're') +
+            s(spei3_lag2, pairID, bs = "re") +
+            s(veg_tmp, pairID, bs = "re"), #+ ,
+          family = nb(),method ='REML', # (use ML methos if wish to compare model with glmmTMB by AIC)  "REML", 
+          data = dat_fin_counts_m_scaled)
 
-check_collinearity(m2)
-summary(m2)
-plot(m1, page = 1, shade = T)
 
-fin.m.peak.diff <- m1
-
-
-#########################################################
-# maybe use???
-# !!!!
-
-# Initialize a data frame to store AIC values and deviance explained
-model_metrics <- data.frame(Predictor = character(), Dependent = character(), AIC = numeric(), DevianceExplained = numeric())
-
-# List of dependent variables and predictors
-selected_predictors <- c("veg_tmp", "veg_tmp_lag1", "veg_tmp_lag2","spei3", "spei3_lag1", "spei3_lag2","spei12", "spei12_lag1", "spei12_lag2")
-dependent_vars <-  c("sum_ips", "peak_diff")
-
-# Loop over each dependent variable
-for (dep in dependent_vars) {
-  #print(dep)
-  # Loop over each predictor
-  for (pred in selected_predictors) {
-    #print(pred)
-    # Fit the model
-    #formula <- as.formula(paste(dep, "~ s(", pred, ", k = 4) + s(pairID, bs = 're')"))
-    formula <- as.formula(paste(dep, "~ s(", pred, ", k = 4)"))
-    #print(formula)
-    model <- gam(formula, family = nb(), method = 'REML', data = dat_fin_counts_m)
-    
-    # Extract model summary
-    model_summary <- summary(model)
-    
-    # Store the AIC value and deviance explained
-    model_metrics <- rbind(model_metrics, data.frame(Predictor = pred, Dependent = dep, AIC = AIC(model), DevianceExplained = round(model_summary$dev.expl*100,1)))
-  }
-}
-
-# View the AIC values and deviance explained
-print(model_metrics)
-
-# Select the best predictor for each dependent variable based on the lowest AIC
-best_predictors <- model_metrics %>% group_by(Dependent) %>% slice(which.min(AIC))
-
-# View the best predictors
-print(best_predictors)# ##############################################################################
-
+check_collinearity(m3)
+summary(m3)
+plot(m3, page = 1, shade = T)
+AIC(m1, m2, m3)
+fin.m.peak.diff <- m3
 
 
 # quick plotting! -----------------------------------------
