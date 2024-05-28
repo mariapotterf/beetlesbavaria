@@ -718,6 +718,16 @@ m.gam.spei_tmp_re_slope45_temp_int <- gam(sum_ips ~ s(spei3_lag2, k = 4) + s(veg
                                      family = nb(),method ='REML', # (use ML methos if wish to compare model with glmmTMB by AIC)  "REML", 
                                      data = dat_fin_counts_m_scaled)
 
+# try with spei lag1
+m.gam.spei_tmp_re_slope45_temp_int_lag1 <- gam(sum_ips ~ s(spei3_lag1, k = 4) + s(veg_tmp, k = 5) +
+                                            ti(spei3_lag1, veg_tmp, k = 4) +
+                                            # s(pairID, bs= 're') +
+                                            s(spei3_lag1, pairID, bs = "re") +
+                                            s(veg_tmp, pairID, bs = "re"), #+ ,
+                                          family = nb(),method ='REML', # (use ML methos if wish to compare model with glmmTMB by AIC)  "REML", 
+                                          data = dat_fin_counts_m_scaled)
+
+
 # add random interacept (pairs as ranndom effects)
 m.gam.spei_tmp_re_slope45_temp_int2 <- gam(sum_ips ~ s(spei3_lag2, k = 4) + 
                                              s(veg_tmp, k = 5) +
@@ -731,8 +741,9 @@ m.gam.spei_tmp_re_slope45_temp_int2 <- gam(sum_ips ~ s(spei3_lag2, k = 4) +
 
 AIC(m.gam.spei_tmp_re_slope, 
     m.gam.spei_tmp_re_slope45_int, 
-    m.gam.spei_tmp_re_slope45_temp_int,
-    m.gam.spei_tmp_re_slope45_temp_int2)
+    m.gam.spei_tmp_re_slope45_temp_int, # This one is teh best and proceeed further with veg_tmp and spei3_lag2
+    m.gam.spei_tmp_re_slope45_temp_int2,
+    m.gam.spei_tmp_re_slope45_temp_int_lag1)
 
 
 
@@ -755,45 +766,55 @@ AIC(m.gam.spei_tmp_re_slope,
 
 ###### How much variance is explained by individual terms????? -----------
 # Full model
-m.gam_random_slopes_int77
+m.gam.spei_tmp_re_slope45_temp_int <- gam(sum_ips ~ s(spei3_lag2, k = 4) + s(veg_tmp, k = 5) +
+                                            ti(spei3_lag2, veg_tmp, k = 4) +
+                                            # s(pairID, bs= 're') +
+                                            s(spei3_lag2, pairID, bs = "re") +
+                                            s(veg_tmp, pairID, bs = "re"), #+ ,
+                                          family = nb(),method ='REML', # (use ML methos if wish to compare model with glmmTMB by AIC)  "REML", 
+                                          data = dat_fin_counts_m_scaled)
+
+
 
 
 # Fit the reduced model without veg_tmp
-m_no_veg_tmp <- gam(sum_ips ~ s(spei3_lag2, k = 7) + 
-                      ti(veg_tmp, spei3_lag2, k = 4) +
+m_no_veg_tmp <- gam(sum_ips ~ s(spei3_lag2, k = 4) + 
+                      ti(spei3_lag2, veg_tmp, k = 4) +
                       s(spei3_lag2, pairID, bs = "re"),
-                    family = nb(),
-                    method = 'REML',
-                    data = dat_fin_counts_m)
+                    family = nb(), method = 'REML', data = dat_fin_counts_m_scaled)
 
 # Fit the reduced model without spei3_lag2
-m_no_spei3_lag2 <- gam(sum_ips ~ s(veg_tmp, k = 7) + 
-                         ti(veg_tmp, spei3_lag2, k = 4) +
+m_no_spei3_lag2 <- gam(sum_ips ~ s(veg_tmp, k = 5) + 
+                         ti(spei3_lag2, veg_tmp, k = 4) +
                          s(veg_tmp, pairID, bs = "re"),
-                       family = nb(),
-                       method = 'REML',
-                       data = dat_fin_counts_m)
+                       family = nb(), method = 'REML', data = dat_fin_counts_m_scaled)
+
+# Fit the reduced model without interaction term
+m_no_interaction <- gam(sum_ips ~ s(spei3_lag2, k = 4) + s(veg_tmp, k = 5) +
+                          s(spei3_lag2, pairID, bs = "re") +
+                          s(veg_tmp, pairID, bs = "re"),
+                        family = nb(), method = 'REML', data = dat_fin_counts_m_scaled)
 
 # Calculate deviance explained for the full model
-dev_full <- summary(m.gam_random_slopes_int77)$dev.expl
+dev_full <- summary(m.gam.spei_tmp_re_slope45_temp_int)$dev.expl
 
 # Calculate deviance explained for the reduced models
 dev_no_veg_tmp <- summary(m_no_veg_tmp)$dev.expl
 dev_no_spei3_lag2 <- summary(m_no_spei3_lag2)$dev.expl
+dev_no_interaction <- summary(m_no_interaction)$dev.expl
 
 # Calculate deviance explained by each predictor
 deviance_explained_veg_tmp <- dev_full - dev_no_veg_tmp
 deviance_explained_spei3_lag2 <- dev_full - dev_no_spei3_lag2
+deviance_explained_interaction <- dev_full - dev_no_interaction
 
 # Print results
 cat("Deviance explained by veg_tmp: ", deviance_explained_veg_tmp, "\n")
 cat("Deviance explained by spei3_lag2: ", deviance_explained_spei3_lag2, "\n")
-
+cat("Deviance explained by interaction (spei3_lag2 * veg_tmp): ", deviance_explained_interaction, "\n")
 
 # save final model
 fin.m.counts <-   m.gam.spei_tmp_re_slope45_temp_int #m.gam_random_slopes_int77 #m.gam_random_slopes_int77 #m.gam_random_slopes_int_k53# m.gam_random_slopes_int # m.gam3
-
-
 
 
 
@@ -1060,9 +1081,6 @@ m.gam77_int_sc <- gam(peak_diff ~ s(veg_tmp_lag3_sc, k = 7) +
                    data = dat_fin_counts_m)
 
 
-# Check multicollinearity again
-vif_values <- performance::check_collinearity(fin.m.counts)
-print(vif_values)
 
 
 
@@ -2351,7 +2369,7 @@ summary(fin.m.RS)
 
 
 # export all models
-sjPlot::tab_model(fin.m.counts,    file = "outTable/gam_counts.doc")
+sjPlot::tab_model(fin.m.counts,    file = "outTable/gam_counts2.doc")
 sjPlot::tab_model(fin.m.agg,       file = "outTable/model_agg.doc")
 sjPlot::tab_model(fin.m.peak,      file = "outTable/model_peak.doc")
 sjPlot::tab_model(fin.m.peak.diff, file = "outTable/model_peak_diff.doc")
