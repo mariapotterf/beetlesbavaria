@@ -537,69 +537,6 @@ cor_matrix[,'veg_tmp_lag2']
 # 0.23009861   0.09263000  -0.42706077  -0.13093393  -0.15411745  -0.16237905  -0.14024565
 
 
-# try with gams:
-
-# Fit the model
-m_tmp_0 <- gam(sum_ips~s(veg_tmp, k = 7) , family = nb(), method = 'REML', data = dat_fin_counts_m)
-m_tmp_1 <- gam(sum_ips~s(veg_tmp_lag1, k = 7) , family = nb(), method = 'REML', data = dat_fin_counts_m)
-m_tmp_2 <- gam(sum_ips~s(veg_tmp_lag2,k=7) , family = nb(), method = 'REML', data = dat_fin_counts_m)
-
-m_spei3_0 <- gam(sum_ips~s(spei3, k = 7) , family = nb(), method = 'REML', data = dat_fin_counts_m)
-m_spei3_1 <- gam(sum_ips~s(spei3_lag1, k = 7) , family = nb(), method = 'REML', data = dat_fin_counts_m)
-m_spei3_2 <- gam(sum_ips~s(spei3_lag2, k = 7) , family = nb(), method = 'REML', data = dat_fin_counts_m)
-
-m_spei12_0 <- gam(sum_ips~s(spei12, k = 7) , family = nb(), method = 'REML', data = dat_fin_counts_m)
-m_spei12_1 <- gam(sum_ips~s(spei12_lag1, k = 7) , family = nb(), method = 'REML', data = dat_fin_counts_m)
-m_spei12_2 <- gam(sum_ips~s(spei12_lag2 , k = 7), family = nb(), method = 'REML', data = dat_fin_counts_m)
-
-
-AIC(m_tmp_0,m_tmp_1,m_tmp_2,
-    m_spei3_0,m_spei3_1,m_spei3_2,
-    m_spei12_0,m_spei12_1,m_spei12_2)
-
-plot(m_tmp_2, page = 1)
-
-# try the least correlated predictors
-m1 <- gam(sum_ips~s(veg_tmp, k = 4) + s(spei3_lag1, k = 4)  , family = nb(), method = 'REML', data = dat_fin_counts_m)
-m2 <- gam(sum_ips~s(veg_tmp, k = 4) + s(spei3_lag1, k = 4) + ti(veg_tmp,spei3_lag1)  , family = nb(), method = 'REML', data = dat_fin_counts_m)
-
-multicollinearity(m2)
-summary(m2)
-plot.gam(m2, page = 1)
-
-
-# explore PCA: ---------------------------------------
-# Standardize the variables
-dat_fin_counts_m$veg_tmp_scaled <- scale(dat_fin_counts_m$veg_tmp)
-dat_fin_counts_m$spei3_lag1_scaled <- scale(dat_fin_counts_m$spei3_lag1)
-
-
-# Combine the standardized variables into a matrix
-data_matrix <- as.matrix(dat_fin_counts_m[, c("veg_tmp_scaled", "spei3_lag1_scaled")])
-
-# Perform PCA
-pca_result <- prcomp(data_matrix, 
-                     center = TRUE, scale. = TRUE)
-
-# Summary of PCA
-summary(pca_result)
-
-# PCA loadings
-pca_result$rotation
-
-dat_fin_counts_m$PC1 <- pca_result$x[, 1]
-dat_fin_counts_m$PC2 <- pca_result$x[, 2]
-
-
-m_pca <- gam(sum_ips ~ s(PC1, k = 4) + 
-               s(PC2, k = 4) + 
-               s(pairID, bs = "re"), 
-             family = nb(), method = 'REML', 
-             data = dat_fin_counts_m)
-summary(m_pca)
-plot(m_pca, page = 1)
-
-
 
 
 ###### check correlation between traps -------------------------- 
@@ -711,7 +648,7 @@ dat_fin_counts_m_scaled <- dat_fin_counts_m %>%
                 .names = "{.col}_scaled"))
 
 
-# test gamm: 
+# test gamm: - replace spei3_lag2 by spei12_lag2 as it is the least correl;ated and the explains teh most deviance
 m.gam.spei <- gam(sum_ips ~ s(spei3_lag2, k = 4), 
               family = nb(),method ='REML', # (use ML methos if wish to compare model with glmmTMB by AIC)  "REML", 
               data = dat_fin_counts_m_scaled)
@@ -729,7 +666,6 @@ m.gam.spei_re_slope <- gam(sum_ips ~ s(spei3_lag2, k = 4) +
                      data = dat_fin_counts_m_scaled)
 
 # add temp - if spei is by use as random effect, multicoll is low
-# for now this one is the best one! 05/27/2024!
 m.gam.spei_tmp_re_slope <- gam(sum_ips ~ s(spei3_lag2, k = 4) + s(veg_tmp, k = 4) +
                             # s(pairID, bs= 're') +
                              s(spei3_lag2, pairID, bs = "re"), #+ ,
@@ -799,7 +735,7 @@ AIC(m.gam.spei_tmp_re_slope,
     m.gam.spei_tmp_re_slope45_temp_int2)
 
 
-check_collinearity(m.gam.spei_tmp_re_slope45_temp_int)
+
 
 
 
@@ -887,7 +823,7 @@ m2 <- gam(peak_diff ~ s(spei3_lag2, k = 4) +
 
 check_collinearity(m2)
 summary(m2)
-plot(m2, page = 1, shade = T)
+plot(m1, page = 1, shade = T)
 
 fin.m.peak.diff <- m1
 
@@ -896,57 +832,96 @@ fin.m.peak.diff <- m1
 # maybe use???
 # !!!!
 
-library(mgcv)
+# Initialize a data frame to store AIC values and deviance explained
+model_metrics <- data.frame(Predictor = character(), Dependent = character(), AIC = numeric(), DevianceExplained = numeric())
 
-# Initialize a data frame to store AIC values
-aic_values <- data.frame(Predictor = character(), Dependent = character(), AIC = numeric())
-
-# List of dependent variables
-dependent_vars <- c("sum_ips", "other_dependent_var1", "other_dependent_var2")  # add your dependent variables here
+# List of dependent variables and predictors
+selected_predictors <- c("veg_tmp", "veg_tmp_lag1", "veg_tmp_lag2","spei3", "spei3_lag1", "spei3_lag2","spei12", "spei12_lag1", "spei12_lag2")
+dependent_vars <-  c("sum_ips", "peak_diff")
 
 # Loop over each dependent variable
 for (dep in dependent_vars) {
+  #print(dep)
   # Loop over each predictor
-  for (pred in names(selected_predictors)) {
+  for (pred in selected_predictors) {
+    #print(pred)
     # Fit the model
-    formula <- as.formula(paste(dep, "~ s(", pred, ", k = 4) + s(pairID, bs = 're')"))
+    #formula <- as.formula(paste(dep, "~ s(", pred, ", k = 4) + s(pairID, bs = 're')"))
+    formula <- as.formula(paste(dep, "~ s(", pred, ", k = 4)"))
+    #print(formula)
     model <- gam(formula, family = nb(), method = 'REML', data = dat_fin_counts_m)
     
-    # Store the AIC value
-    aic_values <- rbind(aic_values, data.frame(Predictor = pred, Dependent = dep, AIC = AIC(model)))
+    # Extract model summary
+    model_summary <- summary(model)
+    
+    # Store the AIC value and deviance explained
+    model_metrics <- rbind(model_metrics, data.frame(Predictor = pred, Dependent = dep, AIC = AIC(model), DevianceExplained = round(model_summary$dev.expl*100,1)))
   }
 }
 
-# View the AIC values
-aic_values
+# View the AIC values and deviance explained
+print(model_metrics)
 
 # Select the best predictor for each dependent variable based on the lowest AIC
-best_predictors <- aic_values %>% group_by(Dependent) %>% slice(which.min(AIC))
+best_predictors <- model_metrics %>% group_by(Dependent) %>% slice(which.min(AIC))
 
 # View the best predictors
-best_predictors
-
-# ##############################################################################
+print(best_predictors)# ##############################################################################
 
 
 
-
-fin.m <- fin.m.peak.diff
+# quick plotting! -----------------------------------------
+fin.m <- m.spei12_no_spei_slope
+#  m.spei12_no_re_slope47# fin.m.peak.diff
 #!!! --------------------------------------------
+
 # plot in easy way how tdoes the k value affect interaction
 p1 <- ggpredict(fin.m, terms = "veg_tmp [all]", allow.new.levels = TRUE)
-p2 <- ggpredict(fin.m, terms = "spei3_lag2 [all]", allow.new.levels = TRUE)
-p3 <- ggpredict(fin.m, terms = c("veg_tmp", "spei3_lag2 [-1, 0, 1]"), allow.new.levels = TRUE)
-#p3 <- ggpredict(m.gam3, terms = c("veg_tmp", "spei3_lag2 [-1, 0, 1]"), allow.new.levels = TRUE)
-
-
+p2 <- ggpredict(fin.m, terms = "spei12 [all]", allow.new.levels = TRUE)
+p3 <- ggpredict(fin.m, terms = c("veg_tmp", "spei12 [-1, 0, 1]"), allow.new.levels = TRUE)
 
 # test simple plot:
 ggplot(p3, aes(x = x , y = predicted , ymin = conf.low, ymax = conf.high)) +
   geom_ribbon(aes(ymin = conf.low, ymax = conf.high, fill = group), alpha = 0.3) +
-  geom_line(aes(color = group, linetype = group), linewidth = 1) 
+  geom_line(aes(color = group, linetype = group), linewidth = 1)  + 
+  ggtitle('Current tmp')
 
 
+
+fin.m.lagged <- m.spei12_no_re_slope47
+
+
+# plot in easy way how tdoes the k value affect interaction
+p1 <- ggpredict(fin.m.lagged, terms = "veg_tmp_lag2 [all]", allow.new.levels = TRUE)
+p2 <- ggpredict(fin.m.lagged, terms = "spei12_lag2 [all]", allow.new.levels = TRUE)
+p3 <- ggpredict(fin.m.lagged, terms = c("veg_tmp_lag2", "spei12_lag2 [-1, 0, 1]"), allow.new.levels = TRUE)
+
+
+# test simple plot:
+p.lagged.tmp <- ggplot(p3, aes(x = x , y = predicted , ymin = conf.low, ymax = conf.high)) +
+  geom_ribbon(aes(ymin = conf.low, ymax = conf.high, fill = group), alpha = 0.3) +
+  geom_line(aes(color = group, linetype = group), linewidth = 1) +
+  ggtitle('Lagged temp')
+
+
+ggarrange(p.current_tmp, p.lagged.tmp)
+
+# try spei12 and veg_tmp
+fin.m. <- m.spei12
+
+
+
+# plot in easy way how tdoes the k value affect interaction
+p1 <- ggpredict(fin.m., terms = "veg_tmp [all]", allow.new.levels = TRUE)
+p2 <- ggpredict(fin.m., terms = "spei12_lag2 [all]", allow.new.levels = TRUE)
+p3 <- ggpredict(fin.m., terms = c("veg_tmp", "spei12_lag2 [-1, 0, 1]"), allow.new.levels = TRUE)
+
+
+# test simple plot:
+ ggplot(p1, aes(x = x , y = predicted , ymin = conf.low, ymax = conf.high)) +
+  geom_ribbon(aes(ymin = conf.low, ymax = conf.high, fill = group), alpha = 0.3) +
+  geom_line(aes(color = group, linetype = group), linewidth = 1) +
+  ggtitle('current tmp spei 12')
 
 
 
@@ -1090,32 +1065,6 @@ vif_values <- performance::check_collinearity(fin.m.counts)
 print(vif_values)
 
 
-
-# PCA results: ----------------------
-# Perform PCA
-pca <- prcomp(dat_fin_counts_m[, c("veg_tmp_lag3", "spei3_lag3")], scale. = TRUE)
-dat_fin_counts_m$PC1 <- pca$x[, 1]
-dat_fin_counts_m$PC2 <- pca$x[, 2]
-
-# Fit the model using PCA components
-m.gam77_pca <- gam(peak_diff ~ s(PC1, k = 7) + 
-                     s(PC2, k = 7) + 
-                     s(pairID, bs = "re") + 
-                     s(PC1, pairID, bs = "re") + 
-                     s(PC2, pairID, bs = "re") + 
-                     s(PC1, PC2, pairID, bs = "re"),
-                   family = nb(), 
-                   method = 'REML',
-                   data = dat_fin_counts_m)
-
-# Check model summary
-summary(m.gam77_pca)
-plot(m.gam77_pca, page = 1)
-
-
-
-vif_values <- performance::check_collinearity(m.gam77_pca)
-print(vif_values)
 
 
 # test multicoollinearity bwetween predictors ------------------------------
