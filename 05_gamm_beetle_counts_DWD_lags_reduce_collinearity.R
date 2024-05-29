@@ -810,7 +810,7 @@ AIC(m.gam.spei_tmp_re_slope,
 
 
 
-###### How much variance is explained by individual terms????? -----------
+###### How much variance is explained by individual terms? -----------
 # Full model
 m.gam.spei_tmp_re_slope45_temp_int <- gam(sum_ips ~ s(spei3_lag2, k = 4) + s(veg_tmp, k = 5) +
                                             ti(spei3_lag2, veg_tmp, k = 4) +
@@ -906,7 +906,7 @@ AIC(m1, m2, m3)
 fin.m.peak.diff <- m3
 
 
-# quick plotting! -----------------------------------------
+#### Eample: quick plotting! -----------------------------------------
 fin.m <- m.spei12_no_spei_slope
 #  m.spei12_no_re_slope47# fin.m.peak.diff
 #!!! --------------------------------------------
@@ -1152,6 +1152,22 @@ ggplot(p1, aes(x = x , y = predicted , ymin = conf.low, ymax = conf.high)) +
 
 
 ### Colonization DOY ------------------------------------------------------------
+
+# create new table with only agg values
+dat_fin_agg_m <- 
+  dat_fin %>% 
+  dplyr::select(-population_growth, -population_growth2, 
+                -wind_beetle, - harvest, 
+                -sum_ips_lag1) %>% 
+  # data %>%
+  group_by(trapID) %>%
+  arrange(year, .by_group = TRUE) %>%
+  mutate( spei3_lag2 = lag(spei3, n = 2, default = NA)) %>%
+  ungroup() %>%
+    na.omit()
+
+
+
 # lowest AIC: veg_tmp, spei3_lag3
 m1 <- glmmTMB(tr_agg_doy  ~ veg_tmp + spei3_lag3,
               family = beta_family(link = "logit"),
