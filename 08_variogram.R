@@ -258,27 +258,16 @@ sjPlot::tab_df(out_tab_variograms,
                digits = 3) 
 
 
-
-# Plot using ggplot2
-combined_results %>% 
-  dplyr::filter(dist <250000) %>% 
-  ggplot(aes(x = dist/1000, y = gamma, color = type)) +
-  geom_point(data = subset(combined_results, type == "Empirical")) +
-  geom_line(data = subset(combined_results, type == "Fitted")) +
-  labs(title = "Empirical and Fitted Variogram", x = "Distance", y = "Semivariance") +
-  theme_minimal() +
-  facet_grid(variable~year, scales = 'free')
-
-
 # Plot using ggplot2
 combined_results_sub <- combined_results %>% 
+  mutate(year_color = ifelse(year %in% 2018:2020, "red", "grey")) %>% 
   dplyr::filter(dist <190000) %>% 
   mutate(variable = factor(variable, 
                            levels = c('log_sum_ips', 'tr_agg_doy', 'tr_peak_doy', 'log_peak_diff'),
                            labels = c('Population level\n[#]', 'Aggregation timing\n[DOY]', 
                                       'Peak swarming\ntiming [DOY]', "Peak swarming\nintensity [#]"))) #%>%
 
-combined_results_sub %>% 
+p_vario_color <- combined_results_sub %>% 
     ggplot(aes(x = dist/1000, 
              y = gamma, 
              color = factor(year),
@@ -290,19 +279,50 @@ combined_results_sub %>%
        x = "Distance [km]", y = "Semivariance"
        ) +
   scale_color_brewer(palette = "Spectral") +
-  theme_minimal() +
+  theme_minimal(base_size = 10) +
   theme(aspect.ratio = 1, 
         legend.position = 'right',
         legend.title =element_blank()  ,
-        panel.border = element_rect(color = "black", fill = NA)) +
+        panel.border = element_rect(color = "black", fill = "white")) +
   facet_wrap(variable~., scales = 'free')
+
+ggsave(filename = 'outFigs/variogram_spectral.png', plot = p_vario_color, width = 7, height = 7, dpi = 300, bg = 'white')
+
+
+# make it black and red
+
+#p_vario_red_grey <- 
+  combined_results_sub %>% 
+  ggplot(aes(x = dist/1000, 
+             y = gamma, 
+             #color = year_color,
+             group = factor(year))) +
+  geom_point(data = subset(combined_results_sub, type == "Empirical"), 
+             alpha = 0.5, size = 1) +
+  geom_line(data = subset(combined_results_sub, type == "Fitted"), lwd = 1) #+
+  labs(#title = "Empirical and Fitted Variogram", 
+    x = "Distance [km]", y = "Semivariance"
+  ) +
+    scale_color_manual(values = c("red"= 'red', "grey"='grey')) +
+ # scale_color_brewer(palette = "Spectral") +
+  theme_minimal(base_size = 10) +
+  theme(aspect.ratio = 1, 
+        legend.position = 'right',
+        legend.title =element_blank()  ,
+        panel.border = element_rect(color = "black", fill = "white")) +
+  facet_wrap(variable~., scales = 'free')
+
+ggsave(filename = 'outFigs/variograms_red_grey.png', plot = p_vario_red_grey, width = 7, height = 7, dpi = 300, bg = 'white')
+
+
+
 
 
 
 
 # try plotting:
 windows(6,6)
-combined_results_sub %>% 
+p_range <- combined_results_sub %>% 
   mutate(cap_fitted_range = case_when(fitted_range > 200000 ~ 200000,
                                       TRUE~fitted_range)) %>% 
  # filter(variable == 'log_sum_ips') %>% 
@@ -324,6 +344,7 @@ combined_results_sub %>%
        x = '')
   
 
+ggsave(filename = 'outFigs/variogram_range.png', plot = p_range, width = 6, height = 6, dpi = 300, bg = 'white')
 
 # test fitting: -------------------------------------
 
