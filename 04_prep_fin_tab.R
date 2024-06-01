@@ -186,7 +186,7 @@ df_predictors <-
  
 
 
-# calculate anomalies: for spei and temp ----------------------------------------
+# calculate anomalies: for temp and spei ----------------------------------------
 reference_period <- 1980:2010
 veg.period <- 4:9
 
@@ -205,10 +205,8 @@ df_tmp_anom <-
   mutate(tmp_z  = (tmp - mean(tmp[year %in% reference_period])) / sd(tmp[year %in% reference_period]),
          prcp_z = (prcp - mean(prcp[year %in% reference_period])) / sd(prcp[year %in% reference_period])) %>%
   ungroup(.) 
-# !!!!
 
-
-# anomalies for spei
+##### anomalies for spei --------------------------
 df_anom_spei_veg_season <- 
   df_spei_months %>% 
   dplyr::filter(month %in% veg.period) %>% # filter chunk of veg period
@@ -224,7 +222,18 @@ df_spei_anom <-
   mutate(spei_z  = (spei - mean(spei[year %in% reference_period])) / sd(spei[year %in% reference_period])) %>%
   ungroup(.) 
 
+plot(df_spei_anom$year, df_spei_anom$spei_z)
+plot(df_spei_anom$year, df_spei_anom$spei)
 
+
+# add anoalies to predictors:
+df_predictors <- df_predictors %>% 
+  left_join(df_spei_anom, by = c('falsto_name', 'year')) %>% 
+  left_join(df_tmp_anom,  by = c('falsto_name', 'year'))
+
+plot(df_predictors$year, df_predictors$tmp_z)
+plot(df_predictors$year, df_predictors$spei_z)
+plot(df_predictors$year, df_predictors$prcp_z)
 
 unique(df_predictors$falsto_name)
 # Clean up dependent variables------------------------------
@@ -236,20 +245,17 @@ unique(df_predictors$falsto_name)
 
 # [2] Max Diff DOY
 max.diff.doy <- max.diff.doy %>% 
-#  mutate(falsto_name = gsub("[^A-Za-z0-9_]", "", falsto_name)) %>%  # Remove all non-alphanumeric characters except underscore
   dplyr::select(c(falsto_name, year, doy, diff)) %>% 
   dplyr::rename(peak_doy = doy,
                 peak_diff = diff)
 
 # [3] Agg DOY !!!!: only 1080 rows!!! some traps dis not reached the values in time; need to increase threshold or somehow account for this!
 ips.aggreg <- ips.aggreg %>% 
-#  mutate(falsto_name = gsub("[^A-Za-z0-9_]", "", falsto_name)) %>% 
   dplyr::select(c(falsto_name, year, doy)) %>% 
   dplyr::rename(agg_doy = doy )
   
 # [4] avg number of beetles per trap/catch
 ips.year.avg <- ips.year.avg %>% 
-  #mutate(falsto_name = gsub("[^A-Za-z0-9_]", "", falsto_name)) %>% 
   ungroup(.) %>% 
   dplyr::select(c(year, falsto_name, avg_beetles_trap))
 
