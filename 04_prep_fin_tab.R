@@ -1,7 +1,8 @@
 
 
 #  Explore dependent vs predictors variables
-# on raw beetle counts (per month) vs summarized values over year (sum, DOY of max increase, DOY of aggregation)
+# on raw beetle counts (per month) vs 
+#summarized values over year (sum, DOY of max increase, DOY of aggregation)
 
 
 rm(list=ls()) 
@@ -17,7 +18,7 @@ library(dplyr)
 library(data.table)
 library(tidyr)
 library(raster)
-library(rgdal)
+#library(rgdal)
 library(fasterize)
 library(terra)
 library(ggplot2)
@@ -54,7 +55,7 @@ anyNA(df_spei_months)
 
 #View(df_spei)
 
-# make a plot with speis
+# make a plot with speis take data fr whole year ----------------------
 df_spei_months <- df_spei_months %>% 
   mutate(date = as.Date(paste(year, month, "01", sep = "-")))
 
@@ -70,50 +71,7 @@ median_spei <-
     replace(is.na(.), 0)
 
 
-# plot SPEI over different scales ----------------------------------------------
-#ggplot2::ggplot(median_spei) + 
-  # geom_area(aes(x = date, y = pos), fill = "blue", col = "grey8") +
-  # geom_area(aes(x = date, y = neg), fill = "red",  col = "grey8") +
-  #  ylab("SPEI") + ggtitle("SPEI") +
-  # facet_grid(scale~.) +
-  # theme_bw() + theme(plot.title = element_text(hjust = 0.5))
 
-
-
-# plot barplot of spei - veg season vs no veg season, temperature and precipitation
-#df_spei_months <- df_spei_months %>% 
-#  mutate(season = case_when(month %in% veg.months ~ 'veg_season',
-#                            month %in% c(1,2, 3,10, 11, 12) ~ 'winter'))# %>% 
-
-
-  
-# mean.prcp = mean(df_clim[,year %in% 1980:2015]$prcp)
-# mean.tmp = mean(df_clim$tmp)
-#   
-#   p.prcp <- df_clim %>%
-#     filter(year %in% study.period.extended) %>% 
-#     ggplot(aes(x = as.factor(year), 
-#                y = prcp)) +
-#     geom_boxplot() +
-#     xlab('') +
-#     ylab('Monthly precipitation [mm]') + 
-#     theme(axis.text=element_text(angle = 90, vjust = 0, hjust = 0.5)) +
-#     geom_hline(yintercept = mean.prcp, lty = 'dashed', col = "grey10" ) 
-#  
-#   
-#   p.tmp <- df_clim %>%
-#     filter(year %in% study.period.extended) %>% 
-#     ggplot(aes(x = as.factor(year), 
-#                y = tmp)) +
-#     geom_boxplot() +
-#     xlab('') +
-#     ylab('Monthly temperature [C]') + 
-#     theme(axis.text=element_text(angle = 90, vjust = 0, hjust = 0.5)) +
-#     geom_hline(yintercept = mean.tmp, lty = 'dashed', col = "grey10" ) 
-#   
-#  ggarrange(p.prcp, p.tmp) 
-  
-  
 
 
 # Get geo data: elevation, slope, roughness...
@@ -226,6 +184,47 @@ df_predictors <-
   ungroup(.) %>% 
     dplyr::select(-c(globalid, x, y, elev))
  
+
+
+# calculate anomalies: for spei and temp ----------------------------------------
+reference_period <- 1980:2010
+veg.period <- 4:9
+
+df_anom_tmp_prcp_veg_season <- 
+  df_clim %>% 
+  filter(month %in% veg.period) %>% # filter chunk of veg period
+  ungroup(.) %>% 
+  group_by(year, falsto_name  ) %>%
+  summarize(prcp = sum(prcp),
+            tmp = mean(tmp)) %>%
+  ungroup()
+
+df_tmp_anom <- 
+  df_anom_tmp_prcp_veg_season %>% 
+  group_by(falsto_name) %>%
+  mutate(tmp_z  = (tmp - mean(tmp[year %in% reference_period])) / sd(tmp[year %in% reference_period]),
+         prcp_z = (prcp - mean(prcp[year %in% reference_period])) / sd(prcp[year %in% reference_period])) %>%
+  ungroup(.) 
+# !!!!
+
+
+# anomalies for spei
+df_anom_spei_veg_season <- 
+  df_spei_months %>% 
+  dplyr::filter(month %in% veg.period) %>% # filter chunk of veg period
+  dplyr::filter(scale == 3) %>%  # select only spei3
+  ungroup(.) %>% 
+  group_by(year, falsto_name, scale  ) %>%
+  summarize(spei = mean(spei)) %>%
+  ungroup()
+
+df_spei_anom <- 
+  df_anom_spei_veg_season %>% 
+  group_by(falsto_name, scale) %>%
+  mutate(spei_z  = (spei - mean(spei[year %in% reference_period])) / sd(spei[year %in% reference_period])) %>%
+  ungroup(.) 
+
+
 
 unique(df_predictors$falsto_name)
 # Clean up dependent variables------------------------------
