@@ -801,6 +801,7 @@ p_glob_moran_bar <-ggplot(glob_merged, aes(x = year,
 # Get variograms: -----------------------------------------------------------------
 
 library(gstat)
+library(sf)
 
 cutoff = 300000
 
