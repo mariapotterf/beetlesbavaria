@@ -478,9 +478,22 @@ dat_spei_lags <-  dat_fin %>%
   mutate(trapID = as.factor(trapID),
          pairID = as.factor(pairID)) %>% 
   arrange(year, .by_group = TRUE) %>%
-  mutate(spei1_lag1 = lag(spei1, n = 1, default = NA),
+  mutate(tmp_z_lag1 = lag(tmp_z, n = 1, default = NA),
+         tmp_z_lag2 = lag(tmp_z, n = 2, default = NA),
+         tmp_z_lag3 = lag(tmp_z, n = 3, default = NA),
+         prcp_z_lag1 = lag(prcp_z, n = 1, default = NA),
+         prcp_z_lag2 = lag(prcp_z, n = 2, default = NA),
+         prcp_z_lag3 = lag(prcp_z, n = 3, default = NA),
+         spei_z_lag1 = lag(spei_z, n = 1, default = NA),
+         spei_z_lag2 = lag(spei_z, n = 2, default = NA),
+         spei_z_lag3 = lag(spei_z, n = 3, default = NA),
+         spei1_lag1 = lag(spei1, n = 1, default = NA),
          spei1_lag2 = lag(spei1, n = 2, default = NA),
          spei1_lag3 = lag(spei1, n = 3, default = NA),
+         spei_lag1 = lag(spei, n = 1, default = NA), # spei3 veg season
+         spei_lag2 = lag(spei, n = 2, default = NA),
+         spei_lag3 = lag(spei, n = 3, default = NA),
+         
          spei3_lag1 = lag(spei3, n = 1, default = NA),
          spei3_lag2 = lag(spei3, n = 2, default = NA),
          spei3_lag3 = lag(spei3, n = 3, default = NA),
@@ -507,7 +520,9 @@ dat_spei_lags <-  dat_fin %>%
 
 # export table to merge it with the spatial data: for variograms:
 dat_dynamics <- dat_fin %>% 
-  dplyr::select(c(year, trapID, pairID, spring_tmp, veg_tmp, veg_prcp,   spei3,
+  dplyr::select(c(year, trapID, pairID, spring_tmp, veg_tmp, veg_prcp,   
+                  spei3, spei, # spei for veg season
+                  tmp_z, prcp_z, spei_z, # z score fr veg season, sd from teh mean reference conditions
                 sum_ips,  peak_doy, peak_diff, tr_agg_doy, tr_peak_doy, agg_doy, peak_doy
                 ))
 fwrite(dat_dynamics, 'outTable/beetle_dynamic_indicators.csv')
@@ -572,7 +587,10 @@ model_metrics_count <- data.frame(Predictor = character(),
 # keep only spei3 and spei 12 - for the short term vs long term effect
 selected_predictors <- c("spring_tmp", "spring_tmp_lag1", "spring_tmp_lag2","spring_tmp_lag3",
   "veg_tmp", "veg_tmp_lag1", "veg_tmp_lag2","veg_tmp_lag3",
-                        # "spei1", "spei1_lag1", "spei1_lag2","spei1_lag3",
+  "tmp_z", "tmp_z_lag1", "tmp_z_lag2","tmp_z_lag3",
+  "spei_z", "spei_z_lag1", "spei_z_lag2","spei_z_lag3",
+  "prcp_z", "prcp_z_lag1", "prcp_z_lag2","prcp_z_lag3",
+                         "spei", "spei_lag1", "spei_lag2","spei_lag3",
                          "spei3", "spei3_lag1", "spei3_lag2","spei3_lag3" #,
                         # "spei6", "spei6_lag1", "spei6_lag2","spei6_lag3",
                         # "spei12", "spei12_lag1", "spei12_lag2","spei12_lag3"
@@ -584,7 +602,7 @@ selected_predictors <- c("spring_tmp", "spring_tmp_lag1", "spring_tmp_lag2","spr
 for (dep in dependent_vars_counts) {
   #print(dep)
   # Loop over each predictor
-  for (pred in selected_predictors) {
+  for (pred in sub_predictors) {
     #print(pred)
     # Fit the model
     #formula <- as.formula(paste(dep, "~ s(", pred, ", k = 4) + s(pairID, bs = 're')"))
@@ -625,7 +643,7 @@ model_metrics_doy <- data.frame(Predictor = character(),
 for (dep in dependent_vars_doy ) {
   #print(dep)
   # Loop over each predictor
-  for (pred in selected_predictors) {
+  for (pred in sub_predictors) {
     #print(pred)
     # Fit the model
     #formula <- as.formula(paste(dep, "~ s(", pred, ", k = 4) + s(pairID, bs = 're')"))
@@ -655,20 +673,37 @@ best_predictors_doy <- model_metrics_doy %>%
   slice(which.min(AIC))
 
 # merge both tables:
-full_lag_models <- rbind(model_metrics_count,model_metrics_doy)
+full_lag_models <- rbind(model_metrics_count,model_metrics_doy) #%>% 
+ 
 best_predictors <- rbind(best_predictors_counts, best_predictors_doy )
 
 (best_predictors)
 
 
 
-# Calculate the correlation matrix for all predictors and their lags
-predictor_vars <- dat_fin_counts_m[, best_predictors$Predictor]
+# Calculate the correlation matrix for all predictors and their lags ---------------------------
+
+# simplify predictors: keep the most important ones
+sub_predictors <- c(#"spring_tmp", "spring_tmp_lag1", "spring_tmp_lag2","spring_tmp_lag3",
+                     #    "veg_tmp", "veg_tmp_lag1", "veg_tmp_lag2","veg_tmp_lag3",
+                         "tmp_z", "tmp_z_lag1", "tmp_z_lag2","tmp_z_lag3",
+                         "spei_z", "spei_z_lag1", "spei_z_lag2","spei_z_lag3",
+                         "spei", "spei_lag1", "spei_lag2","spei_lag3")
+                        # "spei3", "spei3_lag1", "spei3_lag2","spei3_lag3" #,
+#)
+
+
+predictor_vars <- dat_fin_counts_m[, sub_predictors  ] # unique(best_predictors$Predictor)
 cor_matrix <- cor(predictor_vars, method = "spearman")
 (cor_matrix)
-#> cor_matrix - low correlation of predictors
-#spei6_lag2 veg_tmp_lag3 spei6_lag1 veg_tmp_lag2 spei6_lag1 veg_tmp_lag2 spei6_lag1 veg_tmp_lag2
-#spei6_lag2    1.0000000    0.3036622 -0.2698547   -0.3116128 -0.2698547   -0.3116128 -0.2698547   -0.3116128
+corrplot::corrplot(cor_matrix)
+
+# mask highly correlated values
+# Mask high correlations (set them to NA)
+cor_matrix_masked <- cor_matrix
+cor_matrix_masked[cor_matrix > 0.4 | cor_matrix < -0.4] <- NA
+corrplot::corrplot(cor_matrix_masked)
+
 
 #### adreass lags in different way: provide plot with 0,1,2,3 lag ----------------------
 # plot for SPEIs (1,3,6,12)and for veg_tmp
@@ -878,6 +913,255 @@ check_collinearity(m4)
 m5 <- glmmTMB(sum_ips ~ poly(veg_tmp, 2) + poly(spei3_lag2,2) + (1|pairID),
               family = nbinom2,
               data = dat_fin_counts_m)
+
+
+
+
+# SUM_IPS: gam: spei_lag1  , tmp_z ------------------------------------------- 
+m.spei_lag1 <- gam(sum_ips ~ s(spei_lag1, k = 4) , 
+                   family = nb(),
+                   method ='REML', # (use ML methos if wish to compare model with glmmTMB by AIC)  "REML", 
+                   data = dat_fin_counts_m_scaled)
+
+m.spei_lag2 <- gam(sum_ips ~ s(spei_lag1, k = 4), 
+                   family = nb(),
+                   method ='REML', # (use ML methos if wish to compare model with glmmTMB by AIC)  "REML", 
+                   data = dat_fin_counts_m_scaled)
+
+m.tmp <- gam(sum_ips ~  s(tmp_z, k = 4), 
+             family = nb(),
+             method ='REML', # (use ML methos if wish to compare model with glmmTMB by AIC)  "REML", 
+             data = dat_fin_counts_m_scaled)
+
+m.tmp_lag1 <- gam(sum_ips ~  s(tmp_z, k = 4), 
+             family = nb(),
+             method ='REML', # (use ML methos if wish to compare model with glmmTMB by AIC)  "REML", 
+             data = dat_fin_counts_m_scaled)
+
+
+m.add <- gam(sum_ips ~ s(tmp_z, k = 4) +  s(spei_z_lag1, k = 4),# +
+             #  ti(tmp_z_lag1, spei_z_lag2, k =7), 
+             family = nb(),
+             method ='REML', # (use ML methos if wish to compare model with glmmTMB by AIC)  "REML", 
+             data = dat_fin_counts_m_scaled)
+
+
+
+m.int <- gam(sum_ips ~ s(tmp_z, k = 4) +  s(spei_z_lag1, k = 4) +
+               ti(tmp_z_lag1, spei_z_lag2, k =7) +
+               pairID, 
+             family = nb(),
+             method ='REML', # (use ML methos if wish to compare model with glmmTMB by AIC)  "REML", 
+             data = dat_fin_counts_m_scaled)
+
+
+# year:
+m.year <- gam(sum_ips ~ s(tmp_z, k = 4) +  #s(spei_lag1, k = 7) +
+               #ti(tmp_z_lag1, spei_z_lag2, k =7) +
+               as.factor(year), 
+             family = nb(),
+             method ='REML', # (use ML methos if wish to compare model with glmmTMB by AIC)  "REML", 
+             data = dat_fin_counts_m_scaled)
+
+
+summary(m.year)
+check_collinearity(m.year)
+plot(m.year, page = 1)
+
+
+
+
+
+
+
+
+# identify significant traps:
+# Extract significant traps from the model summary
+summary_m.int <- summary(m.int)
+# Extract coefficients
+coefficients <- summary_m.int$p.coeff
+
+# Extract p-values
+p_values <- summary_m.int$p.pv
+
+
+significant_traps <- 
+  data.frame(coefficients = coefficients,
+                                p_values  = p_values) %>% 
+  
+   rownames_to_column("pairID") %>%
+    as.data.frame() %>% 
+   # head()
+   dplyr::filter(p_values < 0.05) %>% 
+   mutate(pairID = gsub("pairID", '', pairID )) 
+  
+
+
+(significant_traps)
+
+# remove too low values: peiting and Eschenbach_idOPf: identify loutlier from log_sum_ips
+df_outliers <- dat_fin_counts_m %>% 
+  group_by(year) %>% 
+  mutate(is_outlier = ifelse(sum_ips_log > quantile(sum_ips_log, 0.75) + 1.5 * IQR(sum_ips_log) |
+                               sum_ips_log < quantile(sum_ips_log, 0.25) - 1.5 * IQR(sum_ips_log), TRUE, FALSE)) # %>% 
+
+# check which ones are outliers and how often?
+
+pair_outliers <- df_outliers %>%
+  dplyr::filter(is_outlier) %>%
+  group_by(trapID, pairID) %>%
+  summarise(n = n()) %>%
+  ungroup() %>%
+  arrange(desc(n)) %>%
+  dplyr::filter(n > 3) %>% 
+  pull(pairID)
+
+# if outlier > 4 time, remove the whole pair; keep the correct traps
+# otherwise i need to remove 35 pairs, which is too much
+
+# get list of outliers and remove the traps
+
+dat_fin_counts_m %>% 
+  ggplot(aes(x = year,
+             group = year,
+             y = sum_ips_log)) +
+  geom_boxplot() +
+  geom_text(data = df_outliers %>% dplyr::filter(is_outlier),
+            aes(label = trapID),
+            position = position_jitter(width = 0.2, height = 0),
+            hjust = -0.1, vjust = -0.5, size = 3, color = "red")
+
+
+boxplot(dat_fin_counts_m$sum_ips_log)
+
+# Combine data for visualization
+climate_data <- dat_fin_counts_m %>%
+  mutate(significance = ifelse(pairID %in% significant_traps$pairID, "sig", "ref"))
+
+# Plot temperature comparison
+p_temp <- ggplot(climate_data, aes(x = significance, y = tmp_z, fill = significance)) +
+  geom_boxplot() +
+  labs(title = "Comparison of Temperature (tmp_z) between Significant and Non-Significant Traps",
+       x = "Trap Significance", y = "Temperature (tmp_z)") +
+  theme_minimal() + 
+  facet_grid(.~year, scales = 'free')
+
+# Plot spei comparison
+p_spei <- ggplot(climate_data, aes(x = significance, y = spei_z, fill = significance)) +
+  geom_boxplot() +
+  labs(title = "Comparison of SPEI (spei_z) between Significant and Non-Significant Traps",
+       x = "Trap Significance", y = "SPEI (spei_z)") +
+  theme_minimal() + 
+  facet_grid(.~year, scales = 'free')
+
+p_ips_counts <- ggplot(climate_data, aes(x = significance, y = sum_ips, 
+                                         fill = significance)) +
+  geom_boxplot() +
+  labs(title = "Comparison of beet counts between Significant and Non-Significant Traps",
+       x = "Trap Significance", y = "Beetle pop level") +
+  theme_minimal() + 
+  facet_grid(.~year, scales = 'free')
+
+p_ips_counts_log <- ggplot(climate_data, aes(x = significance, y = log(sum_ips), 
+                                         fill = significance)) +
+  geom_boxplot() +
+  labs(title = "Comparison of beetle counts (log) between Significant and Non-Significant Traps",
+       x = "Trap Significance", y = "Beetle pop level") +
+  theme_minimal() + 
+  facet_grid(.~year, scales = 'free')
+
+
+
+ggarrange(p_temp, p_spei,p_ips_counts,p_ips_counts_log, nrow = 4)
+
+
+
+# Perform t-tests to compare climate variables
+t_test_tmp <- t.test(tmp_z_lag1 ~ significance, data = climate_data)
+t_test_spei <- t.test(spei_z_lag2 ~ significance, data = climate_data)
+
+print(t_test_tmp)
+print(t_test_spei)
+
+
+
+
+# read spatial ata to check where are the significnat locations
+load("outData/spatial.Rdata")
+dat_dynamics <- fread( 'outTable/beetle_dynamic_indicators.csv')
+
+# Spatial data: 
+sort(unique(xy_sf_expand$falsto_name))
+
+
+# get coordinates from sf object
+xy_df <- data.frame(x = sf::st_coordinates(xy_sf_expand)[,"X"],
+                    y = sf::st_coordinates(xy_sf_expand)[,"Y"],
+                    year = xy_sf_expand$year,
+                    trapID = xy_sf_expand$falsto_name)
+
+xy_df <- distinct(xy_df)
+my_crs <- crs(xy_sf_expand)
+
+
+# Merge beetle dynamics inicators with XYs
+dat_dynamics_sf <- 
+  dat_dynamics %>% 
+  left_join(xy_df, by = c("trapID", 'year')) %>% 
+  # remove years woith NAs:
+  dplyr::filter(year %in% 2015:2021) %>% 
+  mutate(log_sum_ips = log(sum_ips),
+         log_peak_diff = log(peak_diff)) %>% 
+  st_as_sf(coords = c("x", "y"), crs = 3035)
+#na.omit() # as agg_doy have some NAs
+
+# select only signif ones
+dat_dynamics_sf_sign <- dat_dynamics_sf %>% 
+  dplyr::filter(pairID %in% significant_traps$pairID)
+
+# Ensure CRS match
+dat_dynamics_sf_sign <- st_transform(dat_dynamics_sf_sign, st_crs(dat_dynamics_sf))
+
+v_all <- vect(dat_dynamics_sf)
+v_sub <- vect(dat_dynamics_sf_sign)
+
+# Get the extents of both layers
+extent_all <- ext(v_all)
+extent_sub <- ext(v_sub)
+
+# Combine extents to get the overall extent
+combined_extent <- union(extent_all, extent_sub)
+
+# Define a yellow-to-red color palette
+yellow_to_red_palette <- colorRampPalette(c("blue", "red"))
+
+
+# Plot the layers with the combined extent
+plot(v_all, ext = combined_extent, col = 'black', main = "Sign difference plots")
+plot(v_sub['sum_ips'],  ext = combined_extent, add = TRUE, col = 'red')
+# Plot the subset layer with 'log_sum_ips' values
+plot(v_sub, 'log_sum_ips', ext = combined_extent, 
+     col = colorRampPalette(c("blue", "red"))(10), add = T)
+
+
+# plotting with sf values --------------------
+
+plot(dat_dynamics_sf['log_sum_ips'], col = 'black')
+plot(dat_dynamics_sf_sign['log_sum_ips'])
+
+plot(dat_dynamics_sf_sign['log_sum_ips'])
+# Add the points from the second dataset
+plot(st_geometry(dat_dynamics_sf_sign), col = 'red', add = TRUE)
+
+# Initial plot
+plot(dat_dynamics_sf['log_sum_ips'], col = 'black')
+
+# Add additional points
+plot(st_geometry(dat_dynamics_sf_sign), col = 'red', add = TRUE)
+
+
+
+
 
 
 
@@ -2495,7 +2779,7 @@ means_dat_fin_year <-
                  sd_peak_doy    = sd(peak_doy, na.rm = T),
                  sd_peak_diff   = sd(peak_diff, na.rm = T)) %>% 
   mutate(Population_level       = stringr::str_glue("{round(mean_sum_ips,1)}±{round(sd_sum_ips,1)}"),
-         Colonization_DOY       = stringr::str_glue("{round(mean_agg_doy,1)}±{round(sd_agg_doy,1)}"),
+         Aggregation_DOY       = stringr::str_glue("{round(mean_agg_doy,1)}±{round(sd_agg_doy,1)}"),
          Peak_growth_DOY        = stringr::str_glue("{round(mean_peak_doy,1)}±{round(sd_peak_doy,1)}"),
          Peak_growth            = stringr::str_glue("{round(mean_peak_diff,1)}±{round(sd_peak_diff,1)}")) %>% 
   dplyr::select(year, Population_level, Colonization_DOY, Peak_growth_DOY,Peak_growth) 
