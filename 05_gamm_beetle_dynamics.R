@@ -930,7 +930,7 @@ m1 <- glmmTMB(sum_ips ~ veg_tmp + spei3_lag2,
               family = nbinom2,
               data = dat_fin_counts_m_scaled )
 m1.nb <- glm.nb(sum_ips ~ veg_tmp + spei3_lag2,
-             # family = nbinom2,
+              family = nbinom2,
               data = dat_fin_counts_m_scaled)
 
 # veg_tmp s slightly better then veg_tmp_lag2, proceed with veg_tmp
@@ -942,12 +942,23 @@ m3 <- glmmTMB(sum_ips ~ veg_tmp*spei3_lag2 + (1|pairID),
               family = nbinom2,
               data = dat_fin_counts_m_scaled)
 
-m3.time <- glmmTMB(sum_ips ~ veg_tmp*spei3_lag2 + (1|year),
+m3.time <- glmmTMB(sum_ips ~ veg_tmp*spei3_lag2 + 
+                     (1|year) ,# random intercept for year
               family = nbinom2,
               data = dat_fin_counts_m_scaled)
 
-AIC(m3, m3.time)
-check_collinearity(m3)
+# by Marc!
+m4.time <- glmmTMB(sum_ips ~ veg_tmp*spei3_lag2 + 
+                     (year|pairID) ,# random intercept for year
+                   family = nbinom2,
+                   data = dat_fin_counts_m_scaled)
+
+
+AIC(m3, m3.time, m4.time)
+check_collinearity(m4.time)
+summary(m4.time)
+plot(m4.time, page = 1)
+
 # exclue random effect
 m4.poly <- glm.nb(sum_ips ~ poly(veg_tmp, 2) + spei3_lag2 + veg_tmp:spei3_lag2,# + (1|pairID),
              # family = nbinom2,
@@ -1233,7 +1244,7 @@ summary(m.no_sign)
 
 # no meaningful to check for them separately
 
-# get list of outliers and remove the traps
+# get list of outliers and remove the traps --------------------------------------
 
 dat_fin_counts_m %>% 
   ggplot(aes(x = year,
@@ -1370,11 +1381,73 @@ print(t_test_spei_results_df)
 
 
 
+# PCA merge spei and tmp into one variable? ---------------------------------------------
+# see the clusters;
+dat_fin_counts_m_scaled_no_outliers %>% 
+  ggplot(aes(x = tmp_z,
+             y = spei_z,
+             color = year_fact)) +
+  geom_point() + 
+  #geom_smooth(
+  #            aes(data =  dat_fin_counts_m_scaled_no_outliers, 
+  #                x = tmp_z,
+   #               y = spei_z)) +
+  theme_classic() + 
+  theme(aspect.ratio = 1)
+
+
+  
+m.lm <- lm(spei_z ~ tmp_z, dat_fin_counts_m_scaled_no_outliers)
+plot(m.lm, page = 1)
+
+pc <- prcomp(dat_fin_counts_m_scaled_no_outliers[,c('tmp_z', 'spei_z')],
+             center = TRUE,
+             scale. = TRUE)
+attributes(pc)
+summary(pc)
+
+
+# ad axis into data: keep only PC1
+dat_fin_counts_m_scaled_no_outliers$PC1 <-  pc$x[,1]
+
+
+dat_fin_counts_m_scaled_no_outliers %>% 
+  ggplot(aes(x = 1:nrow(dat_fin_counts_m_scaled_no_outliers), y = PC1, color = factor(year_fact))) +
+  geom_point() +
+  labs(x = "Index", y = "PC1", color = "Year") +
+  ggtitle("Combined Index of tmp_z and spei_z")
 
 
 
+# check what my values mean:
+dat_fin_counts_m_scaled_no_outliers %>% 
+  dplyr::select(PC1, tmp_z, spei_z) %>% 
+  View()
+
+# interpret the axis:
+pairs(sum_ips ~ PC1+spei_z+tmp_z,data = dat_fin_counts_m_scaled_no_outliers)
+
+hist(dat_fin_counts_m_scaled_no_outliers$PC1)
+
+dat_fin_counts_m_scaled_no_outliers %>% 
+  ggplot(aes(y = sum_ips,
+         x = PC1,
+         color = year_fact)) + 
+  geom_point() + 
+  geom_smooth() + 
+  facet_wrap(.~year, scales = 'free')
 
 
+
+# allow different slope per year
+m <- gam(sum_ips ~ s(PC1, k = 20) +  s(trapID, bs = 're'), 
+         family = nb(), 
+         dat_fin_counts_m_scaled_no_outliers)
+
+summary(m)
+plot(m, page = 1)
+gam.check(m)
+check_concurvity(m)
 
 
 # read spatial ata to check where are the significnat locations
