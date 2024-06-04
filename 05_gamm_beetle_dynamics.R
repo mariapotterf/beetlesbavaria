@@ -518,6 +518,30 @@ dat_spei_lags <-  dat_fin %>%
    mutate(sum_ips_log = log(sum_ips +1))
 
 
+
+# remove too low values: peiting and Eschenbach_idOPf: identify loutlier from log_sum_ips
+df_outliers <- dat_spei_lags %>% 
+  group_by(year) %>% 
+  mutate(is_outlier = ifelse(sum_ips_log > quantile(sum_ips_log, 0.75,na.rm=T) + 1.5 * IQR(sum_ips_log,na.rm=T) |
+                               sum_ips_log < quantile(sum_ips_log, 0.25,na.rm=T) - 1.5 * IQR(sum_ips_log,na.rm=T), TRUE, FALSE)) # %>% 
+
+# check which ones are outliers and how often?
+
+pair_outliers <- df_outliers %>%
+  dplyr::filter(is_outlier) %>%
+  group_by(trapID, pairID) %>%
+  summarise(n = n()) %>%
+  ungroup() %>%
+  arrange(desc(n)) %>%
+  dplyr::filter(n > 3) %>% 
+  pull(pairID)
+
+# if outlier > 4 time, remove the whole pair; keep the correct traps
+# otherwise i need to remove 35 pairs, which is too much
+
+
+
+
 # export table to merge it with the spatial data: for variograms:
 dat_dynamics <- dat_fin %>% 
   dplyr::select(c(year, trapID, pairID, spring_tmp, veg_tmp, veg_prcp,   
@@ -544,6 +568,9 @@ dat_fin_agg_m <-
 # Specify the columns to skip
 columns_to_skip_counts <- c("year", "trapID", "sum_ips", "tr_peak_doy", "peak_diff", "pairID")
 columns_to_skip_agg <- c("year", "trapID", "tr_agg_doy", "tr_peak_doy", "pairID")
+
+
+
 
 
 # Scale and center the remaining numeric columns
@@ -737,10 +764,11 @@ run_models_and_collect_results <- function(data, predictors, response, k = 4, fa
 
 predictors <- c("spring_tmp", "spring_tmp_lag1", "spring_tmp_lag2","spring_tmp_lag3",
   "veg_tmp", "veg_tmp_lag1", "veg_tmp_lag2","veg_tmp_lag3",
- # "spei1", "spei1_lag1", "spei1_lag2","spei1_lag3",
-                "spei3", "spei3_lag1", "spei3_lag2","spei3_lag3",
- # "spei6", "spei6_lag1", "spei6_lag2","spei6_lag3",
-  "spei12", "spei12_lag1", "spei12_lag2","spei12_lag3")
+ "spei", "spei_lag1", "spei_lag2","spei_lag3",
+ "spei_z", "spei_z_lag1", "spei_z_lag2","spei_z_lag3",
+ "tmp_z", "tmp_z_lag1", "tmp_z_lag2","tmp_z_lag3") #,
+ # "spei12", "spei12_lag1", "spei12_lag2","spei12_lag3"
+ #)
 response <- "sum_ips"
 
 results_df <- run_models_and_collect_results(dat_fin_counts_m_scaled, 
@@ -751,7 +779,9 @@ results_df2 <-
   results_df %>% 
     as.data.frame() %>%  
   mutate(predictor = str_replace_all(predictor, "veg_tmp", "vegtmp"),
-         predictor = str_replace_all(predictor, "spring_tmp", "springtmp")) %>% 
+         predictor = str_replace_all(predictor, "spring_tmp", "springtmp"),
+         predictor = str_replace_all(predictor, "tmp_z", "tmpz"),
+         predictor = str_replace_all(predictor, "spei_z", "speiz")) %>% 
     mutate(predictor_full = case_when(
       str_detect(predictor, "_lag") ~ predictor,
       TRUE ~ paste0(predictor, "_lag0")
@@ -770,10 +800,34 @@ results_df2 <-
 ggplot(results_df2, aes(x = x , y = predicted , ymin = conf.low, ymax = conf.high)) +
   geom_ribbon(aes(ymin = conf.low, ymax = conf.high, fill = lag  ), alpha = 0.3) +
   geom_line(aes(color = lag  , linetype = lag  ), linewidth = 1)  +
-  facet_wrap(.~type) +
+  facet_wrap(lag~type) +
   theme_bw()
-  
 
+
+
+# identify the 'hot and dry conditions'
+plot(dat_fin_counts_m_scaled$veg_tmp,dat_fin_counts_m_scaled$spei)
+plot(dat_fin_counts_m_scaled$tmp_z,dat_fin_counts_m_scaled$spei_z)
+
+
+# identify howt and ry conditions visually
+# Load your data
+dat <- dat_fin_counts_m_scaled_no_outliers
+
+# Identify the points in the lower right cluster
+cluster_points <- dat[dat$tmp_z > 1.5 & dat$spei_z < 0, ]
+
+# Print or inspect the identified points
+summary(cluster_points)
+
+# they are all in 2018: split data between before and after drought?
+dat_before <- dat %>% dplyr::filter(year%in% 2015:2017)
+dat_after <- dat %>% dplyr::filter(year%in% 2018:2021)
+
+mm <- gam(sum_ips ~s(tmp_z, k = 4), 
+          family = nb(), method = 'REML', data = dat[,year == 2018])
+
+plot(mm, page = 1)
 
 
 # check multicollinearity between SPEI and tmp: -------------------------------
@@ -917,56 +971,189 @@ m5 <- glmmTMB(sum_ips ~ poly(veg_tmp, 2) + poly(spei3_lag2,2) + (1|pairID),
 
 
 
-# SUM_IPS: gam: spei_lag1  , tmp_z ------------------------------------------- 
+# SUM_IPS: gam: spei_z_lag1  , tmp_z ------------------------------------------- 
+# remove the traps that were found as outliers!
+
+s(spei_lag1, year, k = 4)
+# random intercept,random slope for year
+
+
+
+
+# in gam, do not use collinearity, but concurvity?
+
+library(mgcv)
+## simulate data with concurvity...
+set.seed(8);n<- 200
+f2 <- function(x) 0.2 * x^11 * (10 * (1 - x))^6 + 10 *
+  (10 * x)^3 * (1 - x)^10
+t <- sort(runif(n)) ## first covariate
+## make covariate x a smooth function of t + noise...
+x <- f2(t) + rnorm(n)*3
+## simulate response dependent on t and x...
+y <- sin(4*pi*t) + exp(x/20) + rnorm(n)*.3
+
+## fit model...
+b <- gam(y ~ s(t,k=15) + s(x,k=15),method="REML")
+
+## assess concurvity between each term and `rest of model'...
+round(concurvity(b,full = T) , 2)
+
+
+## ... and now look at pairwise concurvity between terms...
+concurvity(b,full=FALSE)
+check_collinearity(b)
+
+
+
+
+
+
+
+
+
+
+
+
+dat_fin_counts_m_scaled_no_outliers <- dat_fin_counts_m_scaled %>% 
+  dplyr::filter(!pairID %in% pair_outliers) %>% 
+  mutate(year_fact = as.factor(year))
+
+
+# Fitting the model
+m_no_year <- gam(sum_ips ~ s(tmp_z, k = 4) + 
+           s(spei_z_lag1, k = 4) + 
+           s(trapID, bs = 're'), #+ 
+           #s( year_fact, bs = 're'), 
+         family = nb(), 
+         method = 'REML', 
+         data = dat_fin_counts_m_scaled_no_outliers)
+
+
+m <- gam(sum_ips ~ s(tmp_z, k = 4) + # also, increasing k from 4 to 15 increase multicoll
+           s(spei_z_lag1, k = 4) + 
+           s(trapID, bs = 're') + 
+           s( year_fact, bs = 're'), 
+         family = nb(), 
+         method = 'REML', 
+         data = dat_fin_counts_m_scaled_no_outliers)
+
+# including interaction included high multicollinearity
+m1 <- gam(sum_ips ~ s(tmp_z, k = 4) + 
+           s(spei_z_lag1, k = 4) + 
+            ti(tmp_z, spei_z_lag1, k = 4) +
+           s(trapID, bs = 're') + 
+           s( year_fact, bs = 're'), 
+         family = nb(), 
+         method = 'REML', 
+         data = dat_fin_counts_m_scaled_no_outliers)
+
+
+m2 <- gam(sum_ips ~ #s(tmp_z, k = 4) + 
+            s(spei_z_lag1, k = 4) + 
+            ti(tmp_z, spei_z_lag1, k = 4) +
+            s(trapID, bs = 're') + 
+            s( year_fact, bs = 're'), 
+          family = nb(), 
+          method = 'REML', 
+          data = dat_fin_counts_m_scaled_no_outliers)
+
+
+m3 <- gam(sum_ips ~ #s(tmp_z, k = 4) + 
+            #s(spei_z_lag1, k = 4) + 
+            ti(tmp_z, spei_z_lag1, k = 4) +
+            s(trapID, bs = 're') + 
+            s( year_fact, bs = 're'), 
+          family = nb(), 
+          method = 'REML', 
+          data = dat_fin_counts_m_scaled_no_outliers)
+AIC(m, m1, m2, m3)
+plot(m3)
+concurvity(m)
+concurvity(m2)
+
+# check how my data looks like: tmp vs drought: 
+plot(dat_fin_counts_m_scaled_no_outliers$tmp_z, 
+    dat_fin_counts_m_scaled_no_outliers$spei_z)
+
+
+
+# try: random intercept for locations, random slope for year 
+m1 <- gam(sum_ips ~ s(spei_z_lag2, k = 4) +
+            s(trapID, bs = 're') +
+            s(year, spei_z_lag2, bs = 're'),
+            #s(tmp, )
+            #, 
+                   family = nb(),
+                   method ='REML',  
+                   data = dat_fin_counts_m_scaled_no_outliers)
+
+
+m2 <- gam(sum_ips ~ s(spei_z_lag1, k = 4) +
+            s(tmp_z_lag2, k = 4) +
+            s(trapID, bs = 're') +
+            s(tmp_z, by = year, bs = 'fs'),
+          #s(tmp, )
+          #, 
+          family = nb(),
+          method ='REML',  
+          data = dat_fin_counts_m_scaled_no_outliers)
+
+AIC(m1, m2)
+summary(m2)
+plot(m2, page = 1)
+
 m.spei_lag1 <- gam(sum_ips ~ s(spei_lag1, k = 4) , 
                    family = nb(),
-                   method ='REML', # (use ML methos if wish to compare model with glmmTMB by AIC)  "REML", 
-                   data = dat_fin_counts_m_scaled)
+                   method ='REML',  
+                   data = dat_fin_counts_m_scaled_no_outliers)
 
 m.spei_lag2 <- gam(sum_ips ~ s(spei_lag1, k = 4), 
                    family = nb(),
-                   method ='REML', # (use ML methos if wish to compare model with glmmTMB by AIC)  "REML", 
-                   data = dat_fin_counts_m_scaled)
+                   method ='REML',
+                   data = dat_fin_counts_m_scaled_no_outliers)
 
 m.tmp <- gam(sum_ips ~  s(tmp_z, k = 4), 
              family = nb(),
-             method ='REML', # (use ML methos if wish to compare model with glmmTMB by AIC)  "REML", 
-             data = dat_fin_counts_m_scaled)
+             method ='REML',
+             data = dat_fin_counts_m_scaled_no_outliers)
 
 m.tmp_lag1 <- gam(sum_ips ~  s(tmp_z, k = 4), 
              family = nb(),
-             method ='REML', # (use ML methos if wish to compare model with glmmTMB by AIC)  "REML", 
-             data = dat_fin_counts_m_scaled)
+             method ='REML',  
+             data = dat_fin_counts_m_scaled_no_outliers)
 
 
 m.add <- gam(sum_ips ~ s(tmp_z, k = 4) +  s(spei_z_lag1, k = 4),# +
              #  ti(tmp_z_lag1, spei_z_lag2, k =7), 
              family = nb(),
-             method ='REML', # (use ML methos if wish to compare model with glmmTMB by AIC)  "REML", 
-             data = dat_fin_counts_m_scaled)
+             method ='REML', 
+             data = dat_fin_counts_m_scaled_no_outliers)
 
 
 
 m.int <- gam(sum_ips ~ s(tmp_z, k = 4) +  s(spei_z_lag1, k = 4) +
+               ti(tmp_z, spei_z_lag1, k =7) +
+               pairID, 
+             family = nb(),
+             method ='REML', 
+             data = dat_fin_counts_m_scaled_no_outliers)
+
+
+m.int2 <- gam(sum_ips ~ s(tmp_z_lag1, k = 4) +  s(spei_z_lag2, k = 4) +
                ti(tmp_z_lag1, spei_z_lag2, k =7) +
                pairID, 
              family = nb(),
-             method ='REML', # (use ML methos if wish to compare model with glmmTMB by AIC)  "REML", 
-             data = dat_fin_counts_m_scaled)
+             method ='REML', 
+             data = dat_fin_counts_m_scaled_no_outliers)
 
 
-# year:
-m.year <- gam(sum_ips ~ s(tmp_z, k = 4) +  #s(spei_lag1, k = 7) +
-               #ti(tmp_z_lag1, spei_z_lag2, k =7) +
-               as.factor(year), 
-             family = nb(),
-             method ='REML', # (use ML methos if wish to compare model with glmmTMB by AIC)  "REML", 
-             data = dat_fin_counts_m_scaled)
+AIC(m.int, m.int2)
 
-
-summary(m.year)
-check_collinearity(m.year)
-plot(m.year, page = 1)
+summary(m.int2)
+check_collinearity(m.int2)
+concurvity(m.int2)
+plot(m.int2, page = 1)
 
 
 
@@ -994,30 +1181,57 @@ significant_traps <-
    # head()
    dplyr::filter(p_values < 0.05) %>% 
    mutate(pairID = gsub("pairID", '', pairID )) 
-  
 
 
 (significant_traps)
 
-# remove too low values: peiting and Eschenbach_idOPf: identify loutlier from log_sum_ips
-df_outliers <- dat_fin_counts_m %>% 
-  group_by(year) %>% 
-  mutate(is_outlier = ifelse(sum_ips_log > quantile(sum_ips_log, 0.75) + 1.5 * IQR(sum_ips_log) |
-                               sum_ips_log < quantile(sum_ips_log, 0.25) - 1.5 * IQR(sum_ips_log), TRUE, FALSE)) # %>% 
 
-# check which ones are outliers and how often?
+# split data into significant and non significant locations
+df_sign <- dat_fin_counts_m_scaled_no_outliers %>%
+  mutate(significance = ifelse(pairID %in% significant_traps$pairID, "sig", "ref")) %>% 
+  dplyr::filter(significance == 'sig')
 
-pair_outliers <- df_outliers %>%
-  dplyr::filter(is_outlier) %>%
-  group_by(trapID, pairID) %>%
-  summarise(n = n()) %>%
-  ungroup() %>%
-  arrange(desc(n)) %>%
-  dplyr::filter(n > 3) %>% 
-  pull(pairID)
 
-# if outlier > 4 time, remove the whole pair; keep the correct traps
-# otherwise i need to remove 35 pairs, which is too much
+df_no_sign <- dat_fin_counts_m_scaled_no_outliers %>%
+  mutate(significance = ifelse(pairID %in% significant_traps$pairID, "sig", "ref")) %>% 
+  dplyr::filter(significance == 'ref')
+
+
+# use different location as its own factor:
+dat_fin_counts_m_scaled_no_outliers <- dat_fin_counts_m_scaled_no_outliers %>%
+  mutate(significance = as.factor(ifelse(pairID %in% significant_traps$pairID, "sig", "ref"))) 
+
+m <- gam(sum_ips ~ s(tmp_z, k = 4) + s(spei_z, k = 4) + 
+           significance + 
+           trapID,  # this induces collinearity/concurvity
+         family = nb(),
+         method ='REML', 
+         dat_fin_counts_m_scaled_no_outliers)
+
+summary(m)
+check_concurvity(m)
+plot(m, page = 1)
+
+# try model just for different location stypes: signigicantly ifferent or similar to the ref
+m.sign <- gam(sum_ips ~ s(tmp_z, k = 4) + s(spei_z, k = 4),# + 
+          # significance + 
+          # trapID,  # this induces collinearity/concurvity
+         family = nb(),
+         method ='REML', 
+         df_sign)
+
+summary(m.sign)
+m.no_sign <- gam(sum_ips ~ s(tmp_z, k = 4) + s(spei_z, k = 4),# + 
+              # significance + 
+              # trapID,  # this induces collinearity/concurvity
+              family = nb(),
+              method ='REML', 
+              df_no_sign)
+
+plot(m.no_sign, page = 1)
+summary(m.no_sign)
+
+# no meaningful to check for them separately
 
 # get list of outliers and remove the traps
 
@@ -1041,6 +1255,7 @@ climate_data <- dat_fin_counts_m %>%
 # Plot temperature comparison
 p_temp <- ggplot(climate_data, aes(x = significance, y = tmp_z, fill = significance)) +
   geom_boxplot() +
+  stat_compare_means(aes(group = significance), label = "p.signif") +
   labs(title = "Comparison of Temperature (tmp_z) between Significant and Non-Significant Traps",
        x = "Trap Significance", y = "Temperature (tmp_z)") +
   theme_minimal() + 
@@ -1049,14 +1264,17 @@ p_temp <- ggplot(climate_data, aes(x = significance, y = tmp_z, fill = significa
 # Plot spei comparison
 p_spei <- ggplot(climate_data, aes(x = significance, y = spei_z, fill = significance)) +
   geom_boxplot() +
+  stat_compare_means(aes(group = significance), label = "p.signif") +
   labs(title = "Comparison of SPEI (spei_z) between Significant and Non-Significant Traps",
        x = "Trap Significance", y = "SPEI (spei_z)") +
   theme_minimal() + 
   facet_grid(.~year, scales = 'free')
 
+
 p_ips_counts <- ggplot(climate_data, aes(x = significance, y = sum_ips, 
                                          fill = significance)) +
   geom_boxplot() +
+  stat_compare_means(aes(group = significance), label = "p.signif") +
   labs(title = "Comparison of beet counts between Significant and Non-Significant Traps",
        x = "Trap Significance", y = "Beetle pop level") +
   theme_minimal() + 
@@ -1071,8 +1289,8 @@ p_ips_counts_log <- ggplot(climate_data, aes(x = significance, y = log(sum_ips),
   facet_grid(.~year, scales = 'free')
 
 
-
-ggarrange(p_temp, p_spei,p_ips_counts,p_ips_counts_log, nrow = 4)
+windows()
+ggarrange(p_temp, p_spei,p_ips_counts, nrow = 3) # p_ips_counts_log,
 
 
 
@@ -1082,6 +1300,79 @@ t_test_spei <- t.test(spei_z_lag2 ~ significance, data = climate_data)
 
 print(t_test_tmp)
 print(t_test_spei)
+
+
+# run t test for years
+
+
+# Assume climate_data is your data frame and it has columns year, tmp_z_lag1, spei_z_lag2, and significance
+
+# Initialize lists to store results
+t_test_tmp_results <- list()
+t_test_spei_results <- list()
+
+# Get unique years
+years <- unique(climate_data$year)
+
+# Loop through each year and perform t-tests
+for (year in years) {
+  # Filter data for the current year
+  data_year <- climate_data %>% filter(year == !!year)
+  
+  # Perform t-test for tmp_z_lag1
+  t_test_tmp <- t.test(tmp_z_lag1 ~ significance, data = data_year)
+  t_test_tmp_results[[as.character(year)]] <- round(t_test_tmp$p.value, 2)
+  
+  # Perform t-test for spei_z_lag2
+  t_test_spei <- t.test(spei_z_lag2 ~ significance, data = data_year)
+  t_test_spei_results[[as.character(year)]] <- round(t_test_spei$p.value,2)
+}
+
+# Convert results to data frames
+t_test_tmp_results_df <- data.frame(year = names(t_test_tmp_results), p_value_tmp = unlist(t_test_tmp_results))
+t_test_spei_results_df <- data.frame(year = names(t_test_spei_results), p_value_spei = unlist(t_test_spei_results))
+
+# Print the results
+print(t_test_tmp_results_df)
+print(t_test_spei_results_df)
+
+
+
+# run for current tmps
+# Initialize lists to store results
+t_test_tmp_results <- list()
+t_test_spei_results <- list()
+
+# Get unique years
+years <- unique(climate_data$year)
+
+# Loop through each year and perform t-tests
+for (year in years) {
+  # Filter data for the current year
+  data_year <- climate_data %>% filter(year == !!year)
+  
+  # Perform t-test for tmp_z_lag1
+  t_test_tmp <- t.test(tmp_z ~ significance, data = data_year)
+  t_test_tmp_results[[as.character(year)]] <- round(t_test_tmp$p.value,2)
+  
+  # Perform t-test for spei_z_lag2
+  t_test_spei <- t.test(spei_z ~ significance, data = data_year)
+  t_test_spei_results[[as.character(year)]] <- round(t_test_spei$p.value,2)
+}
+
+# Convert results to data frames
+t_test_tmp_results_df <- data.frame(year = names(t_test_tmp_results), p_value_tmp = unlist(t_test_tmp_results))
+t_test_spei_results_df <- data.frame(year = names(t_test_spei_results), p_value_spei = unlist(t_test_spei_results))
+
+# Print the results
+print(t_test_tmp_results_df)
+print(t_test_spei_results_df)
+
+
+
+
+
+
 
 
 
