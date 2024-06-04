@@ -46,23 +46,23 @@ load("outData/spatial.Rdata")
 
 # Get SPEI and clim data: they are for whole year! check only veg season? now 3-10 (includes march)
 df_clim                <- fread('outTable/xy_clim_DWD.csv')
-df_spei                <- fread('outTable/xy_spei_veg_season_DWD.csv')
-df_spei_months         <- fread('outTable/xy_spei_all_DWD.csv')
+df_spei_season                <- fread('outTable/xy_spei_veg_season_DWD.csv')
+df_spei_year         <- fread('outTable/xy_spei_all_DWD.csv')
 
-anyNA(df_spei_months)
+anyNA(df_spei_year)
 
 #df_clim$falsto_name <- iconv(df_clim$falsto_name, from = "UTF-8", to = "")
 
-#View(df_spei)
+#View(df_spei_season)
 
 # make a plot with speis take data fr whole year ----------------------
-df_spei_months <- df_spei_months %>% 
+df_spei_year <- df_spei_year %>% 
   mutate(date = as.Date(paste(year, month, "01", sep = "-")))
 
 
 # Calculate median SPEI for each scale
 median_spei <- 
-  df_spei_months %>%
+  df_spei_year %>%
   group_by(scale, date) %>%
   summarise(median_spei = median(spei), .groups = 'drop') %>% 
   mutate(sign = case_when(median_spei >=0 ~ 'pos',
@@ -130,7 +130,7 @@ df_prcp_veg_season = df_clim %>%
 
 
 # get median spei for all months, for the spearmans correlations
-df_spei_year <- df_spei_months %>% 
+df_spei_year <- df_spei_year %>% 
   group_by(falsto_name, year, scale) %>% 
   summarise(spei = median(spei)) %>% 
   pivot_wider(names_from = scale, values_from = spei) %>% 
@@ -142,10 +142,10 @@ df_spei_year <- df_spei_months %>%
     annual_spei24 = `24`
   )
 
-head(df_spei)#SPEI is already filtered over years and to vegetation season, just needs to be converted to wide format to havendle two types of SPEI1, 12
+head(df_spei_season)#SPEI is already filtered over years and to vegetation season, just needs to be converted to wide format to havendle two types of SPEI1, 12
 # convert to wide format
 df_spei_wide <- 
-  df_spei %>% 
+  df_spei_season %>% 
   pivot_wider(names_from = scale, values_from = spei)# %>% 
   #filter(year %in% study.period.extended) #%>% already set up for veg season
 
@@ -208,7 +208,7 @@ df_tmp_anom <-
 
 ##### anomalies for spei --------------------------
 df_anom_spei_veg_season <- 
-  df_spei_months %>% 
+  df_spei_year %>% 
   dplyr::filter(month %in% veg.period) %>% # filter chunk of veg period
   dplyr::filter(scale == 3) %>%  # select only spei3
   ungroup(.) %>% 
@@ -397,36 +397,6 @@ df_clim %>%
     width = .2) #+
 
 
-
-# SPEI1
-df_spei %>% 
-  filter(scale == 24) %>% 
-  ggplot(aes(x = year,
-             y = spei,
-             group = falsto_name)) +
-  geom_line(alpha = 0.4)
-
-
-
-# SPEI1
-df_spei %>% 
- # filter(scale == 12) %>% 
-  ggplot(aes(x = year,
-             y = spei,
-             group = scale)) +
-  stat_summary(fun = "median", 
-               geom = "bar", 
-               alpha = .7) +
-  stat_summary(
-    data = df_spei,
-    mapping = aes(x = year, 
-                  y = spei  ),
-    fun.min = function(z) { quantile(z,0.25) },
-    fun.max = function(z) { quantile(z,0.75) },
-    fun = median,
-    geom  = 'errorbar',
-    width = .2) +
- facet_grid(.~scale)
 
 
 

@@ -949,15 +949,21 @@ m3.time <- glmmTMB(sum_ips ~ veg_tmp*spei3_lag2 +
 
 # by Marc!
 m4.time <- glmmTMB(sum_ips ~ veg_tmp*spei3_lag2 + 
+                      (1 + year|pairID) ,
+                    # (year|pairID) ,# random intercept for year
+                   family = nbinom2,
+                   data = dat_fin_counts_m_scaled)
+
+m4_z <- glmmTMB(sum_ips ~ tmp_z*spei_z + 
                      (year|pairID) ,# random intercept for year
                    family = nbinom2,
                    data = dat_fin_counts_m_scaled)
 
 
-AIC(m3, m3.time, m4.time)
-check_collinearity(m4.time)
-summary(m4.time)
-plot(m4.time, page = 1)
+
+AIC(m3, m3.time, m4.time,m4_z)
+check_collinearity(m4_z)
+summary(m4_z)
 
 # exclue random effect
 m4.poly <- glm.nb(sum_ips ~ poly(veg_tmp, 2) + spei3_lag2 + veg_tmp:spei3_lag2,# + (1|pairID),
