@@ -129,6 +129,47 @@ dat_fin <- dat_fin %>%
          population_growth2    = dplyr::lag(population_growth, n = 1, order_by = year)) %>%  # lag population growth by one more year
  ungroup() 
 
+
+# instead of lags: calculate the average tmp from previous years
+library(slider)
+dat_fin %>% 
+  group_by(trapID, pairID) %>% 
+  arrange(year, trapID) %>% 
+  dplyr::select(trapID, veg_tmp, year)
+
+
+calculate_rolling_avg <- function(df, window, variable_name) {
+  tmp_var <- variable_name
+  tmp_col <- paste0(variable_name, "_", window, "yr")
+  
+  df %>%
+    group_by(trapID) %>%
+    arrange(year) %>%
+    mutate(!!tmp_col := slide_dbl(!!sym(variable_name), mean, .before = window, .complete = TRUE)) %>%
+    ungroup()
+}
+
+
+# Calculate rolling averages for 1, 2, and 3 years
+dat_fin_rolling <- dat_fin %>%
+  calculate_rolling_avg(1, "tmp") %>% 
+  calculate_rolling_avg(2, "tmp") %>%
+  calculate_rolling_avg(3, "tmp") %>% 
+  calculate_rolling_avg(1, "tmp_z") %>% 
+  calculate_rolling_avg(2, "tmp_z") %>%
+  calculate_rolling_avg(3, "tmp_z") %>% 
+  calculate_rolling_avg(1, "prcp") %>% 
+  calculate_rolling_avg(2, "prcp") %>%
+  calculate_rolling_avg(3, "prcp") 
+
+
+
+
+
+
+
+
+
 # Find teh most influential time lag :  0,1,2,3----------------------------------------------
 
 
@@ -455,7 +496,6 @@ sjPlot::tab_df(model_lag_RS,
 
 
 
-# alternative: 
 
 
 
@@ -617,10 +657,9 @@ selected_predictors <- c("spring_tmp", "spring_tmp_lag1", "spring_tmp_lag2","spr
   "tmp_z", "tmp_z_lag1", "tmp_z_lag2","tmp_z_lag3",
   "spei_z", "spei_z_lag1", "spei_z_lag2","spei_z_lag3",
   "prcp_z", "prcp_z_lag1", "prcp_z_lag2","prcp_z_lag3",
+  'tmp', 'tmp_1yr', 'tmp_2yr','tmp_3yr',  # averages of tmp
                          "spei", "spei_lag1", "spei_lag2","spei_lag3",
                          "spei3", "spei3_lag1", "spei3_lag2","spei3_lag3" #,
-                        # "spei6", "spei6_lag1", "spei6_lag2","spei6_lag3",
-                        # "spei12", "spei12_lag1", "spei12_lag2","spei12_lag3"
   )
 
 
@@ -629,7 +668,7 @@ selected_predictors <- c("spring_tmp", "spring_tmp_lag1", "spring_tmp_lag2","spr
 for (dep in dependent_vars_counts) {
   #print(dep)
   # Loop over each predictor
-  for (pred in sub_predictors) {
+  for (pred in selected_predictors) {
     #print(pred)
     # Fit the model
     #formula <- as.formula(paste(dep, "~ s(", pred, ", k = 4) + s(pairID, bs = 're')"))
@@ -656,9 +695,10 @@ best_predictors_counts <- model_metrics_count %>%
     TRUE ~ "other"
   )) %>% 
   group_by(Dependent, category) %>% 
-  slice(which.min(AIC))
+ # slice(which.min(AIC))
+  slice(which.max(DevianceExplained))
 
-
+best_predictors_counts
 ####### for DOY values ---------------------------------------------------------------
 
 # Initialize a data frame to store AIC values and deviance explained
@@ -670,7 +710,7 @@ model_metrics_doy <- data.frame(Predictor = character(),
 for (dep in dependent_vars_doy ) {
   #print(dep)
   # Loop over each predictor
-  for (pred in sub_predictors) {
+  for (pred in selected_predictors) {
     #print(pred)
     # Fit the model
     #formula <- as.formula(paste(dep, "~ s(", pred, ", k = 4) + s(pairID, bs = 're')"))
@@ -687,7 +727,7 @@ for (dep in dependent_vars_doy ) {
 }
 
 # View the AIC values and deviance explained
-#print(model_metrics_doy)
+print(model_metrics_doy)
 
 # Select the best predictor for each dependent variable based on the lowest AIC
 best_predictors_doy <- model_metrics_doy %>% 
@@ -698,6 +738,9 @@ best_predictors_doy <- model_metrics_doy %>%
   )) %>% 
   group_by(Dependent, category) %>% 
   slice(which.min(AIC))
+
+best_predictors_doy
+
 
 # merge both tables:
 full_lag_models <- rbind(model_metrics_count,model_metrics_doy) #%>% 
