@@ -151,7 +151,7 @@ calculate_rolling_avg <- function(df, window, variable_name) {
 
 
 # Calculate rolling averages for 1, 2, and 3 years
-dat_fin_rolling <- dat_fin %>%
+dat_fin <- dat_fin %>%
   calculate_rolling_avg(1, "tmp") %>% 
   calculate_rolling_avg(2, "tmp") %>%
   calculate_rolling_avg(3, "tmp") %>% 
@@ -160,7 +160,13 @@ dat_fin_rolling <- dat_fin %>%
   calculate_rolling_avg(3, "tmp_z") %>% 
   calculate_rolling_avg(1, "prcp") %>% 
   calculate_rolling_avg(2, "prcp") %>%
-  calculate_rolling_avg(3, "prcp") 
+  calculate_rolling_avg(3, "prcp") %>% 
+  calculate_rolling_avg(1, "spei") %>% 
+  calculate_rolling_avg(2, "spei") %>%
+  calculate_rolling_avg(3, "spei") %>% 
+  calculate_rolling_avg(1, "spei_z") %>% 
+  calculate_rolling_avg(2, "spei_z") %>%
+  calculate_rolling_avg(3, "spei_z")
 
 
 
@@ -658,8 +664,10 @@ selected_predictors <- c("spring_tmp", "spring_tmp_lag1", "spring_tmp_lag2","spr
   "spei_z", "spei_z_lag1", "spei_z_lag2","spei_z_lag3",
   "prcp_z", "prcp_z_lag1", "prcp_z_lag2","prcp_z_lag3",
   'tmp', 'tmp_1yr', 'tmp_2yr','tmp_3yr',  # averages of tmp
-                         "spei", "spei_lag1", "spei_lag2","spei_lag3",
-                         "spei3", "spei3_lag1", "spei3_lag2","spei3_lag3" #,
+  'tmp_z', 'tmp_z_1yr', 'tmp_z_2yr','tmp_z_3yr',  # averages of tmp
+  'prcp', 'prcp_1yr', 'prcp_2yr','prcp_3yr',  # averages of tmp
+  'spei', 'spei_1yr', 'spei_2yr','spei_3yr',  # averages of tmp
+                         "spei", "spei_lag1", "spei_lag2","spei_lag3"
   )
 
 
@@ -695,8 +703,8 @@ best_predictors_counts <- model_metrics_count %>%
     TRUE ~ "other"
   )) %>% 
   group_by(Dependent, category) %>% 
- # slice(which.min(AIC))
-  slice(which.max(DevianceExplained))
+  slice_min(AIC, n = 3)   # Select the best 3 based on AIC
+ # slice(which.max(DevianceExplained))
 
 best_predictors_counts
 ####### for DOY values ---------------------------------------------------------------
@@ -737,17 +745,32 @@ best_predictors_doy <- model_metrics_doy %>%
     TRUE ~ "other"
   )) %>% 
   group_by(Dependent, category) %>% 
-  slice(which.min(AIC))
+  slice_min(AIC, n = 3) #%>%  # Select the best 3 based on AIC
+  #slice(which.min(AIC))
 
 best_predictors_doy
 
 
 # merge both tables:
 full_lag_models <- rbind(model_metrics_count,model_metrics_doy) #%>% 
- 
+full_lag_models <- full_lag_models %>% 
+  mutate(category = case_when(
+    grepl("tmp", Predictor  ) ~ "tmp",
+    grepl("spei", Predictor  ) ~ "spei",
+    TRUE ~ "other"
+  )) 
+
+
+  
+View(full_lag_models)
 best_predictors <- rbind(best_predictors_counts, best_predictors_doy )
 
 (best_predictors)
+
+best_predictors %>% 
+  ungroup() %>% 
+  dplyr::count(Dependent, category, Predictor) %>%
+  arrange(Dependent, category, desc(n))
 
 
 
