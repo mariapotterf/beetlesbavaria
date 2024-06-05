@@ -251,7 +251,7 @@ district_ID <- terra::extract(rast(grid_sel_ras),
                             #  vect(ips_sum_sf_trans), 
                               df = TRUE, bind = TRUE )
 
-#### LLink beetle counts vs damage volume per departm,ent (sub district)  -------------------------------------------------------
+#### Link beetle counts vs damage volume per department (sub district)  -------------------------------------------------------
 ips_damage_district <- district_ID %>% 
   as.data.frame() %>% 
   rename(forstrev_1 = layer)
@@ -453,136 +453,136 @@ ips_damage_clean$sum_beetle_lag2_scaled <- scale(ips_damage_clean$sum_beetle_lag
 # Kriging -----------------------------------------------------------------------
 
 # rasterzie
-xv <- rasterize(v_districts_simpl, dist_year_crop, fun=sum)
-plot(xv)
-
-# convert spatRast to raster format
-back_rst <- raster(xv)
-
-plot(v_ips_sum_simpl, add = T )
-plot(v_ips_sum_2015, add = T , col = 'red')
-
-
-plot(back_rst )
-plot(trap_data, add = T , col = 'red')
-
-
-
-# test kriging: chat gpt
-
-# Load necessary libraries
-library(terra)
-library(gstat)
-
-# Create some sample spatial data
-set.seed(123)
-coords <- cbind(runif(50, 0, 10), runif(50, 0, 10))
-values <- sin(coords[,1]) + cos(coords[,2]) + rnorm(50, 0, 0.1)
-
-# Create a SpatVector object with the sample data
-sp_data <- vect(data.frame(x = coords[,1], y = coords[,2], z = values), geom = c("x", "y"))
-
-# Convert to SpatialPointsDataFrame
-sp_data_spdf <- as(sp_data, "Spatial")
-
-# Create a raster template
-rast_template <- rast(xmin=0, xmax=10, ymin=0, ymax=10, resolution=0.1)
-
-# Convert raster template to SpatialPixelsDataFrame
-rast_template_spdf <- as(rast_template, "Spatial")
-
-# Create a gstat object for ordinary kriging
-g <- gstat(id="z", formula=z~1, data=sp_data_spdf)
-
-# Compute and fit variogram
-vgm_model <- variogram(z~1, sp_data_spdf)
-fit_vgm <- fit.variogram(vgm_model, model=vgm("Sph"))
-
-# Perform kriging
-krig_result <- predict(g, newdata=rast_template_spdf, model=fit_vgm)
-
-# Convert the result to a SpatRaster
-krig_raster <- rast(krig_result)
-
-# Plot the result
-plot(krig_raster, main="Kriging Interpolation")
-points(sp_data, col="red", pch=16)
-
-
-
-
-
-# interpolate the beetle trap ata overBavaria/ year
-# link better with the reported damage data on teh district levels
-library(gstat)
-
-v_ips_sum_2015 <- v_ips_sum[v_ips_sum$year == 2015, ]
-
-#convert to sf object
-trap_data <- st_as_sf(v_ips_sum_2015)
-
-
-
-interpolate(p, tps)
-
-
-# Create a vast_as_sf()# Create a variogram
-vgm_model <- variogram(sum_beetle ~ 1, trap_data)
-
-
-# Fit a variogram model
-fit_model1 <- fit.variogram(vgm_model, model = vgm(psill=1, model="Exp", range=1, nugget=0.1))
-
-# Fit a variogram model with the estimated parameters from the semivariogram plot
-fit_model2 <- fit.variogram(vgm_model, model = vgm(psill = 8e7, model = "Exp", range = 100000, nugget = 2e7))
-
-#grid_sel_ras_sf <- raster::raster(grid_sel_ras)
-#grid_spdf <- as(grid_sel_ras, "SpatialPixelsDataFrame")
-#crs(grid_spdf) <- crs(raster(dist_year_crop))
-#identical(crs(grid_spdf), crs(raster(dist_year_crop)))
-
-# Step 2: Perform Kriging
-kriging_result <- krige(sum_beetle                 ~ 1, trap_data, newdata = back_rst, model = fit_model2)
-
-# Optional: Convert kriging result back to RasterLayer if needed
-kriging_raster <- raster(kriging_result)
-
-
-
-# Perform Kriging
-kriging_result <- krige(count ~ 1, trap_data, newdata =grid_sel_ras, model = fit_model2)
-grid_sel_ras
-
-# Convert the result to a raster for visualization
-r_interpolated <- rast(kriging_result)
-
-# Plot the interpolated raster
-plot(r_interpolated, main = "Interpolated Bark Beetle Counts")
-
-
-# test krigin on Meuse ---------------------
-library(sp)
-data(meuse)
-coordinates(meuse) = ~x+y
-data(meuse.grid)
-gridded(meuse.grid) = ~x+y
-m <- vgm(.59, "Sph", 874, .04)
-# ordinary kriging:
-x <- krige(log(zinc)~1, meuse, meuse.grid, model = m)
-spplot(x["var1.pred"], main = "ordinary kriging predictions")
-spplot(x["var1.var"],  main = "ordinary kriging variance")
-# simple kriging:
-x <- krige(log(zinc)~1, meuse, meuse.grid, model = m, beta = 5.9)
-# residual variogram:
-m <- vgm(.4, "Sph", 954, .06)
-# universal block kriging:
-x <- krige(log(zinc)~x+y, meuse, meuse.grid, model = m, block = c(40,40))
-spplot(x["var1.pred"], main = "universal kriging predictions")
-
-
-
-
-
+# xv <- rasterize(v_districts_simpl, dist_year_crop, fun=sum)
+# plot(xv)
+# 
+# # convert spatRast to raster format
+# back_rst <- raster(xv)
+# 
+# plot(v_ips_sum_simpl, add = T )
+# plot(v_ips_sum_2015, add = T , col = 'red')
+# 
+# 
+# plot(back_rst )
+# plot(trap_data, add = T , col = 'red')
+# 
+# 
+# 
+# # test kriging: chat gpt
+# 
+# # Load necessary libraries
+# library(terra)
+# library(gstat)
+# 
+# # Create some sample spatial data
+# set.seed(123)
+# coords <- cbind(runif(50, 0, 10), runif(50, 0, 10))
+# values <- sin(coords[,1]) + cos(coords[,2]) + rnorm(50, 0, 0.1)
+# 
+# # Create a SpatVector object with the sample data
+# sp_data <- vect(data.frame(x = coords[,1], y = coords[,2], z = values), geom = c("x", "y"))
+# 
+# # Convert to SpatialPointsDataFrame
+# sp_data_spdf <- as(sp_data, "Spatial")
+# 
+# # Create a raster template
+# rast_template <- rast(xmin=0, xmax=10, ymin=0, ymax=10, resolution=0.1)
+# 
+# # Convert raster template to SpatialPixelsDataFrame
+# rast_template_spdf <- as(rast_template, "Spatial")
+# 
+# # Create a gstat object for ordinary kriging
+# g <- gstat(id="z", formula=z~1, data=sp_data_spdf)
+# 
+# # Compute and fit variogram
+# vgm_model <- variogram(z~1, sp_data_spdf)
+# fit_vgm <- fit.variogram(vgm_model, model=vgm("Sph"))
+# 
+# # Perform kriging
+# krig_result <- predict(g, newdata=rast_template_spdf, model=fit_vgm)
+# 
+# # Convert the result to a SpatRaster
+# krig_raster <- rast(krig_result)
+# 
+# # Plot the result
+# plot(krig_raster, main="Kriging Interpolation")
+# points(sp_data, col="red", pch=16)
+# 
+# 
+# 
+# 
+# 
+# # interpolate the beetle trap ata overBavaria/ year
+# # link better with the reported damage data on teh district levels
+# library(gstat)
+# 
+# v_ips_sum_2015 <- v_ips_sum[v_ips_sum$year == 2015, ]
+# 
+# #convert to sf object
+# trap_data <- st_as_sf(v_ips_sum_2015)
+# 
+# 
+# 
+# interpolate(p, tps)
+# 
+# 
+# # Create a vast_as_sf()# Create a variogram
+# vgm_model <- variogram(sum_beetle ~ 1, trap_data)
+# 
+# 
+# # Fit a variogram model
+# fit_model1 <- fit.variogram(vgm_model, model = vgm(psill=1, model="Exp", range=1, nugget=0.1))
+# 
+# # Fit a variogram model with the estimated parameters from the semivariogram plot
+# fit_model2 <- fit.variogram(vgm_model, model = vgm(psill = 8e7, model = "Exp", range = 100000, nugget = 2e7))
+# 
+# #grid_sel_ras_sf <- raster::raster(grid_sel_ras)
+# #grid_spdf <- as(grid_sel_ras, "SpatialPixelsDataFrame")
+# #crs(grid_spdf) <- crs(raster(dist_year_crop))
+# #identical(crs(grid_spdf), crs(raster(dist_year_crop)))
+# 
+# # Step 2: Perform Kriging
+# kriging_result <- krige(sum_beetle                 ~ 1, trap_data, newdata = back_rst, model = fit_model2)
+# 
+# # Optional: Convert kriging result back to RasterLayer if needed
+# kriging_raster <- raster(kriging_result)
+# 
+# 
+# 
+# # Perform Kriging
+# kriging_result <- krige(count ~ 1, trap_data, newdata =grid_sel_ras, model = fit_model2)
+# grid_sel_ras
+# 
+# # Convert the result to a raster for visualization
+# r_interpolated <- rast(kriging_result)
+# 
+# # Plot the interpolated raster
+# plot(r_interpolated, main = "Interpolated Bark Beetle Counts")
+# 
+# 
+# # test krigin on Meuse ---------------------
+# library(sp)
+# data(meuse)
+# coordinates(meuse) = ~x+y
+# data(meuse.grid)
+# gridded(meuse.grid) = ~x+y
+# m <- vgm(.59, "Sph", 874, .04)
+# # ordinary kriging:
+# x <- krige(log(zinc)~1, meuse, meuse.grid, model = m)
+# spplot(x["var1.pred"], main = "ordinary kriging predictions")
+# spplot(x["var1.var"],  main = "ordinary kriging variance")
+# # simple kriging:
+# x <- krige(log(zinc)~1, meuse, meuse.grid, model = m, beta = 5.9)
+# # residual variogram:
+# m <- vgm(.4, "Sph", 954, .06)
+# # universal block kriging:
+# x <- krige(log(zinc)~x+y, meuse, meuse.grid, model = m, block = c(40,40))
+# spplot(x["var1.pred"], main = "universal kriging predictions")
+# 
+# 
+# 
+# 
+# 
 
 # merge all raster data together; check n of cells---------------------------------------
 ncell(grid_sel_ras)
