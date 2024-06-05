@@ -71,9 +71,6 @@ median_spei <-
     replace(is.na(.), 0)
 
 
-
-
-
 # Get geo data: elevation, slope, roughness...
 xy_topo      <- vect(paste(myPath, outFolder, "xy_3035_topo.gpkg", sep = "/"), 
                   layer = 'xy_3035_topo') # read trap pairID
@@ -86,9 +83,6 @@ xy_df <- data.frame(x = sf::st_coordinates(xy_sf_expand)[,"X"],
                     globalid =    xy_sf_expand$globalid,
                     year =    xy_sf_expand$year)
 
-# remove special characters
-#xy_df$falsto_name <- gsub("[^A-Za-z0-9_]", "", xy_df$falsto_name) # Remove all non-alphanumeric characters except underscore
-#xy_topo$falsto_name <- gsub("[^A-Za-z0-9_]", "", xy_topo$falsto_name) # Remove all non-alphanumeric characters except underscore
 
 
 # get the final subset of globalids
@@ -126,11 +120,11 @@ df_temp_veg_season = df_clim %>%
 df_prcp_veg_season = df_clim %>% 
   filter(year %in% study.period.extended & month %in% veg.months) %>%
   group_by(year, falsto_name) %>% 
-  summarise(veg_prcp = mean(prcp))
+  summarise(veg_prcp = sum(prcp))
 
 
 # get median spei for all months, for the spearmans correlations
-df_spei_year <- df_spei_year %>% 
+df_spei_year_median <- df_spei_year %>% 
   group_by(falsto_name, year, scale) %>% 
   summarise(spei = median(spei)) %>% 
   pivot_wider(names_from = scale, values_from = spei) %>% 
@@ -187,12 +181,11 @@ df_predictors <-
 
 
 # calculate anomalies: for temp and spei ----------------------------------------
-reference_period <- 1980:2010
-veg.period <- 4:9
+
 
 df_anom_tmp_prcp_veg_season <- 
   df_clim %>% 
-  filter(month %in% veg.period) %>% # filter chunk of veg period
+  dplyr::filter(month %in% veg.months) %>% # filter chunk of veg period
   ungroup(.) %>% 
   group_by(year, falsto_name  ) %>%
   summarize(prcp = sum(prcp),
@@ -209,11 +202,11 @@ df_tmp_anom <-
 ##### anomalies for spei --------------------------
 df_anom_spei_veg_season <- 
   df_spei_year %>% 
-  dplyr::filter(month %in% veg.period) %>% # filter chunk of veg period
+  dplyr::filter(month %in% veg.months) %>% # filter chunk of veg period
   dplyr::filter(scale == 3) %>%  # select only spei3
   ungroup(.) %>% 
   group_by(year, falsto_name, scale  ) %>%
-  summarize(spei = mean(spei)) %>%
+  dplyr::summarize(spei = mean(spei)) %>%
   ungroup()
 
 df_spei_anom <- 
