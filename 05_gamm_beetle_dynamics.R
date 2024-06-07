@@ -982,7 +982,6 @@ m5 <- gam(sum_ips ~ s(sum_ips_lag1) + s(tmp_z_lag2, k = 5) +
 # account to temp autocorrelation explicitely
 # Fit the BAM with Negative Binomial distribution and AR1 correlation structure
 # Create a variable to indicate the start of each time series for AR1
-dat_fin_counts_m_scaled$AR.start <- dat_fin_counts_m_scaled$year == 2016
 
 # bam not wotking with rho???
 m6 <- bam(sum_ips ~ s(year, k =4) + s(tmp_z_lag2, k = 4) + #s(spei) +
@@ -991,6 +990,9 @@ m6 <- bam(sum_ips ~ s(year, k =4) + s(tmp_z_lag2, k = 4) + #s(spei) +
               family = nb,
               rho = 0.15, 
               AR.start = AR.start)
+
+
+dat_fin_counts_m_scaled$AR.start <- dat_fin_counts_m_scaled$year == 2016
 
 # try with gamm, and different specification of the temp autocorrelation
 m7 <- gamm(sum_ips ~ s(year, k =4) + s(tmp_z_lag2, k = 4) + #s(spei) +
@@ -1019,11 +1021,19 @@ m9 <- gamm(sum_ips ~  s(sum_ips_log  , k =4) + s(year, k =4) + s(tmp_z_lag2, k =
 
 # do not add previous years: instead use groupping on pairID
 # add previous years beetle counts
-m10 <- gamm(sum_ips ~  s(year, k =4) + s(tmp_z_lag2, k = 4) + s(spei_z_lag2, k = 4) +
+m10 <- gamm(sum_ips ~  s(year, k =6) + s(tmp_z_lag2, k = 8) + s(spei_z_lag2, k = 8) +
              s(x, y, bs = "gp") + s(pairID, bs = "re"),
            data = dat_fin_counts_m_scaled, 
            family = nb,
            correlation = corAR1(form = ~ year | trapID))
+
+# Calculate average counts for each trap pair
+avg_data <- dat_fin_counts_m_scaled %>%
+  group_by(pairID, year, spei_z_lag2, tmp_z_lag1) %>%
+  summarise(avg_sum_ips = mean(sum_ips, na.rm = TRUE)) %>%
+  ungroup()
+
+
 # tmp_lag1
 m11 <- gamm(sum_ips ~  s(year, k =4) + s(tmp_z_lag1, k = 4) + s(spei_z_lag2, k = 4) +
               s(x, y, bs = "gp") + s(trapID, bs = "re"),
@@ -1053,15 +1063,15 @@ m13.int <- gamm(sum_ips ~  s(year, k =4) + #s(tmp_z_lag1, k = 4) + s(spei_z_lag2
 
 
 summary(m7)
-summary(m12$gam)
+summary(m10$gam)
 summary(m8$lme)
 
 AIC(m5, m6, m7, m8, m10, m11, m12)
 gam.check(m8$gam)
 plot.gam(m10$gam, page = 1, shade = T)
 
-acf(residuals(m9$gam))
-pacf(residuals(m8$gam))
+acf(residuals(m10$gam))
+pacf(residuals(m10$gam))
 
 # how many observation s i have per year?
 
@@ -2341,20 +2351,25 @@ fin.m.peak.diff <- m3
 
 
 #### Eample: quick plotting! -----------------------------------------
-fin.m <- m3.int.re4410
+fin.m <- m10$gam
 #  m.spei12_no_re_slope47# fin.m.peak.diff
 #!!! --------------------------------------------
 
 # plot in easy way how tdoes the k value affect interaction
-p1 <- ggpredict(fin.m, terms = "veg_tmp_lag2 [all]", allow.new.levels = TRUE)
-p2 <- ggpredict(fin.m, terms = "spei3_lag2 [all]", allow.new.levels = TRUE)
+p1 <- ggpredict(fin.m, terms = "tmp_z_lag2 [all]", allow.new.levels = TRUE)
+p2 <- ggpredict(fin.m, terms = "spei_z_lag2 [all]", allow.new.levels = TRUE)
 p3 <- ggpredict(fin.m, terms = c("veg_tmp_lag2", "spei3_lag2 [-1, 0, 1]"), allow.new.levels = TRUE)
 
+p_df <- as.data.frame(p1)
 # test simple plot:
-ggplot(p3, aes(x = x , y = predicted , ymin = conf.low, ymax = conf.high)) +
+ggplot(p_df, aes(x = x, y = predicted)) +
+   # geom_point(data = dat_fin_counts_m_scaled, aes(x = tmp_z_lag2, y = sum_ips), 
+  #            color = "black", alpha = 0.2) +
   geom_ribbon(aes(ymin = conf.low, ymax = conf.high, fill = group), alpha = 0.3) +
-  geom_line(aes(color = group, linetype = group), linewidth = 1)  
-
+  
+  geom_line(aes(color = group, linetype = group), linewidth = 1) +
+  #labs(x = "SPEI Lag 2", y = "Sum of Beetle Counts") +
+  theme_classic2()
 
 
 fin.m.lagged <- m.spei12_no_re_slope47
