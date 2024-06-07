@@ -28,6 +28,7 @@
 # 
   
 
+rm(list=ls()) 
 
 # Libs --------------------------------------------------------------------------
 library(dplyr)
@@ -257,7 +258,7 @@ ips_damage_district <- district_ID %>%
   rename(forstrev_1 = layer)
 
 
-# join with damage data
+# join trap counts with damage data
 ips_damage_merge <- ips_damage_district %>% 
   left_join(df_damage, by = c('forstrev_1' = 'AELF_district_ID',
                               'year' = 'Year')) %>% 
@@ -584,7 +585,7 @@ ips_damage_clean$sum_beetle_lag2_scaled <- scale(ips_damage_clean$sum_beetle_lag
 # 
 # 
 
-# merge all raster data together; check n of cells---------------------------------------
+# merge disturbance rasters together; check n of cells---------------------------------------
 ncell(grid_sel_ras)
 ncell(dist_year_crop)
 ncell(dist_type_crop)
@@ -605,8 +606,7 @@ df_disturb <- data.frame(ID = ID,
                          ) %>% 
   dplyr::filter(!is.na(ID))
 
-# What to get: per region: how many cells, forest, disturbances, harvest& bark beetles
-
+# What to get: per district: how many cells, forest, disturbances, harvest& bark beetles
 df_forest <- df_disturb %>% 
   group_by(ID) %>%
   dplyr::summarize(forest86 = sum(forest == 1, na.rm = TRUE),
@@ -662,7 +662,7 @@ df_cor <- df_all %>%
                                             method = "spearman", use = "complete.obs"))
 
 
-# correlations per location: beetle counts vs damage
+#### correlations per location: beetle counts vs damage volume --------------------
 df_cor_counts_damage <- 
   ips_damage_clean %>% 
   #dplyr::filter(!ID %in% c(0, 50104, 60613,62705)) %>% # exlude if there is missing data
@@ -673,6 +673,66 @@ df_cor_counts_damage <-
                                             method = "spearman", use = "complete.obs"),
                    spearm_cor_lag2 = cor(damaged_volume_total_m3, sum_beetle_lag2 , 
                                         method = "spearman", use = "complete.obs"))
+
+
+#### correlations per disctrict: beetle counts vs RS damage --------------------------
+# merge based on the district ID, subset the data as the traps do not cover the whole 
+# bavaria's districts
+df_traps_RS_damage <-  
+ips_damage_clean %>%  
+  left_join(df_all,
+             by = c("forstrev_1" =   "ID",
+                              "year" = "year",
+                    "damaged_volume_total_m3" = "damaged_volume_total_m3") ) %>% 
+  mutate(falsto_name = as.factor(falsto_name))
+
+
+df_traps_RS_damage_mean <- df_traps_RS_damage %>% 
+  mutate(pairID = as.factor(str_sub(falsto_name, 1, -3)),
+         year_fact = as.factor(year)) %>% 
+  group_by(pairID, year_fact) %>% 
+  summarise(log_sum_beetle = mean(log_sum_beetle, na.rm =T),
+            RS_wind_beetle = mean(RS_wind_beetle, na.rm =T)) %>% 
+  na.omit() %>% 
+  distinct()
+
+
+# try with avrages
+m0<- gam(RS_wind_beetle ~ s(log_sum_beetle) + s(pairID, bs = 're'), 
+         family = nb(),data =df_traps_RS_damage_mean) 
+
+m_fixed<- gam(RS_wind_beetle ~ s(log_sum_beetle, k = 15) + year_fact, 
+         family = nb(),data =df_traps_RS_damage_mean) 
+
+m_fixed<- gam(RS_wind_beetle ~ s(log_sum_beetle, k = 15) + year_fact, 
+              family = nb(),data =df_traps_RS_damage_mean) 
+
+
+check_concurvity(m_fixed)
+  summary(m_fixed)
+  plot(m_fixed, page =1)
+  
+# try simple gams: how do beetle counts represent the RS damage?
+
+m0<- gam(RS_wind_beetle ~ s(sum_beetle) + s(falsto_name, bs = 're'), family = nb(),data =df_traps_RS_damage) 
+m1<- gam(RS_wind_beetle ~ s(sum_beetle_lag1 ) + s(falsto_name, bs = 're'), family = nb(),data =df_traps_RS_damage) 
+m2<- gam(RS_wind_beetle ~ s(sum_beetle_lag1)+ s(falsto_name, bs = 're'), family = nb(),data =df_traps_RS_damage) 
+
+
+m0_log<- gam(RS_wind_beetle ~ s(log_sum_beetle) + s(falsto_name, bs = 're'), family = nb(),data =df_traps_RS_damage) 
+m1_log<- gam(RS_wind_beetle ~ s(log_sum_beetle_lag1 ) + s(falsto_name, bs = 're'), family = nb(),data =df_traps_RS_damage) 
+m2_log<- gam(RS_wind_beetle ~ s(log_sum_beetle_lag1)+s(falsto_name, bs = 're'), family = nb(),data =df_traps_RS_damage) 
+
+
+summary(m)
+AIC(m0, m1, m2,m0_log,m1_log,m2_log)
+plot(m0, page = 1, shade = T)
+plot(m1, page = 1, shade = T)
+plot(m2_log, page = 1, shade = T)
+
+summary(m2_log)
+
+check_concurvity(m2_log)
 
 
 df_cor_counts_damage_long <- df_cor_counts_damage %>% 
@@ -920,6 +980,12 @@ df_all$log_damaged_volume_total_m3<- log(df_all$damaged_volume_total_m3 + 1)
 # try different functions and seettings - not finished!
 gam_RS_1 <- gam(log_RS_wind_beetle ~ s(log_damaged_volume_total_m3, k = 3) + s(year,
                                                                                k = 3) + s(ID, bs = 'fs', k = 30) +, family = gaussian(),method = "REML", data = df_all)
+
+
+
+# GAM Trap vs RS damage data ----------------------------------------------
+
+
 
 summary(gam_RS_1)
 plot(gam_RS_1, page = 1)
