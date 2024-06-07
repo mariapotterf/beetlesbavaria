@@ -76,12 +76,27 @@ lab_peak_growth       = "Peak swarming\nintensity [#]"
 load(file=   "outData/final_table.Rdata")
 load(file =  "outData/buffers.Rdata")  # df_RS_out
 load(file =  "outData/lisa.Rdata")     # read LISA Moran's I stats
+load(file =  "outData/spatial.Rdata")  # read xy coordinates
+
+
+# Spatial data: 
+sort(unique(xy_sf_expand$falsto_name))
+
+
+# get coordinates from sf object
+xy_df <- data.frame(x = sf::st_coordinates(xy_sf_expand)[,"X"],
+                    y = sf::st_coordinates(xy_sf_expand)[,"Y"],
+                    year = xy_sf_expand$year,
+                    trapID = xy_sf_expand$falsto_name)
+
+xy_df <- distinct(xy_df)
+
 
 # check data: length 1106 or more!
 nrow(df_RS_out)
 nrow(lisa_merged_df)
 nrow(dat_fin)
-
+nrow(xy_df)
 
 # prepare data RS --------------------------------------------
 df_RS_out <- df_RS_out %>% 
@@ -124,15 +139,19 @@ dat_fin <- dat_fin %>%
   group_by(trapID) %>%
   arrange(year, .by_group = TRUE) %>%
   mutate(peak_diff = as.integer(round(peak_diff))) %>% 
-  mutate(sum_ips_lag1          = lag(sum_ips, n = 1, default = NA),
-         population_growth     = (sum_ips - sum_ips_lag1) / sum_ips_lag1 * 100,
-         population_growth2    = dplyr::lag(population_growth, n = 1, order_by = year)) %>%  # lag population growth by one more year
- ungroup() 
+ # mutate(sum_ips_lag1          = lag(sum_ips, n = 1, default = NA),
+#         population_growth     = (sum_ips - sum_ips_lag1) / sum_ips_lag1 * 100,
+#         population_growth2    = dplyr::lag(population_growth, n = 1, order_by = year)) %>%  # lag population growth by one more year
+ ungroup(.) 
 
+# Merge beetle dynamics inicators with XYs
+dat_fin <- 
+  dat_fin %>% 
+  left_join(xy_df, by = c("trapID", 'year')) %>% 
+  # remove years woith NAs:
+  dplyr::filter(year %in% 2012:2021) 
 
-
-
-
+nrow(dat_fin)
 
 
 
@@ -481,40 +500,25 @@ sjPlot::tab_df(model_lag_RS,
 dat_spei_lags <-  dat_fin %>% 
   dplyr::select(c(year, pairID, trapID, tmp_z, spei_z, 
                   sum_ips, tr_agg_doy, tr_peak_doy,peak_diff,
-                  agg_doy, peak_doy)) %>% 
-   # data %>%
+                  agg_doy, peak_doy, x, y)) %>% 
   group_by(trapID) %>%
   mutate(trapID = as.factor(trapID),
-         pairID = as.factor(pairID)) %>% 
+         pairID = as.factor(pairID),
+         year_fact = as.factor(year)) %>% 
   arrange(year, .by_group = TRUE) %>%
    mutate(sum_ips_log = log(sum_ips +1)) %>% 
   mutate(sum_ips_lag1 = lag(sum_ips_log, n = 1, default = NA),
     tmp_z_lag1 = lag(tmp_z, n = 1, default = NA),
          tmp_z_lag2 = lag(tmp_z, n = 2, default = NA),
          tmp_z_lag3 = lag(tmp_z, n = 3, default = NA),
-         #prcp_z_lag1 = lag(prcp_z, n = 1, default = NA),
-         #prcp_z_lag2 = lag(prcp_z, n = 2, default = NA),
-         #prcp_z_lag3 = lag(prcp_z, n = 3, default = NA),
-         spei_z_lag1 = lag(spei_z, n = 1, default = NA),
+        spei_z_lag1 = lag(spei_z, n = 1, default = NA),
          spei_z_lag2 = lag(spei_z, n = 2, default = NA),
          spei_z_lag3 = lag(spei_z, n = 3, default = NA),
-        #   spei_lag1 = lag(spei, n = 1, default = NA), # spei3 veg season
-        # spei_lag2 = lag(spei, n = 2, default = NA),
-        # spei_lag3 = lag(spei, n = 3, default = NA),
-         #     veg_tmp_lag1 = lag(veg_tmp, n = 1, default = NA),
-        # veg_tmp_lag2 = lag(veg_tmp, n = 2, default = NA),
-         #    veg_tmp_lag3 = lag(veg_tmp, n = 3, default = NA),
-        # spring_tmp_lag1 = lag(spring_tmp , n = 1, default = NA),
-        # spring_tmp_lag2 = lag(spring_tmp , n = 2, default = NA),
-        # spring_tmp_lag3 = lag(spring_tmp , n = 3, default = NA)
-  ) %>%
+          ) %>%
   mutate(peak_diff  = as.integer(peak_diff )) %>% 
-#  dplyr::select(-population_growth, -population_growth2, 
- #               -wind_beetle, - harvest,# -agg_doy, -tr_agg_doy,
-#                -sum_ips_lag1) %>% 
   ungroup(.) 
 
-
+nrow(dat_spei_lags)
 
 # remove too low values: peiting and Eschenbach_idOPf: identify loutlier from log_sum_ips
 df_outliers <- dat_spei_lags %>% 
@@ -537,8 +541,6 @@ pair_outliers <- df_outliers %>%
 # otherwise i need to remove 35 pairs, which is too much
 
 
-
-
 # export table to merge it with the spatial data: for variograms:
 dat_dynamics <- dat_fin %>% 
   dplyr::select(c(year, trapID, pairID, spring_tmp, veg_tmp, veg_prcp,   
@@ -551,24 +553,23 @@ fwrite(dat_dynamics, 'outTable/beetle_dynamic_indicators.csv')
 
 # table for ips counts, peak diff
 dat_fin_counts_m <- 
-  dat_spei_lags %>%  dplyr::select( -agg_doy, -tr_agg_doy) %>% 
+  dat_spei_lags %>%  
+  dplyr::select( -c(agg_doy, tr_agg_doy)) %>% 
   na.omit()
  
+nrow(dat_fin_counts_m)  # 948 rws, not sure why????
 
 # create new table with only agg values
 dat_fin_agg_m <- 
   dat_spei_lags %>% 
    ungroup() %>%
   na.omit()
-
+nrow(dat_fin_agg_m)
 
 # scale IPS_count data and AGG_doy tables --------
 # Specify the columns to skip
-columns_to_skip_counts <- c("year", "trapID", "sum_ips", "tr_peak_doy", "peak_diff", "pairID")
-columns_to_skip_agg <- c("year", "trapID", "tr_agg_doy", "tr_peak_doy", "pairID")
-
-
-
+columns_to_skip_counts <- c("year", "trapID", "sum_ips", "tr_peak_doy", "peak_diff","peak_doy",  "pairID", "x", "y", "year_fact")
+columns_to_skip_agg <- c("year", "trapID", "tr_agg_doy", "tr_peak_doy","agg_doy",  "pairID", "x", "y", "year_fact")
 
 
 # Scale and center the remaining numeric columns
@@ -929,7 +930,7 @@ boxplot(log(dat_fin_counts_m$sum_ips))
 
 
 
-# TEST: GAMM beetle counst with temp autocorr or with [revious years beetle counts
+# TEST: GAMM beetle counst with temp autocorr or with previous years beetle counts -------------------------------
 
 m1 <- gam(sum_ips ~ s(sum_ips_lag1),# + s(tmp_z, k = 4) + 
                    #s(spei_z_lag1, k = 4) + 
@@ -948,7 +949,7 @@ m2 <- gam(sum_ips ~ s(sum_ips_lag1) + s(tmp_z_lag2, k = 15),# +
           data = dat_fin_counts_m_scaled)
 
 m3 <- gam(sum_ips ~ s(sum_ips_lag1) + s(tmp_z_lag2, k = 15) +
-            pairID,
+            pairID + year,
           #s(spei_z_lag1, k = 4) + 
           #s(trapID, bs = 're'), #+ 
           #s( year_fact, bs = 're'), 
@@ -956,16 +957,120 @@ m3 <- gam(sum_ips ~ s(sum_ips_lag1) + s(tmp_z_lag2, k = 15) +
           method = 'REML', 
           data = dat_fin_counts_m_scaled)
 
+m4 <- gam(sum_ips ~ s(sum_ips_lag1) + s(tmp_z_lag2, k = 5) +
+            s(x, y, bs = "gp") + # add spatial autocorrelation
+            pairID + year,
+          #s(spei_z_lag1, k = 4) + 
+          #s(trapID, bs = 're'), #+ 
+          #s( year_fact, bs = 're'), 
+          family = nb(), 
+          method = 'REML', 
+          data = dat_fin_counts_m_scaled)
+
+m5 <- gam(sum_ips ~ s(sum_ips_lag1) + s(tmp_z_lag2, k = 5) +
+            s(x, y, bs = "gp") + # add spatial autocorrelation
+            s(trapID, bs = "re"),
+          #s(spei_z_lag1, k = 4) + 
+          #s(trapID, bs = 're'), #+ 
+          #s( year_fact, bs = 're'), 
+          family = nb, 
+          rho = 0.5,
+          AR.start = year == min(year),
+          method = 'REML', 
+          data = dat_fin_counts_m_scaled)
+
+# account to temp autocorrelation explicitely
+# Fit the BAM with Negative Binomial distribution and AR1 correlation structure
+# Create a variable to indicate the start of each time series for AR1
+dat_fin_counts_m_scaled$AR.start <- dat_fin_counts_m_scaled$year == 2016
+
+# bam not wotking with rho???
+m6 <- bam(sum_ips ~ s(year, k =4) + s(tmp_z_lag2, k = 4) + #s(spei) +
+                s(x, y, bs = "gp") + s(trapID, bs = "re"),
+              data = dat_fin_counts_m_scaled, 
+              family = nb,
+              rho = 0.15, 
+              AR.start = AR.start)
+
+# try with gamm, and different specification of the temp autocorrelation
+m7 <- gamm(sum_ips ~ s(year, k =4) + s(tmp_z_lag2, k = 4) + #s(spei) +
+            s(x, y, bs = "gp") + s(trapID, bs = "re"),
+          data = dat_fin_counts_m_scaled, 
+          family = nb,
+          #rho = 0.15, 
+          correlation = corAR1(form = ~ year | trapID))
+
+# add spei
+m8 <- gamm(sum_ips ~ s(year, k =4) + s(tmp_z_lag2, k = 4) + s(spei_z_lag2, k = 4) +
+             s(x, y, bs = "gp") + s(trapID, bs = "re"),
+           data = dat_fin_counts_m_scaled, 
+           family = nb,
+           correlation = corAR1(form = ~ year | trapID))
 
 
-summary(m3)
-gam.check(m3)
-plot.gam(m3, page = 1)
 
-acf(residuals(m3))
-pacf(residuals(m3))
+# add previous years beetle counts
+m9 <- gamm(sum_ips ~  s(sum_ips_log  , k =4) + s(year, k =4) + s(tmp_z_lag2, k = 4) + s(spei_z_lag2, k = 4) +
+             s(x, y, bs = "gp") + s(trapID, bs = "re"),
+           data = dat_fin_counts_m_scaled, 
+           family = nb,
+           correlation = corAR1(form = ~ year | trapID))
 
 
+# do not add previous years: instead use groupping on pairID
+# add previous years beetle counts
+m10 <- gamm(sum_ips ~  s(year, k =4) + s(tmp_z_lag2, k = 4) + s(spei_z_lag2, k = 4) +
+             s(x, y, bs = "gp") + s(pairID, bs = "re"),
+           data = dat_fin_counts_m_scaled, 
+           family = nb,
+           correlation = corAR1(form = ~ year | trapID))
+# tmp_lag1
+m11 <- gamm(sum_ips ~  s(year, k =4) + s(tmp_z_lag1, k = 4) + s(spei_z_lag2, k = 4) +
+              s(x, y, bs = "gp") + s(trapID, bs = "re"),
+            data = dat_fin_counts_m_scaled, 
+            family = nb,
+            correlation = corAR1(form = ~ year | trapID))
+
+# tmp_lag0
+m12 <- gamm(sum_ips ~  s(year, k =4) + s(tmp_z, k = 4) + s(spei_z_lag2, k = 4) +
+              s(x, y, bs = "gp") + s(trapID, bs = "re"),
+            data = dat_fin_counts_m_scaled, 
+            family = nb,
+            correlation = corAR1(form = ~ year | trapID))
+# int
+m13.int <- gamm(sum_ips ~  s(year, k =4) + #s(tmp_z_lag1, k = 4) + s(spei_z_lag2, k = 4) +
+              s(x, y, bs = "gp") + te(tmp_z_lag1, spei_z_lag2, k = 4)  +
+                s(pairID, bs = "re"),
+            data = dat_fin_counts_m_scaled, 
+            family = nb,
+            correlation = corAR1(form = ~ year | trapID))
+
+
+
+# !!!! continue: why is year 2015 missing?
+# average trap values by trap pair, instead of double design
+
+
+
+summary(m7)
+summary(m12$gam)
+summary(m8$lme)
+
+AIC(m5, m6, m7, m8, m10, m11, m12)
+gam.check(m8$gam)
+plot.gam(m10$gam, page = 1, shade = T)
+
+acf(residuals(m9$gam))
+pacf(residuals(m8$gam))
+
+# how many observation s i have per year?
+
+yearly_counts <- dat_fin_counts_m_scaled %>%
+  group_by(year, trapID) %>%
+  summarise(count = n())
+
+yearly_counts %>% 
+  dplyr::filter(count > 1)
 ### glmm: SUM_IPS vegt_tmp + spei3_lag2  -----------------------------------------
 
 m1 <- glmmTMB(sum_ips ~ veg_tmp + spei3_lag2,
