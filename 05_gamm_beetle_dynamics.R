@@ -130,46 +130,6 @@ dat_fin <- dat_fin %>%
  ungroup() 
 
 
-# instead of lags: calculate the average tmp from previous years
-library(slider)
-dat_fin %>% 
-  group_by(trapID, pairID) %>% 
-  arrange(year, trapID) %>% 
-  dplyr::select(trapID, veg_tmp, year)
-
-
-calculate_rolling_avg <- function(df, window, variable_name) {
-  tmp_var <- variable_name
-  tmp_col <- paste0(variable_name, "_", window, "yr")
-  
-  df %>%
-    group_by(trapID) %>%
-    arrange(year) %>%
-    mutate(!!tmp_col := slide_dbl(!!sym(variable_name), mean, .before = window, .complete = TRUE)) %>%
-    ungroup()
-}
-
-
-# Calculate rolling averages for 1, 2, and 3 years
-dat_fin <- dat_fin %>%
-  calculate_rolling_avg(1, "tmp") %>% 
-  calculate_rolling_avg(2, "tmp") %>%
-  calculate_rolling_avg(3, "tmp") %>% 
-  calculate_rolling_avg(1, "tmp_z") %>% 
-  calculate_rolling_avg(2, "tmp_z") %>%
-  calculate_rolling_avg(3, "tmp_z") %>% 
-  calculate_rolling_avg(1, "prcp") %>% 
-  calculate_rolling_avg(2, "prcp") %>%
-  calculate_rolling_avg(3, "prcp") %>% 
-  calculate_rolling_avg(1, "spei") %>% 
-  calculate_rolling_avg(2, "spei") %>%
-  calculate_rolling_avg(3, "spei") %>% 
-  calculate_rolling_avg(1, "spei_z") %>% 
-  calculate_rolling_avg(2, "spei_z") %>%
-  calculate_rolling_avg(3, "spei_z")
-
-
-
 
 
 
@@ -519,36 +479,40 @@ sjPlot::tab_df(model_lag_RS,
 
 # IPS_counts test based on teh most important lags: lag 2 for spei3 and veg_tmp --------------
 dat_spei_lags <-  dat_fin %>% 
+  dplyr::select(c(year, pairID, trapID, tmp_z, spei_z, 
+                  sum_ips, tr_agg_doy, tr_peak_doy,peak_diff,
+                  agg_doy, peak_doy)) %>% 
    # data %>%
   group_by(trapID) %>%
   mutate(trapID = as.factor(trapID),
          pairID = as.factor(pairID)) %>% 
   arrange(year, .by_group = TRUE) %>%
-  mutate(tmp_z_lag1 = lag(tmp_z, n = 1, default = NA),
+   mutate(sum_ips_log = log(sum_ips +1)) %>% 
+  mutate(sum_ips_lag1 = lag(sum_ips_log, n = 1, default = NA),
+    tmp_z_lag1 = lag(tmp_z, n = 1, default = NA),
          tmp_z_lag2 = lag(tmp_z, n = 2, default = NA),
          tmp_z_lag3 = lag(tmp_z, n = 3, default = NA),
-         prcp_z_lag1 = lag(prcp_z, n = 1, default = NA),
-         prcp_z_lag2 = lag(prcp_z, n = 2, default = NA),
-         prcp_z_lag3 = lag(prcp_z, n = 3, default = NA),
+         #prcp_z_lag1 = lag(prcp_z, n = 1, default = NA),
+         #prcp_z_lag2 = lag(prcp_z, n = 2, default = NA),
+         #prcp_z_lag3 = lag(prcp_z, n = 3, default = NA),
          spei_z_lag1 = lag(spei_z, n = 1, default = NA),
          spei_z_lag2 = lag(spei_z, n = 2, default = NA),
          spei_z_lag3 = lag(spei_z, n = 3, default = NA),
-           spei_lag1 = lag(spei, n = 1, default = NA), # spei3 veg season
-         spei_lag2 = lag(spei, n = 2, default = NA),
-         spei_lag3 = lag(spei, n = 3, default = NA),
-              veg_tmp_lag1 = lag(veg_tmp, n = 1, default = NA),
-         veg_tmp_lag2 = lag(veg_tmp, n = 2, default = NA),
-             veg_tmp_lag3 = lag(veg_tmp, n = 3, default = NA),
-         spring_tmp_lag1 = lag(spring_tmp , n = 1, default = NA),
-         spring_tmp_lag2 = lag(spring_tmp , n = 2, default = NA),
-         spring_tmp_lag3 = lag(spring_tmp , n = 3, default = NA)
+        #   spei_lag1 = lag(spei, n = 1, default = NA), # spei3 veg season
+        # spei_lag2 = lag(spei, n = 2, default = NA),
+        # spei_lag3 = lag(spei, n = 3, default = NA),
+         #     veg_tmp_lag1 = lag(veg_tmp, n = 1, default = NA),
+        # veg_tmp_lag2 = lag(veg_tmp, n = 2, default = NA),
+         #    veg_tmp_lag3 = lag(veg_tmp, n = 3, default = NA),
+        # spring_tmp_lag1 = lag(spring_tmp , n = 1, default = NA),
+        # spring_tmp_lag2 = lag(spring_tmp , n = 2, default = NA),
+        # spring_tmp_lag3 = lag(spring_tmp , n = 3, default = NA)
   ) %>%
   mutate(peak_diff  = as.integer(peak_diff )) %>% 
-  dplyr::select(-population_growth, -population_growth2, 
-                -wind_beetle, - harvest,# -agg_doy, -tr_agg_doy,
-                -sum_ips_lag1) %>% 
-  ungroup() %>%
-   mutate(sum_ips_log = log(sum_ips +1))
+#  dplyr::select(-population_growth, -population_growth2, 
+ #               -wind_beetle, - harvest,# -agg_doy, -tr_agg_doy,
+#                -sum_ips_lag1) %>% 
+  ungroup(.) 
 
 
 
@@ -578,7 +542,8 @@ pair_outliers <- df_outliers %>%
 # export table to merge it with the spatial data: for variograms:
 dat_dynamics <- dat_fin %>% 
   dplyr::select(c(year, trapID, pairID, spring_tmp, veg_tmp, veg_prcp,   
-                  spei3, spei, # spei for veg season
+                  #spei3, 
+                  spei, # spei for veg season
                   tmp_z, prcp_z, spei_z, # z score fr veg season, sd from teh mean reference conditions
                 sum_ips,  peak_doy, peak_diff, tr_agg_doy, tr_peak_doy, agg_doy, peak_doy
                 ))
@@ -645,17 +610,17 @@ model_metrics_count <- data.frame(Predictor = character(),
 
 # List of dependent variables and predictors:
 # keep only spei3 and spei 12 - for the short term vs long term effect
-selected_predictors <- c("spring_tmp", "spring_tmp_lag1", "spring_tmp_lag2","spring_tmp_lag3",
-  "veg_tmp", "veg_tmp_lag1", "veg_tmp_lag2","veg_tmp_lag3",
-  "tmp_z", "tmp_z_lag1", "tmp_z_lag2","tmp_z_lag3",
-  "spei_z", "spei_z_lag1", "spei_z_lag2","spei_z_lag3",
-  "prcp_z", "prcp_z_lag1", "prcp_z_lag2","prcp_z_lag3",
-  'tmp', 'tmp_1yr', 'tmp_2yr','tmp_3yr',  # averages of tmp
-  'tmp_z', 'tmp_z_1yr', 'tmp_z_2yr','tmp_z_3yr',  # averages of tmp
-  'prcp', 'prcp_1yr', 'prcp_2yr','prcp_3yr',  # averages of tmp
-  'spei', 'spei_1yr', 'spei_2yr','spei_3yr',  # averages of tmp
-                         "spei", "spei_lag1", "spei_lag2","spei_lag3"
-  )
+selected_predictors <- c(#"spring_tmp", "spring_tmp_lag1", "spring_tmp_lag2","spring_tmp_lag3",
+  #"veg_tmp", "veg_tmp_lag1", "veg_tmp_lag2","veg_tmp_lag3",
+  "tmp_z", "tmp_z_lag1", "tmp_z_lag2","tmp_z_lag3" ,
+  "spei_z", "spei_z_lag1", "spei_z_lag2","spei_z_lag3") 
+  #"prcp_z", "prcp_z_lag1", "prcp_z_lag2","prcp_z_lag3",
+  #'tmp', 'tmp_1yr', 'tmp_2yr','tmp_3yr',  # averages of tmp
+  #'tmp_z', 'tmp_z_1yr', 'tmp_z_2yr','tmp_z_3yr',  # averages of tmp
+ # 'prcp', 'prcp_1yr', 'prcp_2yr','prcp_3yr',  # averages of tmp
+ # 'spei', 'spei_1yr', 'spei_2yr','spei_3yr',  # averages of tmp
+  #                       "spei", "spei_lag1", "spei_lag2","spei_lag3"
+#  )
 
 
 
@@ -667,7 +632,7 @@ for (dep in dependent_vars_counts) {
     #print(pred)
     # Fit the model
     #formula <- as.formula(paste(dep, "~ s(", pred, ", k = 4) + s(pairID, bs = 're')"))
-    formula <- as.formula(paste(dep, "~ s(", pred, ", k = 4)"))
+    formula <- as.formula(paste(dep, "~ s(", pred, ", k = 5)"))
     #print(formula)
     model <- gam(formula, family = nb(), method = 'REML', data = dat_fin_counts_m_scaled)
     
@@ -690,7 +655,7 @@ best_predictors_counts <- model_metrics_count %>%
     TRUE ~ "other"
   )) %>% 
   group_by(Dependent, category) %>% 
-  slice_min(AIC, n = 3)   # Select the best 3 based on AIC
+  slice_min(AIC, n = 1)   # Select the best 3 based on AIC
  # slice(which.max(DevianceExplained))
 
 best_predictors_counts
@@ -709,7 +674,7 @@ for (dep in dependent_vars_doy ) {
     #print(pred)
     # Fit the model
     #formula <- as.formula(paste(dep, "~ s(", pred, ", k = 4) + s(pairID, bs = 're')"))
-    formula <- as.formula(paste(dep, "~ s(", pred, ", k = 4)"))
+    formula <- as.formula(paste(dep, "~ s(", pred, ", k = 5)"))
     #print(formula)
     model <- gam(formula, family = betar(link = "logit"), method = 'REML', data = dat_fin_agg_m_scaled)
     
@@ -732,7 +697,8 @@ best_predictors_doy <- model_metrics_doy %>%
     TRUE ~ "other"
   )) %>% 
   group_by(Dependent, category) %>% 
-  slice_min(AIC, n = 3) #%>%  # Select the best 3 based on AIC
+ 
+  slice_min(AIC, n = 1) #%>%  # Select the best 3 based on AIC
   #slice(which.min(AIC))
 
 best_predictors_doy
@@ -745,35 +711,25 @@ full_lag_models <- full_lag_models %>%
     grepl("tmp", Predictor  ) ~ "tmp",
     grepl("spei", Predictor  ) ~ "spei",
     TRUE ~ "other"
-  )) 
+  ))  %>% 
+  dplyr::filter(category != 'other') 
 
 
   
 View(full_lag_models)
 best_predictors <- rbind(best_predictors_counts, best_predictors_doy )
 
-(best_predictors)
+best_predictors <- best_predictors %>% 
+  dplyr::filter(category != 'other') 
 
-best_predictors %>% 
-  ungroup() %>% 
-  dplyr::count(Dependent, category, Predictor) %>%
-  arrange(Dependent, category, desc(n))
-
+View(best_predictors)
 
 
 # Calculate the correlation matrix for all predictors and their lags ---------------------------
 
-# simplify predictors: keep the most important ones
-sub_predictors <- c(#"spring_tmp", "spring_tmp_lag1", "spring_tmp_lag2","spring_tmp_lag3",
-                     #    "veg_tmp", "veg_tmp_lag1", "veg_tmp_lag2","veg_tmp_lag3",
-                         "tmp_z", "tmp_z_lag1", "tmp_z_lag2","tmp_z_lag3",
-                         "spei_z", "spei_z_lag1", "spei_z_lag2","spei_z_lag3",
-                         "spei", "spei_lag1", "spei_lag2","spei_lag3")
-                        # "spei3", "spei3_lag1", "spei3_lag2","spei3_lag3" #,
-#)
 
 
-predictor_vars <- dat_fin_counts_m[, sub_predictors  ] # unique(best_predictors$Predictor)
+predictor_vars <- dat_fin_counts_m[, selected_predictors  ] # unique(best_predictors$Predictor)
 cor_matrix <- cor(predictor_vars, method = "spearman")
 (cor_matrix)
 corrplot::corrplot(cor_matrix)
@@ -815,17 +771,10 @@ run_models_and_collect_results <- function(data, predictors, response, k = 4, fa
   return(combined_results)
 }
 
-predictors <- c("spring_tmp", "spring_tmp_lag1", "spring_tmp_lag2","spring_tmp_lag3",
-  "veg_tmp", "veg_tmp_lag1", "veg_tmp_lag2","veg_tmp_lag3",
- "spei", "spei_lag1", "spei_lag2","spei_lag3",
- "spei_z", "spei_z_lag1", "spei_z_lag2","spei_z_lag3",
- "tmp_z", "tmp_z_lag1", "tmp_z_lag2","tmp_z_lag3") #,
- # "spei12", "spei12_lag1", "spei12_lag2","spei12_lag3"
- #)
 response <- "sum_ips"
 
 results_df <- run_models_and_collect_results(dat_fin_counts_m_scaled, 
-                                             predictors, response)
+                                             selected_predictors  , response)
 
 # Modify the predictors
 results_df2 <- 
@@ -862,6 +811,7 @@ ggplot(results_df2, aes(x = x , y = predicted , ymin = conf.low, ymax = conf.hig
 plot(dat_fin_counts_m_scaled$veg_tmp,dat_fin_counts_m_scaled$spei)
 plot(dat_fin_counts_m_scaled$tmp_z,dat_fin_counts_m_scaled$spei_z)
 
+pairs(sum_ips ~tmp_z_lag2 + spei_z_lag2,   data  = dat_fin_counts_m_scaled, panel=panel.smooth)
 
 # identify howt and ry conditions visually
 # Load your data
@@ -977,6 +927,45 @@ df_corr %>%
 boxplot(dat_fin_counts_m$sum_ips)
 boxplot(log(dat_fin_counts_m$sum_ips))
 
+
+
+# TEST: GAMM beetle counst with temp autocorr or with [revious years beetle counts
+
+m1 <- gam(sum_ips ~ s(sum_ips_lag1),# + s(tmp_z, k = 4) + 
+                   #s(spei_z_lag1, k = 4) + 
+                   #s(trapID, bs = 're'), #+ 
+                 #s( year_fact, bs = 're'), 
+                 family = nb(), 
+                 method = 'REML', 
+                 data = dat_fin_counts_m_scaled)
+
+m2 <- gam(sum_ips ~ s(sum_ips_lag1) + s(tmp_z_lag2, k = 15),# + 
+          #s(spei_z_lag1, k = 4) + 
+          #s(trapID, bs = 're'), #+ 
+          #s( year_fact, bs = 're'), 
+          family = nb(), 
+          method = 'REML', 
+          data = dat_fin_counts_m_scaled)
+
+m3 <- gam(sum_ips ~ s(sum_ips_lag1) + s(tmp_z_lag2, k = 15) +
+            pairID,
+          #s(spei_z_lag1, k = 4) + 
+          #s(trapID, bs = 're'), #+ 
+          #s( year_fact, bs = 're'), 
+          family = nb(), 
+          method = 'REML', 
+          data = dat_fin_counts_m_scaled)
+
+
+
+summary(m3)
+gam.check(m3)
+plot.gam(m3, page = 1)
+
+acf(residuals(m3))
+pacf(residuals(m3))
+
+
 ### glmm: SUM_IPS vegt_tmp + spei3_lag2  -----------------------------------------
 
 m1 <- glmmTMB(sum_ips ~ veg_tmp + spei3_lag2,
@@ -1042,39 +1031,6 @@ m5 <- glmmTMB(sum_ips ~ poly(veg_tmp, 2) + poly(spei3_lag2,2) + (1|pairID),
 
 
 # SUM_IPS: gam: spei_z_lag1  , tmp_z ------------------------------------------- 
-# remove the traps that were found as outliers!
-
-s(spei_lag1, year, k = 4)
-# random intercept,random slope for year
-
-
-
-
-# in gam, do not use collinearity, but concurvity?
-
-library(mgcv)
-## simulate data with concurvity...
-set.seed(8);n<- 200
-f2 <- function(x) 0.2 * x^11 * (10 * (1 - x))^6 + 10 *
-  (10 * x)^3 * (1 - x)^10
-t <- sort(runif(n)) ## first covariate
-## make covariate x a smooth function of t + noise...
-x <- f2(t) + rnorm(n)*3
-## simulate response dependent on t and x...
-y <- sin(4*pi*t) + exp(x/20) + rnorm(n)*.3
-
-## fit model...
-b <- gam(y ~ s(t,k=15) + s(x,k=15),method="REML")
-
-## assess concurvity between each term and `rest of model'...
-round(concurvity(b,full = T) , 2)
-
-
-## ... and now look at pairwise concurvity between terms...
-concurvity(b,full=FALSE)
-check_collinearity(b)
-
-
 
 
 
