@@ -498,7 +498,8 @@ sjPlot::tab_df(model_lag_RS,
 
 # IPS_counts test based on teh most important lags: lag 2 for spei3 and veg_tmp --------------
 dat_spei_lags <-  dat_fin %>% 
-  dplyr::select(c(year, pairID, trapID, tmp_z, spei_z, 
+  dplyr::select(c(year, pairID, trapID, tmp, spei, 
+                  tmp_z, spei_z, 
                   sum_ips, tr_agg_doy, tr_peak_doy,peak_diff,
                   agg_doy, peak_doy, x, y)) %>% 
   group_by(trapID) %>%
@@ -506,14 +507,20 @@ dat_spei_lags <-  dat_fin %>%
          pairID = as.factor(pairID),
          year_fact = as.factor(year)) %>% 
   arrange(year, .by_group = TRUE) %>%
-   mutate(sum_ips_log = log(sum_ips +1)) %>% 
-  mutate(sum_ips_lag1 = lag(sum_ips_log, n = 1, default = NA),
+  # mutate(sum_ips_log = log(sum_ips +1)) %>% 
+  mutate(#sum_ips_lag1 = lag(sum_ips_log, n = 1, default = NA),
+         tmp_lag1 = lag(tmp, n = 1, default = NA),
+         tmp_lag2 = lag(tmp, n = 2, default = NA),
+         tmp_lag3 = lag(tmp, n = 3, default = NA),
     tmp_z_lag1 = lag(tmp_z, n = 1, default = NA),
          tmp_z_lag2 = lag(tmp_z, n = 2, default = NA),
          tmp_z_lag3 = lag(tmp_z, n = 3, default = NA),
         spei_z_lag1 = lag(spei_z, n = 1, default = NA),
          spei_z_lag2 = lag(spei_z, n = 2, default = NA),
          spei_z_lag3 = lag(spei_z, n = 3, default = NA),
+    spei_lag1 = lag(spei, n = 1, default = NA),
+    spei_lag2 = lag(spei, n = 2, default = NA),
+    spei_lag3 = lag(spei, n = 3, default = NA),
           ) %>%
   mutate(peak_diff  = as.integer(peak_diff )) %>% 
   ungroup(.) 
@@ -983,16 +990,6 @@ m5 <- gam(sum_ips ~ s(sum_ips_lag1) + s(tmp_z_lag2, k = 5) +
 # Fit the BAM with Negative Binomial distribution and AR1 correlation structure
 # Create a variable to indicate the start of each time series for AR1
 
-# bam not wotking with rho???
-m6 <- bam(sum_ips ~ s(year, k =4) + s(tmp_z_lag2, k = 4) + #s(spei) +
-                s(x, y, bs = "gp") + s(trapID, bs = "re"),
-              data = dat_fin_counts_m_scaled, 
-              family = nb,
-              rho = 0.15, 
-              AR.start = AR.start)
-
-
-dat_fin_counts_m_scaled$AR.start <- dat_fin_counts_m_scaled$year == 2016
 
 # try with gamm, and different specification of the temp autocorrelation
 m7 <- gamm(sum_ips ~ s(year, k =4) + s(tmp_z_lag2, k = 4) + #s(spei) +
@@ -1021,6 +1018,137 @@ m9 <- gamm(sum_ips ~  s(sum_ips_log  , k =4) + s(year, k =4) + s(tmp_z_lag2, k =
 
 # do not add previous years: instead use groupping on pairID
 # add previous years beetle counts
+# try with uncsaled data: also unscaled z-score
+# as this can be easier to interpret in relationship to climate change??
+m10_unsc <- gamm(sum_ips ~  s(year, k =6) + s(tmp_z_lag2, k = 8) + s(spei_z_lag2, k = 8) +
+              s(x, y, bs = "gp") + 
+                s(pairID, bs = "re"),
+            data = dat_fin_counts_m, 
+            family = nb,
+            correlation = corAR1(form = ~ year | trapID))
+
+
+# try less correlated predictors:
+m10_unsc2 <- gamm(sum_ips ~  s(year, k =6) + s(tmp_z_lag1, k = 8) + s(spei_z_lag2, k = 8) +
+                   s(x, y, bs = "gp") + 
+                   s(pairID, bs = "re"),
+                 data = dat_fin_counts_m, 
+                 family = nb,
+                 correlation = corAR1(form = ~ year | trapID))
+
+
+# try less correlated predictors:
+m10_unsc2_int <- gamm(sum_ips ~  s(year, k =6) + s(tmp_z_lag1, k = 8) + s(spei_z_lag2, k = 8) +
+                        te(tmp_z_lag1, spei_z_lag2, k = 10) + 
+                    s(x, y, bs = "gp") + 
+                    s(pairID, bs = "re"),
+                  data = dat_fin_counts_m, 
+                  family = nb,
+                  correlation = corAR1(form = ~ year | trapID))
+
+AIC(m10_unsc2, m10_unsc) # the tmp_z1 and spei_z2 are the least correlated!
+
+plot(m10_unsc2$gam, page = 1)
+
+# use in interaction different values of tmp then in teh main terms
+# does not converge every time, maybe just skipp the interaction
+m10_unsc_int <- gamm(sum_ips ~  s(year, k =6) + s(tmp_z_lag2, k = 15) + s(spei_z_lag2, k = 15) +
+                       te(tmp_z, spei_z_lag2, k = 30) +
+                   s(x, y, bs = "gp", k =30) + 
+                     s(pairID, bs = "re"),
+                 data = dat_fin_counts_m, 
+                 family = nb,
+                 correlation = corAR1(form = ~ year | trapID))
+cor(dat_fin_counts_m$tmp_z_lag2, dat_fin_counts_m$spei_z_lag2, method = 'pearson' )
+cor(dat_fin_counts_m$tmp_z_lag1, dat_fin_counts_m$spei_z_lag2, method = 'pearson' )
+
+
+
+# add spatial autocorrelation
+# Extract the lme part of the model
+lme_model <- m10_unsc$lme
+
+# Update the lme model to include the spatial correlation structure
+lme_model <- update(lme_model, correlation = corGaus(form = ~ x + y | trapID))
+
+# Update the gamm object with the new lme model
+m10_unsc$lme <- lme_model
+
+# Summarize the model
+summary(m10_unsc_spat_cor$gam)
+summary(m10_unsc_spat_cor$lme)
+
+
+m10_unsc_spat_cor <- gamm(sum_ips ~  s(year, k =6) + s(tmp_z_lag2, k = 4) + s(spei_z_lag2, k = 5) +
+                      # te(tmp_z, spei_z_lag2, k = 30) +
+                       s(x, y, bs = "gp", k =30) + 
+                       s(pairID, bs = "re"),
+                     data = dat_fin_counts_m, 
+                     family = nb,
+                     correlation = corAR1(form = ~ year | trapID) +
+                       corGaus(form = ~ x + y | trapID))
+
+
+mm <- m10_unsc2$gam
+# plot in easy way how tdoes the k value affect interaction
+p1 <- ggpredict(mm, terms = "tmp_z_lag1 [all]", allow.new.levels = TRUE)
+p2 <- ggpredict(mm, terms = "spei_z_lag2 [all]", allow.new.levels = TRUE)
+p3 <- ggpredict(mm, terms = c("tmp_z", "spei_z_lag2 [-1, 0, 1]"), allow.new.levels = TRUE)
+
+p_df <- as.data.frame(p2)
+
+# test simple plot:
+ggplot(p_df, aes(x = x, y = predicted)) +
+  geom_ribbon(aes(ymin = conf.low, ymax = conf.high, fill = group), alpha = 0.3) +
+  geom_line(aes(color = group, linetype = group), linewidth = 1) +
+  geom_point(data = dat_fin_counts_m, aes(x = spei_z_lag2, y = sum_ips, color=factor(year))) +
+ # ylim(0,75000) +
+  #labs(x = "SPEI Lag 2", y = "Sum of Beetle Counts") +
+  theme_classic2()
+
+
+# plot in easy way how tdoes the k value affect interaction
+p1 <- ggpredict(fin.m, terms = "tmp_z_lag2 [all]", allow.new.levels = TRUE)
+p2 <- ggpredict(fin.m, terms = "spei_z_lag2 [all]", allow.new.levels = TRUE)
+p3 <- ggpredict(fin.m, terms = c("tmp_z", "spei_z_lag2 [-1, 0, 1]"), allow.new.levels = TRUE)
+
+p_df <- as.data.frame(p3)
+
+
+# test simple plot:
+ggplot(p3, aes(x = x, y = predicted)) +
+  geom_ribbon(aes(ymin = conf.low, ymax = conf.high, fill = group), alpha = 0.3) +
+  geom_line(aes(color = group, linetype = group), linewidth = 1) +
+  ylim(0,75000) +
+  #labs(x = "SPEI Lag 2", y = "Sum of Beetle Counts") +
+  theme_classic2()
+
+
+
+
+m10_unsc_no_year <- gamm(sum_ips ~  #s(year, k =6) + 
+                           s(tmp_z_lag2, k = 8) + s(spei_z_lag2, k = 8) +
+                   s(x, y, bs = "gp") + s(pairID, bs = "re"),
+                 data = dat_fin_counts_m, 
+                 family = nb,
+                 correlation = corAR1(form = ~ year | trapID))
+
+# treat year as random effect
+m10_re <- gamm(sum_ips ~ s(tmp_z_lag2, k = 8) + s(spei_z_lag2, k = 8) +
+                 s(x, y, bs = "gp") + s(pairID, bs = "re"),
+               data = dat_fin_counts_m, 
+               family = nb,
+               correlation = corAR1(form = ~ year | trapID),
+               random = list(year = ~1))
+
+
+
+AIC(m10_unsc,m10_unsc_no_year,m10_re,m10_unsc_int)
+summary(m10_unsc_no_year$gam)
+gam.check(m10_unsc_no_year$gam)
+plot(m10_unsc$gam, page = 1, shade = T)
+
+#dat_fin_counts_m$AR
 m10 <- gamm(sum_ips ~  s(year, k =6) + s(tmp_z_lag2, k = 8) + s(spei_z_lag2, k = 8) +
              s(x, y, bs = "gp") + s(pairID, bs = "re"),
            data = dat_fin_counts_m_scaled, 
@@ -1057,7 +1185,6 @@ m13.int <- gamm(sum_ips ~  s(year, k =4) + #s(tmp_z_lag1, k = 4) + s(spei_z_lag2
 
 
 
-# !!!! continue: why is year 2015 missing?
 # average trap values by trap pair, instead of double design
 
 
@@ -2351,25 +2478,38 @@ fin.m.peak.diff <- m3
 
 
 #### Eample: quick plotting! -----------------------------------------
-fin.m <- m10$gam
+fin.m <- m10_unsc_int$gam
 #  m.spei12_no_re_slope47# fin.m.peak.diff
 #!!! --------------------------------------------
 
 # plot in easy way how tdoes the k value affect interaction
 p1 <- ggpredict(fin.m, terms = "tmp_z_lag2 [all]", allow.new.levels = TRUE)
 p2 <- ggpredict(fin.m, terms = "spei_z_lag2 [all]", allow.new.levels = TRUE)
-p3 <- ggpredict(fin.m, terms = c("veg_tmp_lag2", "spei3_lag2 [-1, 0, 1]"), allow.new.levels = TRUE)
+p3 <- ggpredict(fin.m, terms = c("tmp_z", "spei_z_lag2 [-1, 0, 1]"), allow.new.levels = TRUE)
 
-p_df <- as.data.frame(p1)
+p_df <- as.data.frame(p3)
 # test simple plot:
 ggplot(p_df, aes(x = x, y = predicted)) +
-   # geom_point(data = dat_fin_counts_m_scaled, aes(x = tmp_z_lag2, y = sum_ips), 
-  #            color = "black", alpha = 0.2) +
+   geom_point(data = dat_fin_counts_m, aes(x = tmp_z_lag2, y = sum_ips, color = year_fact), 
+              alpha = 0.2) +
   geom_ribbon(aes(ymin = conf.low, ymax = conf.high, fill = group), alpha = 0.3) +
   
   geom_line(aes(color = group, linetype = group), linewidth = 1) +
+  ylim(0,75000) +
   #labs(x = "SPEI Lag 2", y = "Sum of Beetle Counts") +
   theme_classic2()
+
+
+# test simple plot:
+ggplot(p3, aes(x = x, y = predicted)) +
+  geom_ribbon(aes(ymin = conf.low, ymax = conf.high, fill = group), alpha = 0.3) +
+  geom_line(aes(color = group, linetype = group), linewidth = 1) +
+  ylim(0,75000) +
+  #labs(x = "SPEI Lag 2", y = "Sum of Beetle Counts") +
+  theme_classic2()
+
+
+
 
 
 fin.m.lagged <- m.spei12_no_re_slope47
