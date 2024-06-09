@@ -939,57 +939,7 @@ boxplot(log(dat_fin_counts_m$sum_ips))
 
 # TEST: GAMM beetle counst with temp autocorr or with previous years beetle counts -------------------------------
 
-m1 <- gam(sum_ips ~ s(sum_ips_lag1),# + s(tmp_z, k = 4) + 
-                   #s(spei_z_lag1, k = 4) + 
-                   #s(trapID, bs = 're'), #+ 
-                 #s( year_fact, bs = 're'), 
-                 family = nb(), 
-                 method = 'REML', 
-                 data = dat_fin_counts_m_scaled)
-
-m2 <- gam(sum_ips ~ s(sum_ips_lag1) + s(tmp_z_lag2, k = 15),# + 
-          #s(spei_z_lag1, k = 4) + 
-          #s(trapID, bs = 're'), #+ 
-          #s( year_fact, bs = 're'), 
-          family = nb(), 
-          method = 'REML', 
-          data = dat_fin_counts_m_scaled)
-
-m3 <- gam(sum_ips ~ s(sum_ips_lag1) + s(tmp_z_lag2, k = 15) +
-            pairID + year,
-          #s(spei_z_lag1, k = 4) + 
-          #s(trapID, bs = 're'), #+ 
-          #s( year_fact, bs = 're'), 
-          family = nb(), 
-          method = 'REML', 
-          data = dat_fin_counts_m_scaled)
-
-m4 <- gam(sum_ips ~ s(sum_ips_lag1) + s(tmp_z_lag2, k = 5) +
-            s(x, y, bs = "gp") + # add spatial autocorrelation
-            pairID + year,
-          #s(spei_z_lag1, k = 4) + 
-          #s(trapID, bs = 're'), #+ 
-          #s( year_fact, bs = 're'), 
-          family = nb(), 
-          method = 'REML', 
-          data = dat_fin_counts_m_scaled)
-
-m5 <- gam(sum_ips ~ s(sum_ips_lag1) + s(tmp_z_lag2, k = 5) +
-            s(x, y, bs = "gp") + # add spatial autocorrelation
-            s(trapID, bs = "re"),
-          #s(spei_z_lag1, k = 4) + 
-          #s(trapID, bs = 're'), #+ 
-          #s( year_fact, bs = 're'), 
-          family = nb, 
-          rho = 0.5,
-          AR.start = year == min(year),
-          method = 'REML', 
-          data = dat_fin_counts_m_scaled)
-
-# account to temp autocorrelation explicitely
-# Fit the BAM with Negative Binomial distribution and AR1 correlation structure
-# Create a variable to indicate the start of each time series for AR1
-
+# account to temp autocorrelation explicitely, within gamm
 
 # try with gamm, and different specification of the temp autocorrelation
 m7 <- gamm(sum_ips ~ s(year, k =4) + s(tmp_z_lag2, k = 4) + #s(spei) +
@@ -1039,7 +989,7 @@ m10_unsc2 <- gamm(sum_ips ~  s(year, k =6) + s(tmp_z_lag1, k = 8) + s(spei_z_lag
 
 # try less correlated predictors:
 m10_unsc2_int <- gamm(sum_ips ~  s(year, k =6) + s(tmp_z_lag1, k = 8) + s(spei_z_lag2, k = 8) +
-                        te(tmp_z_lag1, spei_z_lag2, k = 10) + 
+                        te(tmp_z_lag1, spei_z_lag2, k = 20) + 
                     s(x, y, bs = "gp") + 
                     s(pairID, bs = "re"),
                   data = dat_fin_counts_m, 
@@ -1064,36 +1014,12 @@ cor(dat_fin_counts_m$tmp_z_lag1, dat_fin_counts_m$spei_z_lag2, method = 'pearson
 
 
 
-# add spatial autocorrelation
-# Extract the lme part of the model
-lme_model <- m10_unsc$lme
-
-# Update the lme model to include the spatial correlation structure
-lme_model <- update(lme_model, correlation = corGaus(form = ~ x + y | trapID))
-
-# Update the gamm object with the new lme model
-m10_unsc$lme <- lme_model
-
-# Summarize the model
-summary(m10_unsc_spat_cor$gam)
-summary(m10_unsc_spat_cor$lme)
-
-
-m10_unsc_spat_cor <- gamm(sum_ips ~  s(year, k =6) + s(tmp_z_lag2, k = 4) + s(spei_z_lag2, k = 5) +
-                      # te(tmp_z, spei_z_lag2, k = 30) +
-                       s(x, y, bs = "gp", k =30) + 
-                       s(pairID, bs = "re"),
-                     data = dat_fin_counts_m, 
-                     family = nb,
-                     correlation = corAR1(form = ~ year | trapID) +
-                       corGaus(form = ~ x + y | trapID))
-
-
-mm <- m10_unsc2$gam
+# the best!!!
+mm <- m10_unsc2_int$gam
 # plot in easy way how tdoes the k value affect interaction
 p1 <- ggpredict(mm, terms = "tmp_z_lag1 [all]", allow.new.levels = TRUE)
 p2 <- ggpredict(mm, terms = "spei_z_lag2 [all]", allow.new.levels = TRUE)
-p3 <- ggpredict(mm, terms = c("tmp_z", "spei_z_lag2 [-1, 0, 1]"), allow.new.levels = TRUE)
+p3 <- ggpredict(mm, terms = c("tmp_z_lag1", "spei_z_lag2 [-1, 0, 1]"), allow.new.levels = TRUE) #[-1, 0, 1]
 
 p_df <- as.data.frame(p2)
 
@@ -1101,7 +1027,7 @@ p_df <- as.data.frame(p2)
 ggplot(p_df, aes(x = x, y = predicted)) +
   geom_ribbon(aes(ymin = conf.low, ymax = conf.high, fill = group), alpha = 0.3) +
   geom_line(aes(color = group, linetype = group), linewidth = 1) +
-  geom_point(data = dat_fin_counts_m, aes(x = spei_z_lag2, y = sum_ips, color=factor(year))) +
+  #geom_point(data = dat_fin_counts_m, aes(x = spei_z_lag2, y = sum_ips, color=factor(year))) +
  # ylim(0,75000) +
   #labs(x = "SPEI Lag 2", y = "Sum of Beetle Counts") +
   theme_classic2()
