@@ -1086,17 +1086,170 @@ avg_data <- dat_spei_lags %>%
             x           = mean(x, na.rm = TRUE),
             y           = mean(y, na.rm = TRUE),
             ) %>%
-  ungroup()
+  ungroup(.) %>% 
+  na.omit()
+
+
+
+# test on averaged design
+# try less correlated predictors:
+m1 <- gamm(sum_ips ~  s(year, k =6) + s(tmp_z_lag1, k = 8) + s(spei_z_lag2, k = 4) +
+                        te(tmp_z_lag1, spei_z_lag2, k = 15) + 
+                        s(x, y, bs = "gp") + 
+                        s(pairID, bs = "re"),
+                      data = avg_data, 
+                      family = nb,
+                      correlation = corAR1(form = ~ year | pairID))
+# remove xy??
+m2 <- gamm(sum_ips ~  s(year, k =6) +  s(tmp_z_lag1, k = 8) + s(spei_z_lag2, k = 4) +
+             te(tmp_z_lag1, spei_z_lag2, k = 20) + 
+            # s(x, y, bs = "gp") + 
+             s(pairID, bs = "re"),
+           data = avg_data, 
+           family = nb,
+           correlation = corAR1(form = ~ year | pairID))
+
+# add spatial autocorrelation explicitely, try simple
+# Define the model with spatial autocorrelation
+m3 <- gamm(sum_ips ~ s(year, k = 6) + s(tmp_z_lag1, k = 8) + s(spei_z_lag2, k = 4) +
+             te(tmp_z_lag1, spei_z_lag2, k = 15) + s(pairID, bs = "re"),
+           data = avg_data,
+           family = nb,
+           correlation = corAR1(form = ~ year | pairID) +
+             corSpatial(form = ~ x + y, type = "exponential"))
+
+
+m<- m2$gam
+fin.m.count <- m2
+
+AIC(m1$lme, m2$lme)
+AIC(m1$gam, m2$gam)
+
+summary(m)
+plot.gam(m)
+plot.lme( m1$lme )
+
+acf(residuals(m2$gam))
+pacf(residuals(m1$gam))
+
+
+# chec for residuals:
+
+library(gstat)
+
+# Extract residuals from m2
+residuals_m2 <- residuals(m2$lme, type = "normalized")
+
+# Create a spatial data frame
+spatial_data <- data.frame(x = avg_data$x, y = avg_data$y, residuals = residuals_m2)
+
+# Plot residuals to check for spatial patterns
+plot(spatial_data$x, spatial_data$y, col = residuals_m2, pch = 16, 
+     xlab = "X Coordinate", ylab = "Y Coordinate", 
+     main = "Spatial Plot of Residuals (Model m2)")
+colorRampPalette(c("blue", "white", "red"))(100)
+
+# Variogram of residuals
+vgm_res <- variogram(residuals ~ 1, data = spatial_data, locations = ~ x + y)
+plot(vgm_res, main = "Variogram of Residuals (Model m2)")
+# residual seems not to be spatialy autocorrelated!
+
+# Automate approach??? ----------------------
+# !!! START
+
+# Define a function to build and compare models with descriptive names
+compare_models <- function(data) {
+  models <- list()
+  AIC_values <- data.frame(Model = character(), AIC = numeric(), stringsAsFactors = FALSE)
+  
+  # Step 1: Initial Model (Base Model with Year)
+  models$base_model <- gamm(sum_ips ~ s(year, k = 6),
+                            data = data,
+                            family = nb,
+                            correlation = corAR1(form = ~ year | pairID))
+  
+  AIC_values <- rbind(AIC_values, data.frame(Model = "Base Model (Year)", AIC = AIC(models$base_model$lme)))
+  
+  # Step 2: Add s(tmp_z_lag1, k = 8)
+  models$tmp_lag1 <- gamm(sum_ips ~ s(year, k = 6) + s(tmp_z_lag1, k = 8),
+                          data = data,
+                          family = nb,
+                          correlation = corAR1(form = ~ year | pairID))
+  
+  AIC_values <- rbind(AIC_values, data.frame(Model = "Add tmp_z_lag1", AIC = AIC(models$tmp_lag1$lme)))
+  
+  # Step 3: Add s(spei_z_lag2, k = 4)
+  models$spei_lag2 <- gamm(sum_ips ~ s(year, k = 6) + s(tmp_z_lag1, k = 8) + s(spei_z_lag2, k = 4),
+                           data = data,
+                           family = nb,
+                           correlation = corAR1(form = ~ year | pairID))
+  
+  AIC_values <- rbind(AIC_values, data.frame(Model = "Add spei_z_lag2", AIC = AIC(models$spei_lag2$lme)))
+  
+  # Step 4: Add te(tmp_z_lag1, spei_z_lag2, k = 15)
+  models$tmp_spei_interaction <- gamm(sum_ips ~ s(year, k = 6) + s(tmp_z_lag1, k = 8) + s(spei_z_lag2, k = 4) +
+                                        te(tmp_z_lag1, spei_z_lag2, k = 15),
+                                      data = data,
+                                      family = nb,
+                                      correlation = corAR1(form = ~ year | pairID))
+  
+  AIC_values <- rbind(AIC_values, data.frame(Model = "Add tmp_spei_interaction", AIC = AIC(models$tmp_spei_interaction$lme)))
+  
+  # Step 5: Add s(x, y, bs = "gp")
+  models$spatial <- gamm(sum_ips ~ s(year, k = 6) + s(tmp_z_lag1, k = 8) + s(spei_z_lag2, k = 4) +
+                           te(tmp_z_lag1, spei_z_lag2, k = 15) + s(x, y, bs = "gp"),
+                         data = data,
+                         family = nb,
+                         correlation = corAR1(form = ~ year | pairID))
+  
+  AIC_values <- rbind(AIC_values, data.frame(Model = "Add spatial", AIC = AIC(models$spatial$lme)))
+  
+  # Step 6: Add s(pairID, bs = "re")
+  models$random_effect <- gamm(sum_ips ~ s(year, k = 6) + s(tmp_z_lag1, k = 8) + s(spei_z_lag2, k = 4) +
+                                 te(tmp_z_lag1, spei_z_lag2, k = 15) + s(x, y, bs = "gp") + s(pairID, bs = "re"),
+                               data = data,
+                               family = nb,
+                               correlation = corAR1(form = ~ year | pairID))
+  
+  AIC_values <- rbind(AIC_values, data.frame(Model = "Add random effect", AIC = AIC(models$random_effect$lme)))
+  
+  # Print AIC values
+  print(AIC_values)
+  
+  # Return the list of models and AIC values for further inspection if needed
+  return(list(models = models, AIC_values = AIC_values))
+}
+
+# Run the function on your dataset
+result <- compare_models(avg_data)
+
+# END !!!!!
+
+
+
+# AGG DOY : test for betar family-----------------------------------
+m1 <- gamm(tr_agg_doy ~ s(year, k = 6) + s(tmp_z_lag1, k = 8) + s(spei_z_lag2, k = 4) +
+             te(tmp_z_lag1, spei_z_lag2, k = 15) + s(x, y, bs = "gp") + s(pairID, bs = "re"),
+           data = avg_data,
+           family = nb,
+           correlation = corAR1(form = ~ year | pairID))
 
 
 
 
-# average trap values by trap pair, instead of double design
 
 
 
-acf(residuals(m10_unsc2_int$gam))
-pacf(residuals(m10_unsc2_int$gam))
+
+
+
+
+
+
+
+
+
+
 
 # how many observation s i have per year?
 
@@ -2275,7 +2428,7 @@ m.gam.spei_tmp_re_slope45_temp_int2 <- gam(sum_ips ~ s(spei3_lag2, k = 4) +
 
 
 
-fin.m.counts <- m.gam.spei_tmp_re_slope45_temp_int2
+#fin.m.counts <- m.gam.spei_tmp_re_slope45_temp_int2
 # Fit the reduced model without veg_tmp
 m_no_veg_tmp <- gam(sum_ips ~ s(spei3_lag2, k = 4) + 
                       ti(spei3_lag2, veg_tmp, k = 4) +
