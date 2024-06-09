@@ -942,7 +942,7 @@ boxplot(log(dat_fin_counts_m$sum_ips))
 # account to temp autocorrelation explicitely, within gamm
 
 # try with gamm, and different specification of the temp autocorrelation
-m7 <- gamm(sum_ips ~ s(year, k =4) + s(tmp_z_lag2, k = 4) + #s(spei) +
+m7 <- gamm(sum_ips ~ s(year, k =4) + s(tmp_z_lag1, k = 4) + #s(spei) +
             s(x, y, bs = "gp") + s(trapID, bs = "re"),
           data = dat_fin_counts_m_scaled, 
           family = nb,
@@ -950,16 +950,7 @@ m7 <- gamm(sum_ips ~ s(year, k =4) + s(tmp_z_lag2, k = 4) + #s(spei) +
           correlation = corAR1(form = ~ year | trapID))
 
 # add spei
-m8 <- gamm(sum_ips ~ s(year, k =4) + s(tmp_z_lag2, k = 4) + s(spei_z_lag2, k = 4) +
-             s(x, y, bs = "gp") + s(trapID, bs = "re"),
-           data = dat_fin_counts_m_scaled, 
-           family = nb,
-           correlation = corAR1(form = ~ year | trapID))
-
-
-
-# add previous years beetle counts
-m9 <- gamm(sum_ips ~  s(sum_ips_log  , k =4) + s(year, k =4) + s(tmp_z_lag2, k = 4) + s(spei_z_lag2, k = 4) +
+m8 <- gamm(sum_ips ~ s(year, k =4) + s(tmp_z_lag1, k = 4) + s(spei_z_lag2, k = 4) +
              s(x, y, bs = "gp") + s(trapID, bs = "re"),
            data = dat_fin_counts_m_scaled, 
            family = nb,
@@ -970,7 +961,7 @@ m9 <- gamm(sum_ips ~  s(sum_ips_log  , k =4) + s(year, k =4) + s(tmp_z_lag2, k =
 # add previous years beetle counts
 # try with uncsaled data: also unscaled z-score
 # as this can be easier to interpret in relationship to climate change??
-m10_unsc <- gamm(sum_ips ~  s(year, k =6) + s(tmp_z_lag2, k = 8) + s(spei_z_lag2, k = 8) +
+m10_unsc <- gamm(sum_ips ~  s(year, k =6) + s(tmp_z_lag1, k = 8) + s(spei_z_lag2, k = 8) +
               s(x, y, bs = "gp") + 
                 s(pairID, bs = "re"),
             data = dat_fin_counts_m, 
@@ -1082,32 +1073,21 @@ m10 <- gamm(sum_ips ~  s(year, k =6) + s(tmp_z_lag2, k = 8) + s(spei_z_lag2, k =
            correlation = corAR1(form = ~ year | trapID))
 
 # Calculate average counts for each trap pair
-avg_data <- dat_fin_counts_m_scaled %>%
-  group_by(pairID, year, spei_z_lag2, tmp_z_lag1) %>%
-  summarise(avg_sum_ips = mean(sum_ips, na.rm = TRUE)) %>%
+avg_data <- dat_spei_lags %>%
+  group_by(pairID, year) %>%
+  summarise(sum_ips     = mean(sum_ips, na.rm = TRUE),
+            tr_agg_doy  = mean(tr_agg_doy, na.rm = TRUE),
+            tr_peak_doy = mean(tr_peak_doy, na.rm = TRUE), 
+            tr_agg_doy  = mean(tr_agg_doy, na.rm = TRUE),
+            agg_doy     = mean(agg_doy, na.rm = TRUE),
+            peak_doy    = mean(peak_doy, na.rm = TRUE),
+            spei_z_lag2 = mean(spei_z_lag2, na.rm = TRUE),
+            tmp_z_lag1  = mean(tmp_z_lag1, na.rm = TRUE),
+            x           = mean(x, na.rm = TRUE),
+            y           = mean(y, na.rm = TRUE),
+            ) %>%
   ungroup()
 
-
-# tmp_lag1
-m11 <- gamm(sum_ips ~  s(year, k =4) + s(tmp_z_lag1, k = 4) + s(spei_z_lag2, k = 4) +
-              s(x, y, bs = "gp") + s(trapID, bs = "re"),
-            data = dat_fin_counts_m_scaled, 
-            family = nb,
-            correlation = corAR1(form = ~ year | trapID))
-
-# tmp_lag0
-m12 <- gamm(sum_ips ~  s(year, k =4) + s(tmp_z, k = 4) + s(spei_z_lag2, k = 4) +
-              s(x, y, bs = "gp") + s(trapID, bs = "re"),
-            data = dat_fin_counts_m_scaled, 
-            family = nb,
-            correlation = corAR1(form = ~ year | trapID))
-# int
-m13.int <- gamm(sum_ips ~  s(year, k =4) + #s(tmp_z_lag1, k = 4) + s(spei_z_lag2, k = 4) +
-              s(x, y, bs = "gp") + te(tmp_z_lag1, spei_z_lag2, k = 4)  +
-                s(pairID, bs = "re"),
-            data = dat_fin_counts_m_scaled, 
-            family = nb,
-            correlation = corAR1(form = ~ year | trapID))
 
 
 
@@ -1115,16 +1095,8 @@ m13.int <- gamm(sum_ips ~  s(year, k =4) + #s(tmp_z_lag1, k = 4) + s(spei_z_lag2
 
 
 
-summary(m7)
-summary(m10$gam)
-summary(m8$lme)
-
-AIC(m5, m6, m7, m8, m10, m11, m12)
-gam.check(m8$gam)
-plot.gam(m10$gam, page = 1, shade = T)
-
-acf(residuals(m10$gam))
-pacf(residuals(m10$gam))
+acf(residuals(m10_unsc2_int$gam))
+pacf(residuals(m10_unsc2_int$gam))
 
 # how many observation s i have per year?
 
