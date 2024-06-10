@@ -1925,31 +1925,69 @@ save( fin.m.agg,
 
 # define plotiing functions
 
+my_theme_square <- function() {
+  theme_minimal(base_size = 10) +
+    theme(
+      aspect.ratio = 1, 
+      axis.ticks.y = element_line(),
+      axis.ticks.x = element_line(),
+      panel.grid.major = element_blank(), 
+      panel.grid.minor = element_blank(), 
+      panel.background = element_rect(fill = "white", colour = "black")
+    ) 
+}
 
+#ggplot(p0, aes(x = x, y = predicted, ymin = conf.low, ymax = conf.high)) +
+  #geom_line() +
+  #geom_ribbon(alpha = 0.1) +
+ggplot() +  
+  geom_line(data = avg_data, aes(x = year, y = sum_ips / 100, group = pairID), col = "gray20", alpha = 0.1) +
+  geom_line(data = p0, aes(x = x, y = predicted), col = 'blue') +
+  geom_ribbon(data = p0, aes(x = x, y = predicted, ymin = conf.low, ymax = conf.high), alpha = 0.2, fill = 'blue') +
+  my_theme_square() 
+
+create_effect_year(p0, avg_data)
 # Create effect plot function with an additional argument to control y-axis labels
-create_effect_plot <- function(data, line_color = "blue", x_title = "X-axis", 
-                               y_title = "Y-axis",  my_title = '',
+create_effect_year <- function(data, avg_data, line_color = "blue", x_title = "X-axis", 
+                               y_title = "Y-axis", my_title = '',
                                x_annotate = 0, lab_annotate = "lab ann") {
-  p <- ggplot(data, aes(x = x, y = predicted, ymin = conf.low, ymax = conf.high)) +
-    geom_line(color = line_color) +
-    geom_ribbon(alpha = 0.1, fill = line_color) +
+  p <- ggplot() +  
+    geom_line(data = avg_data, aes(x = year, y = sum_ips, group = pairID), col = "gray60", alpha = 0.3) +
+    geom_line(data = data, aes(x = x, y = predicted), color = line_color) +
+    geom_ribbon(data = data, aes(x = x, ymin = conf.low, ymax = conf.high), alpha = 0.25, fill = line_color) +
     labs(x = x_title,
          title = my_title,
          y = y_title) +
-   # ylim(y_lim) +
-  #  scale_x_continuous(breaks = c(-2, -1, 0, 1, 2), limits = c(-2.7, 2.7)) + # Set x-axis breaks and limits
-    theme_minimal(base_size = 10) +
-    theme(aspect.ratio = 1, 
-          axis.ticks.y = element_line(),
-          axis.ticks.x = element_line(),
-          panel.grid.major = element_blank(), 
-          panel.grid.minor = element_blank(), 
-          panel.background = element_rect(fill = "white", colour = "black")) +
+    my_theme_square() + 
     annotate("text", x = x_annotate, y = Inf, label = lab_annotate, hjust = 0.5, vjust = 1.5)
-
+  
   return(p)
 }
 
+
+# Create effect plot function with additional arguments to select columns from avg_data
+create_effect_plot <- function(data, avg_data, 
+                               x_col = "tmp_z_lag1", 
+                               y_col = "sum_ips", 
+                               line_color = "blue", x_title = "X-axis", 
+                               y_title = "Y-axis", my_title = '',
+                               x_annotate = 0, lab_annotate = "lab ann") {
+  
+  x_col <- ensym(x_col)
+  y_col <- ensym(y_col)
+  
+  p <- ggplot() +
+    geom_point(data = avg_data, aes(x = !!x_col, y = !!y_col), col = "gray60", alpha = 0.3) +
+    geom_line(data = data, aes(x = x, y = predicted), color = line_color) +
+    geom_ribbon(data = data, aes(x = x, ymin = conf.low, ymax = conf.high), alpha = 0.25, fill = line_color) +
+    labs(x = x_title,
+         title = my_title,
+         y = y_title) +
+    my_theme_square() + 
+    annotate("text", x = x_annotate, y = Inf, label = lab_annotate, hjust = 0.5, vjust = 1.5)
+  
+  return(p)
+}
 
 
 
@@ -1967,13 +2005,7 @@ create_effect_Y_trans <- function(data, line_color = "blue", x_title = "X-axis",
     labs(x = x_title, y = y_title, title = my_title) +
    # ylim(y_lim) +
   #  scale_x_continuous(breaks = c(-2, -1, 0, 1, 2), limits = c(-2.7, 2.7)) + # Set x-axis breaks and limits
-    theme_minimal(base_size = 10) +
-    theme(aspect.ratio = 1, 
-          axis.ticks.y = element_line(),
-          axis.ticks.x = element_line(),
-          panel.grid.major = element_blank(), 
-          panel.grid.minor = element_blank(), 
-          panel.background = element_rect(fill = "white", colour = "black")) +
+    my_theme_square() + 
     annotate("text", x = x_annotate, y = Inf, label = lab_annotate, hjust = 0.5, vjust = 1.5)
   
   return(p)
@@ -1995,16 +2027,8 @@ plot_effect_interactions <- function(data, temp_label, y_title,x_annotate = 0, l
          fill = "SPEI\nlevels",
          color = "SPEI\nlevels",
          linetype = "SPEI\nlevels") +  # Fixed "y_title" to "y" for correct y-axis label argument
-    theme_minimal(base_size = 10) +
-    theme(aspect.ratio = 1, 
-          legend.position = 'bottom',
-          axis.ticks.y = element_line(),
-          axis.ticks.x = element_line(),
-          panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
-          panel.background = element_rect(fill = "white", colour = "black"),
-          legend.key.size = unit(0.5, "cm"),
-          legend.text = element_text(size = 8)) +
-    guides(color = guide_legend(ncol = 1), 
+   my_theme_square() + 
+   guides(color = guide_legend(ncol = 1), 
            fill = guide_legend(ncol = 1),
            linetype = guide_legend(ncol = 1)) +
     annotate("text", x = x_annotate, y = Inf, 
@@ -2017,20 +2041,28 @@ plot_effect_interactions <- function(data, temp_label, y_title,x_annotate = 0, l
 ### Beetle counts -----------------------------------------------------------
 # plot only significant terms
 
-temp_label <- expression(paste("Temperature [", degree, "C]", sep=""))
-spei_label <- 'SPEI'
+temp_label <- "Temperature [z-score]" #expression(paste("Temperature [", degree, "C]", sep=""))
+spei_label <- 'SPEI [z-score]'
+
 
 
 
 # Assuming 'model' is your glm.nb model
 summary(fin.m.counts)
-p1 <- ggpredict(fin.m.counts, terms = "veg_tmp [all]", allow.new.levels = TRUE)
-p2 <- ggpredict(fin.m.counts, terms = "spei3_lag2 [all]", allow.new.levels = TRUE)
-p3 <- ggpredict(fin.m.counts, terms = c("veg_tmp", "spei3_lag2 [-1, 0, 1]"), allow.new.levels = TRUE)
-#p3 <- ggpredict(m.gam3, terms = c("veg_tmp", "spei3_lag2 [-1, 0, 1]"), allow.new.levels = TRUE)
+p0 <- ggpredict(fin.m.counts, terms = "year [all]", allow.new.levels = TRUE)
+p1 <- ggpredict(fin.m.counts, terms = "tmp_z_lag1 [all]", allow.new.levels = TRUE)
+p2 <- ggpredict(fin.m.counts, terms = "spei_z_lag2 [all]", allow.new.levels = TRUE)
+p3 <- ggpredict(fin.m.counts, terms = c("tmp_z_lag1", "spei_z_lag2 [-1, 0, 1]"), allow.new.levels = TRUE)
+#p3 <- ggpredict(m.gam3, terms = c("veg_tmp", "spei_z_lag2 [-1, 0, 1]"), allow.new.levels = TRUE)
 
 
 # change the values to allow y lables to fit 
+p0$predicted <- p0$predicted/100
+p0$conf.low  <- p0$conf.low/100
+p0$conf.high <- p0$conf.high/100
+
+
+
 p1$predicted <- p1$predicted/100
 p1$conf.low  <- p1$conf.low/100
 p1$conf.high <- p1$conf.high/100
@@ -2043,36 +2075,46 @@ p3$predicted <- p3$predicted/100
 p3$conf.low  <- p3$conf.low/100
 p3$conf.high <- p3$conf.high/100
 
+avg_data_sum_ips <- avg_data %>% 
+  mutate(sum_ips = sum_ips/100)
 
+p0.count <- create_effect_year(data = p0, 
+                              avg_data = avg_data_sum_ips, 
+                              line_color = "darkgreen", 
+                              x_title = "Year", 
+                              y_title = paste(lab_popul_level, '*100'),# "Population level\n[# beetle*100]",
+                              my_title = "", 
+                              x_annotate = 2018, lab_annotate = "***")
 
+(p0.count)
 p1.count <- 
-  create_effect_plot(p1, line_color = "red", 
-                               x_title = temp_label, 
-                               y_title = "Counts [#*100]",
-                     x_annotate = 13,
-                     lab_annotate = "***"
-                     #,  y_lim = c(80,800)
-                               ) 
- 
-p2.count <- create_effect_plot(p2, line_color = "blue", 
-                               x_title = "SPEI [dim.]", 
-                               y_title = "Counts [#*100]", #,  y_lim = c(80,800)
-                               x_annotate = 0,
-                               lab_annotate = "***") 
+  create_effect_plot(data = p1, avg_data = avg_data_sum_ips, 
+                     x_col = "tmp_z_lag1", y_col = "sum_ips", 
+                     line_color = "red", 
+                     x_title = temp_label , 
+                     y_title = paste(lab_popul_level, '*100'), 
+                     #my_title = "Effect of Year on Sum IPS", 
+                     x_annotate = 2, 
+                     lab_annotate = "*")
+
+(p1.count)
+p2.count <- create_effect_plot(data = p2, avg_data = avg_data_sum_ips, 
+                               x_col = "spei_z_lag2", y_col = "sum_ips", 
+                               line_color = "blue", 
+                               x_title = spei_label , 
+                               y_title = paste(lab_popul_level, '*100'), 
+                               #my_title = "Effect of Year on Sum IPS", 
+                               x_annotate = -1, 
+                               lab_annotate = "*")
+(p2.count)
 p3.count <- plot_effect_interactions(p3, 
-                                     temp_label = "temp",#''temp_label, 
-                                     y_title = "Counts [#*100]",
-                                     x_annotate = 13,
+                                     temp_label = temp_label, 
+                                     y_title = paste(lab_popul_level, '*100'),
+                                     x_annotate = 2,
                                      lab_annotate = "n.s.") 
 
+(p3.count)
 ggarrange(p1.count,p2.count, p3.count)
-
-
-
-# test simple plot:
-ggplot(p3, aes(x = x , y = predicted , ymin = conf.low, ymax = conf.high)) +
-  geom_ribbon(aes(ymin = conf.low, ymax = conf.high, fill = group), alpha = 0.3) +
-  geom_line(aes(color = group, linetype = group), linewidth = 1) 
 
 
 
@@ -2199,10 +2241,10 @@ p.peak.diff <- ggarrange(p1.peak.diff, p2.peak.diff, ncol = 1)
 p.out.clim <- ggarrange(p.count, p.agg, p.peak, p.peak.diff, 
           ncol=4, nrow = 1 , align = 'hv', 
           font.label = list(size = 8, color = "black", face = "plain", family = NULL),
-          labels = c( "[a] Population level",
-                      "[b] Colonization timing",
-                      "[c] Peak timing",
-                      "[d] Peak growth"))
+          labels = c( paste("[a] ", lab_popul_level),
+                      paste("[b] ", lab_colonization_time ),
+                      paste("[c] ", lab_peak_time ),
+                      paste("[d] ", lab_peak_growth )))
                       
 
 windows(7,4)
@@ -2386,7 +2428,7 @@ summary(fin.m.peak.diff)
 
 
 
-# print models outputs:
+# print models outputs: ---------------------------------------------------------
 
 
 
