@@ -1343,8 +1343,8 @@ result_peak_diff <- compare_models(avg_data, dependent_vars =  c("peak_diff"))
 # explore results for individual dependent variables: select the onse with the lowest AIC/with the all random effects
 fin.m.counts     <- result$sum_ips$models$random_effect$gam  # lowest AIC
 fin.m.agg        <- result$tr_agg_doy$models$random_effect$gam  # lowest AIC
-fin.m.peak_doy   <- result$tr_peak_doy$models$random_effect$gam  # lowest AIC
-fin.m.peak_diff  <- result_peak_diff$peak_diff$models$random_effect$gam  # lowest AIC
+fin.m.peak   <- result$tr_peak_doy$models$random_effect$gam  # lowest AIC
+fin.m.peak.diff  <- result_peak_diff$peak_diff$models$random_effect$gam  # lowest AIC
   
 
 
@@ -1764,148 +1764,6 @@ deviance_explained_interaction <- dev_full - dev_no_interaction
 cat("Deviance explained by veg_tmp: ", deviance_explained_veg_tmp, "\n")
 cat("Deviance explained by spei3_lag2: ", deviance_explained_spei3_lag2, "\n")
 cat("Deviance explained by interaction (spei3_lag2 * veg_tmp): ", deviance_explained_interaction, "\n")
-
-
-
-
-
-
-
-
-### RS beetle damage: 2 years lag of beetle data! ----------------------------------
-## always use lag of 2 years, as little difference between the models, and we wish t have more observations
-
-cols_skip <- c('trapID', 'pairID', 'year', 'wind_beetle')
-
-dat_fin_RS_m <-  
-  dat_fin %>% 
-  
-  #dplyr::select(-wind_beetle) %>% 
-  # data %>%
-  group_by(trapID) %>%
-  arrange(year, .by_group = TRUE) %>%
-  mutate(spei3_lag2   = lag(spei3, n = 2, default = NA),
-         veg_tmp_lag2 = lag(veg_tmp, n = 2, default = NA),
-         agg_doy_lag2   = lag(agg_doy, n = 2, default = NA),
-         peak_doy_lag2   = lag(peak_doy, n = 2, default = NA),
-         sum_ips_lag2   = lag(sum_ips, n = 2, default = NA),
-         peak_diff_lag2   = lag(peak_diff, n = 2, default = NA),
-         Morans_I_log_lag2   = lag(Morans_I_log, n = 2, default = NA)) %>%
-  #sum_ips_lag3   = lag(sum_ips, n = 3, default = NA)
-  dplyr::mutate(population_growth     = (sum_ips - sum_ips_lag1) / sum_ips_lag1 * 100,
-                population_growth2    = dplyr::lag(population_growth, n = 2, order_by = year)) %>%  # lag population growth by one more year
-  
-  mutate(peak_diff  = as.integer(peak_diff )) %>% 
-  ungroup() %>% 
-  na.omit()
-
-dat_fin_RS_scaled <-
-  dat_fin_RS_m %>% 
-  ungroup(.) %>% 
-  # na.omit() %>% 
-  dplyr::select(-all_of(cols_skip )) %>%
-  # Apply the scale function
-  scale(center = TRUE, scale = TRUE) %>%
-  as.data.frame() %>%
-  # Bind the unscaled columns back
-  bind_cols(dat_fin_RS_m %>% dplyr::select(all_of(cols_skip)), .)
-
-
-summary(dat_fin_RS_scaled)
-dim(dat_fin_RS_scaled)
-
-# put all predictors 
-m1 <- glmmTMB(wind_beetle ~ veg_tmp_lag2 + spei3_lag2 + agg_doy_lag2 + peak_doy_lag2 + 
-                sum_ips_lag2 + peak_diff_lag2 + Morans_I_log_lag2 + population_growth2,
-              family = nbinom2,
-              data = dat_fin_RS_scaled)
-summary(m1)
-# Assuming your model is an 'lme4' or 'glmmTMB' object, check from additive model
-(vif_values <- performance::check_collinearity(m1))
-
-
-
-# only spei is significant here, add interaction with climate
-m1.2 <- glmmTMB(wind_beetle ~ veg_tmp_lag2*spei3_lag2 + 
-                agg_doy_lag2 + peak_doy_lag2 + 
-                sum_ips_lag2 + peak_diff_lag2 + Morans_I_log_lag2 + population_growth2,
-              family = nbinom2,
-              data = dat_fin_RS_scaled)
-
-# only spei is significant here, add interaction with climate
-m1.2.1 <- glmmTMB(wind_beetle ~ veg_tmp_lag2*spei3_lag2 + 
-                  agg_doy_lag2 + peak_doy_lag2, # + 
-                 # sum_ips_lag2 + peak_diff_lag2 + 
-                  # Morans_I_log_lag2 + population_growth2,
-                family = nbinom2,
-                data = dat_fin_RS_scaled)
-
-
-m1.2.1.re <- glmmTMB(wind_beetle ~ veg_tmp_lag2*spei3_lag2 + 
-                    agg_doy_lag2 + peak_doy_lag2  +  (1|pairID),
-                  # sum_ips_lag2 + peak_diff_lag2 + 
-                  # Morans_I_log_lag2 + population_growth2,
-                  family = nbinom2,
-                  data = dat_fin_RS_scaled)
-
-AIC(m3,m1.2.1,m1.2.1.re)
-
-# keep only beetle pop predictors 
-m2 <- glmmTMB(wind_beetle ~ #veg_tmp_lag2*spei3_lag2 + 
-                agg_doy_lag2 + peak_doy_lag2 + 
-                #peak_diff_lag2 + 
-                Morans_I_log_lag2 +population_growth2+ 
-                sum_ips_lag2
-              ,# + ,
-              family = nbinom2,
-              data = dat_fin_RS_scaled)
-
-m3 <- glmmTMB(wind_beetle ~ #veg_tmp_lag2*spei3_lag2 + 
-                agg_doy_lag2 + peak_doy_lag2 + 
-                #peak_diff_lag2 + 
-                Morans_I_log_lag2 + #population_growth2+ 
-                sum_ips_lag2 + (1|pairID) 
-              ,# + ,
-              family = nbinom2,
-              data = dat_fin_RS_scaled)
-
-# remove random effects
-m4 <- glm.nb(wind_beetle ~ #veg_tmp_lag2*spei3_lag2 + 
-                agg_doy_lag2, #+ # + peak_doy_lag2 + 
-                #peak_diff_lag2 + 
-                #Morans_I_log_lag2 + #population_growth2+ 
-                #sum_ips_lag2,# + (1|pairID) 
-             # ,# + ,
-            #  family = nbinom2,
-              data = dat_fin_RS_scaled)
-
-AIC(m1, m1.2, m2, m3, m4)
-r2(m4)
-
-fin.m.RS <- m3
-summary(fin.m.RS)
-
-plot(allEffects(m4))
-r2(m4)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 
@@ -2516,8 +2374,6 @@ r2(fin.m.counts )
 r2(fin.m.agg)
 r2(fin.m.peak)
 r2(fin.m.peak.diff)
-r2(fin.m.moran)
-r2(fin.m.RS)
 
 
 
@@ -2525,8 +2381,8 @@ summary(fin.m.counts )
 summary(fin.m.agg)
 summary(fin.m.peak)
 summary(fin.m.peak.diff)
-summary(fin.m.moran)
-summary(fin.m.RS)
+#summary(fin.m.moran)
+#summary(fin.m.RS)
 
 
 
@@ -2535,12 +2391,12 @@ summary(fin.m.RS)
 
 
 # export all models
-sjPlot::tab_model(fin.m.counts,    file = "outTable/gam_counts2.doc")
+sjPlot::tab_model(fin.m.counts,    file = "outTable/model_counts.doc")
 sjPlot::tab_model(fin.m.agg,       file = "outTable/model_agg.doc")
 sjPlot::tab_model(fin.m.peak,      file = "outTable/model_peak.doc")
 sjPlot::tab_model(fin.m.peak.diff, file = "outTable/model_peak_diff.doc")
-sjPlot::tab_model(fin.m.moran,     file = "outTable/model_moran.doc")
-sjPlot::tab_model(fin.m.RS,        file = "outTable/model_RS_3.doc")
+#sjPlot::tab_model(fin.m.moran,     file = "outTable/model_moran.doc")
+#sjPlot::tab_model(fin.m.RS,        file = "outTable/model_RS_3.doc")
 
 sum(dat_fin$sum_ips, na.rm = T)
 
