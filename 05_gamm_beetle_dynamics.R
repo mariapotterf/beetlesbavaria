@@ -1341,37 +1341,14 @@ result <- compare_models(avg_data, dependent_vars)
 result_peak_diff <- compare_models(avg_data, dependent_vars =  c("peak_diff"))
 
 # explore results for individual dependent variables: select the onse with the lowest AIC/with the all random effects
-fin.m.counts <- result$sum_ips$models$random_effect  # lowest AIC
-fin.m.agg <- result$tr_agg_doy$models$random_effect  # lowest AIC
-#fin.m.peak_diff    <- 
-  result$peak_diff
+fin.m.counts     <- result$sum_ips$models$random_effect$gam  # lowest AIC
+fin.m.agg        <- result$tr_agg_doy$models$random_effect$gam  # lowest AIC
+fin.m.peak_doy   <- result$tr_peak_doy$models$random_effect$gam  # lowest AIC
+fin.m.peak_diff  <- result_peak_diff$peak_diff$models$random_effect$gam  # lowest AIC
   
 
 
-
-
-
-
-
-m <- result$tr_agg_doy$models$random_effect$gam
-summary(m)
-plot.gam(m)
-
-# Plot interaction term
-draw(gam_model, select = "te(tmp_z_lag1,spei_z_lag2)")
-draw(gam_model, select = "s(tmp_z_lag1)")
-library(gratia)
-gratia::draw(m)
-appraise(m)
-draw(m1, residuals = TRUE)
-
-
-
-# explore model with linea terms
-m2 <- gamm(tr_agg_doy ~ s(year, k = 6) + s(tmp_z_lag1,3), # +# s(spei_z_lag2,3) + te(tmp_z_lag1, spei_z_lag2, k = 8) + s(x, y, bs = 'gp') + s(pairID, bs = 're'),
-           family = betar(link = "logit"),data = avg_data,  corAR1(form = ~ year | pairID))
-
-
+summary(fin.m.peak_diff)
 
 
 # how many observation s i have per year?
