@@ -1154,99 +1154,208 @@ vgm_res <- variogram(residuals ~ 1, data = spatial_data, locations = ~ x + y)
 plot(vgm_res, main = "Variogram of Residuals (Model m2)")
 # residual seems not to be spatialy autocorrelated!
 
-# Automate approach??? ----------------------
-# !!! START
-
-# Define a function to build and compare models with descriptive names
-compare_models <- function(data) {
-  models <- list()
-  AIC_values <- data.frame(Model = character(), AIC = numeric(), stringsAsFactors = FALSE)
-  
-  # Step 1: Initial Model (Base Model with Year)
-  models$base_model <- gamm(sum_ips ~ s(year, k = 6),
-                            data = data,
-                            family = nb,
-                            correlation = corAR1(form = ~ year | pairID))
-  
-  AIC_values <- rbind(AIC_values, data.frame(Model = "Base Model (Year)", AIC = AIC(models$base_model$lme)))
-  
-  # Step 2: Add s(tmp_z_lag1, k = 8)
-  models$tmp_lag1 <- gamm(sum_ips ~ s(year, k = 6) + s(tmp_z_lag1, k = 8),
-                          data = data,
-                          family = nb,
-                          correlation = corAR1(form = ~ year | pairID))
-  
-  AIC_values <- rbind(AIC_values, data.frame(Model = "Add tmp_z_lag1", AIC = AIC(models$tmp_lag1$lme)))
-  
-  # Step 3: Add s(spei_z_lag2, k = 4)
-  models$spei_lag2 <- gamm(sum_ips ~ s(year, k = 6) + s(tmp_z_lag1, k = 8) + s(spei_z_lag2, k = 4),
-                           data = data,
-                           family = nb,
-                           correlation = corAR1(form = ~ year | pairID))
-  
-  AIC_values <- rbind(AIC_values, data.frame(Model = "Add spei_z_lag2", AIC = AIC(models$spei_lag2$lme)))
-  
-  # Step 4: Add te(tmp_z_lag1, spei_z_lag2, k = 15)
-  models$tmp_spei_interaction <- gamm(sum_ips ~ s(year, k = 6) + s(tmp_z_lag1, k = 8) + s(spei_z_lag2, k = 4) +
-                                        te(tmp_z_lag1, spei_z_lag2, k = 15),
-                                      data = data,
-                                      family = nb,
-                                      correlation = corAR1(form = ~ year | pairID))
-  
-  AIC_values <- rbind(AIC_values, data.frame(Model = "Add tmp_spei_interaction", AIC = AIC(models$tmp_spei_interaction$lme)))
-  
-  # Step 5: Add s(x, y, bs = "gp")
-  models$spatial <- gamm(sum_ips ~ s(year, k = 6) + s(tmp_z_lag1, k = 8) + s(spei_z_lag2, k = 4) +
-                           te(tmp_z_lag1, spei_z_lag2, k = 15) + s(x, y, bs = "gp"),
-                         data = data,
-                         family = nb,
-                         correlation = corAR1(form = ~ year | pairID))
-  
-  AIC_values <- rbind(AIC_values, data.frame(Model = "Add spatial", AIC = AIC(models$spatial$lme)))
-  
-  # Step 6: Add s(pairID, bs = "re")
-  models$random_effect <- gamm(sum_ips ~ s(year, k = 6) + s(tmp_z_lag1, k = 8) + s(spei_z_lag2, k = 4) +
-                                 te(tmp_z_lag1, spei_z_lag2, k = 15) + s(x, y, bs = "gp") + s(pairID, bs = "re"),
-                               data = data,
-                               family = nb,
-                               correlation = corAR1(form = ~ year | pairID))
-  
-  AIC_values <- rbind(AIC_values, data.frame(Model = "Add random effect", AIC = AIC(models$random_effect$lme)))
-  
-  # Print AIC values
-  print(AIC_values)
-  
-  # Return the list of models and AIC values for further inspection if needed
-  return(list(models = models, AIC_values = AIC_values))
-}
-
-# Run the function on your dataset
-result <- compare_models(avg_data)
-
-# END !!!!!
+# Automate approach??? SUM_IPS ----------------------
 
 
 
 # AGG DOY : test for betar family-----------------------------------
-m1 <- gamm(tr_agg_doy ~ s(year, k = 6) + s(tmp_z_lag1, k = 8) + s(spei_z_lag2, k = 4) +
-             te(tmp_z_lag1, spei_z_lag2, k = 15) + s(x, y, bs = "gp") + s(pairID, bs = "re"),
+# test if it is better to keep pairs as random effect or just the xy coordinates? 
+m.re <- gamm(tr_agg_doy ~ s(year, k = 6) + s(tmp_z_lag1, k = 3) + s(spei_z_lag2, k = 3) +
+             te(tmp_z_lag1, spei_z_lag2, k = 15) + 
+             #s(x, y, bs = "gp") + 
+             s(pairID, bs = "re"),
            data = avg_data,
-           family = nb,
+           family = betar,
            correlation = corAR1(form = ~ year | pairID))
 
+m.xy <- gamm(tr_agg_doy ~ s(year, k = 6) +  s(tmp_z_lag1, k = 3) + s(spei_z_lag2, k = 3) +
+             te(tmp_z_lag1, spei_z_lag2, k = 15) + 
+             s(x, y, bs = "gp") ,
+           data = avg_data,
+           family = betar,
+           correlation = corAR1(form = ~ year | pairID))
+
+# both
+m.both.spat <- gamm(tr_agg_doy ~ s(year, k = 6) +  s(tmp_z_lag1, k = 8) + s(spei_z_lag2, k = 3) +
+               te(tmp_z_lag1, spei_z_lag2, k = 15) + 
+               s(x, y, bs = "gp") +
+                 s(pairID, bs = "re"),
+             data = avg_data,
+             family = betar,
+             correlation = corAR1(form = ~ year | pairID))
 
 
 
+m1 <- m.re$gam
+m2 <- m.xy$gam
+m3 <- m.both.spat$gam
+
+r2(m3)
+
+
+avg_data %>% 
+  ggplot(aes(x = spei_z_lag2,
+             y = tr_agg_doy)) +
+  geom_smooth()
 
 
 
+# quick plotting
+fin.m <- m3
+#  m.spei12_no_re_slope47# fin.m.peak.diff
+#!!! --------------------------------------------
+
+# plot in easy way how tdoes the k value affect interaction
+p1 <- ggpredict(fin.m, terms = "year [all]", allow.new.levels = TRUE)
+p2 <- ggpredict(fin.m, terms = "tmp_z_lag1 [all]", allow.new.levels = TRUE)
+p3 <- ggpredict(fin.m, terms = "spei_z_lag2 [all]", allow.new.levels = TRUE)
+p4 <- ggpredict(fin.m, terms = c("tmp_z_lag1", "spei_z_lag2 [-1, 0, 1]"), allow.new.levels = TRUE)
+
+#p_df <- as.data.frame(p3)
+# test simple plot:
+plot1<-ggplot(p1, aes(x = x, y = predicted)) +
+  geom_ribbon(aes(ymin = conf.low, ymax = conf.high, fill = group), alpha = 0.3) +
+  geom_line(aes(color = group, linetype = group), linewidth = 1) +
+  theme_classic2()
+
+plot2<-ggplot(p2, aes(x = x, y = predicted)) +
+  geom_ribbon(aes(ymin = conf.low, ymax = conf.high, fill = group), alpha = 0.3) +
+  geom_line(aes(color = group, linetype = group), linewidth = 1) +
+  theme_classic2()
+
+plot3<-ggplot(p3, aes(x = x, y = predicted)) +
+  geom_ribbon(aes(ymin = conf.low, ymax = conf.high, fill = group), alpha = 0.3) +
+  geom_line(aes(color = group, linetype = group), linewidth = 1) +
+  theme_classic2()
+
+plot4<-ggplot(p4, aes(x = x, y = predicted)) +
+  geom_ribbon(aes(ymin = conf.low, ymax = conf.high, fill = group), alpha = 0.3) +
+  geom_line(aes(color = group, linetype = group), linewidth = 1) +
+  theme_classic2()
+
+ggarrange(plot1,plot2,plot3,plot4, ncol = 4, nrow = 1)
+
+
+AIC(m.re$lme, m.xy$lme )
+# compare the two: add xy or add pairs as random effects? what is better?
+
+m<-m1$gam
+summary(m)
+plot(m, page = 1)
+
+# automate for DOY as well:  -----------------------------------------
+# START 
+
+# Define a function to build and compare models with descriptive names for multiple dependent variables
+compare_models <- function(data, dependent_vars) {
+  results <- list()
+  
+  for (dep_var in dependent_vars) {
+    models <- list()
+    AIC_values <- data.frame(Model = character(), AIC = numeric(), stringsAsFactors = FALSE)
+    
+    # Determine the appropriate family for the dependent variable
+    if (dep_var %in% c("sum_ips", "peak_diff")) {
+      family <- nb()
+    } else if (dep_var %in% c("tr_agg_doy", "tr_peak_doy")) {
+      family <- betar()
+    } else {
+      stop("Unknown dependent variable family.")
+    }
+    
+    # Function to safely fit a model and catch errors
+    safe_gamm <- function(formula, data, family, correlation) {
+      tryCatch({
+        gamm(formula, data = data, family = family, correlation = correlation)
+      }, error = function(e) {
+        cat("Error in model fitting:", conditionMessage(e), "\n")
+        return(NULL)
+      })
+    }
+    
+    # Step 1: Initial Model (Base Model with Year)
+    models$base_model <- safe_gamm(as.formula(paste(dep_var, "~ s(year, k = 6)")),
+                                   data, family, corAR1(form = ~ year | pairID))
+    
+    if (!is.null(models$base_model)) {
+      AIC_values <- rbind(AIC_values, data.frame(Model = "Base Model (Year)", AIC = AIC(models$base_model$lme)))
+    }
+    
+    # Step 2: Add s(tmp_z_lag1, k = 8)
+    models$tmp_lag1 <- safe_gamm(as.formula(paste(dep_var, "~ s(year, k = 6) + s(tmp_z_lag1, k = 8)")),
+                                 data, family, corAR1(form = ~ year | pairID))
+    
+    if (!is.null(models$tmp_lag1)) {
+      AIC_values <- rbind(AIC_values, data.frame(Model = "Add tmp_z_lag1", AIC = AIC(models$tmp_lag1$lme)))
+    }
+    
+    # Step 3: Add s(spei_z_lag2, k = 4)
+    models$spei_lag2 <- safe_gamm(as.formula(paste(dep_var, "~ s(year, k = 6) + s(tmp_z_lag1, k = 8) + s(spei_z_lag2, k = 4)")),
+                                  data, family, corAR1(form = ~ year | pairID))
+    
+    if (!is.null(models$spei_lag2)) {
+      AIC_values <- rbind(AIC_values, data.frame(Model = "Add spei_z_lag2", AIC = AIC(models$spei_lag2$lme)))
+    }
+    
+    # Step 4: Add te(tmp_z_lag1, spei_z_lag2, k = 15)
+    models$tmp_spei_interaction <- safe_gamm(as.formula(paste(dep_var, "~ s(year, k = 6) + s(tmp_z_lag1, k = 8) + s(spei_z_lag2, k = 4) + te(tmp_z_lag1, spei_z_lag2, k = 15)")),
+                                             data, family, corAR1(form = ~ year | pairID))
+    
+    if (!is.null(models$tmp_spei_interaction)) {
+      AIC_values <- rbind(AIC_values, data.frame(Model = "Add tmp_spei_interaction", AIC = AIC(models$tmp_spei_interaction$lme)))
+    }
+    
+    # Step 5: Add s(x, y, bs = "gp")
+    models$spatial <- safe_gamm(as.formula(paste(dep_var, "~ s(year, k = 6) + s(tmp_z_lag1, k = 8) + s(spei_z_lag2, k = 4) + te(tmp_z_lag1, spei_z_lag2, k = 15) + s(x, y, bs = 'gp')")),
+                                data, family, corAR1(form = ~ year | pairID))
+    
+    if (!is.null(models$spatial)) {
+      AIC_values <- rbind(AIC_values, data.frame(Model = "Add spatial", AIC = AIC(models$spatial$lme)))
+    }
+    
+    # Step 6: Add s(pairID, bs = "re")
+    models$random_effect <- safe_gamm(as.formula(paste(dep_var, "~ s(year, k = 6) + s(tmp_z_lag1, k = 8) + s(spei_z_lag2, k = 4) + te(tmp_z_lag1, spei_z_lag2, k = 15) + s(x, y, bs = 'gp') + s(pairID, bs = 're')")),
+                                      data, family, corAR1(form = ~ year | pairID))
+    
+    if (!is.null(models$random_effect)) {
+      AIC_values <- rbind(AIC_values, data.frame(Model = "Add random effect", AIC = AIC(models$random_effect$lme)))
+    }
+    
+    # Store results for each dependent variable
+    results[[dep_var]] <- list(models = models, AIC_values = AIC_values)
+    
+    # Print AIC values for each dependent variable
+    cat("\nAIC values for", dep_var, ":\n")
+    print(AIC_values)
+  }
+  
+  # Return the results for further inspection if needed
+  return(results)
+}
+
+# Define the list of dependent variables
+dependent_vars <- c("sum_ips", "peak_diff", "tr_agg_doy", "tr_peak_doy")
+#dependent_vars  <- c("tr_agg_doy")
+# Run the function on your dataset
+result <- compare_models(avg_data, dependent_vars)
+
+m <- result$tr_agg_doy$models$random_effect$gam
+summary(m)
+plot.gam(m)
+
+# Plot interaction term
+draw(gam_model, select = "te(tmp_z_lag1,spei_z_lag2)")
+draw(gam_model, select = "s(tmp_z_lag1)")
+library(gratia)
+gratia::draw(m)
+appraise(m)
+draw(m1, residuals = TRUE)
 
 
 
-
-
-
-
+# explore model with linea terms
+m2 <- gamm(tr_agg_doy ~ s(year, k = 6) + s(tmp_z_lag1,3), # +# s(spei_z_lag2,3) + te(tmp_z_lag1, spei_z_lag2, k = 8) + s(x, y, bs = 'gp') + s(pairID, bs = 're'),
+           family = betar(link = "logit"),data = avg_data,  corAR1(form = ~ year | pairID))
 
 
 
@@ -2529,22 +2638,21 @@ fin.m.peak.diff <- m3
 
 
 #### Eample: quick plotting! -----------------------------------------
-fin.m <- m10_unsc_int$gam
+fin.m <- m
 #  m.spei12_no_re_slope47# fin.m.peak.diff
 #!!! --------------------------------------------
 
 # plot in easy way how tdoes the k value affect interaction
-p1 <- ggpredict(fin.m, terms = "tmp_z_lag2 [all]", allow.new.levels = TRUE)
+p1 <- ggpredict(fin.m, terms = "tmp_z_lag1 [all]", allow.new.levels = TRUE)
 p2 <- ggpredict(fin.m, terms = "spei_z_lag2 [all]", allow.new.levels = TRUE)
-p3 <- ggpredict(fin.m, terms = c("tmp_z", "spei_z_lag2 [-1, 0, 1]"), allow.new.levels = TRUE)
+p3 <- ggpredict(fin.m, terms = c("tmp_z_lag1", "spei_z_lag2 [-1, 0, 1]"), allow.new.levels = TRUE)
 
 p_df <- as.data.frame(p3)
 # test simple plot:
 ggplot(p_df, aes(x = x, y = predicted)) +
-   geom_point(data = dat_fin_counts_m, aes(x = tmp_z_lag2, y = sum_ips, color = year_fact), 
-              alpha = 0.2) +
+  # geom_point(data = dat_fin_counts_m, aes(x = tmp_z_lag2, y = sum_ips, color = year_fact), 
+  #            alpha = 0.2) +
   geom_ribbon(aes(ymin = conf.low, ymax = conf.high, fill = group), alpha = 0.3) +
-  
   geom_line(aes(color = group, linetype = group), linewidth = 1) +
   ylim(0,75000) +
   #labs(x = "SPEI Lag 2", y = "Sum of Beetle Counts") +
@@ -2555,7 +2663,7 @@ ggplot(p_df, aes(x = x, y = predicted)) +
 ggplot(p3, aes(x = x, y = predicted)) +
   geom_ribbon(aes(ymin = conf.low, ymax = conf.high, fill = group), alpha = 0.3) +
   geom_line(aes(color = group, linetype = group), linewidth = 1) +
-  ylim(0,75000) +
+ # ylim(0,75000) +
   #labs(x = "SPEI Lag 2", y = "Sum of Beetle Counts") +
   theme_classic2()
 
