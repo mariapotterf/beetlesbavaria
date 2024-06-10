@@ -1076,9 +1076,9 @@ m10 <- gamm(sum_ips ~  s(year, k =6) + s(tmp_z_lag2, k = 8) + s(spei_z_lag2, k =
 avg_data <- dat_spei_lags %>%
   group_by(pairID, year) %>%
   summarise(sum_ips     = mean(sum_ips, na.rm = TRUE),
+            peak_diff   = mean(peak_diff, na.rm = TRUE),
             tr_agg_doy  = mean(tr_agg_doy, na.rm = TRUE),
             tr_peak_doy = mean(tr_peak_doy, na.rm = TRUE), 
-            tr_agg_doy  = mean(tr_agg_doy, na.rm = TRUE),
             agg_doy     = mean(agg_doy, na.rm = TRUE),
             peak_doy    = mean(peak_doy, na.rm = TRUE),
             spei_z_lag2 = mean(spei_z_lag2, na.rm = TRUE),
@@ -1243,7 +1243,7 @@ m<-m1$gam
 summary(m)
 plot(m, page = 1)
 
-# automate for DOY as well:  -----------------------------------------
+# automate models over all dependent variables and over increasing model complexity  -----------------------------------------
 # START 
 
 # Define a function to build and compare models with descriptive names for multiple dependent variables
@@ -1335,9 +1335,23 @@ compare_models <- function(data, dependent_vars) {
 
 # Define the list of dependent variables
 dependent_vars <- c("sum_ips", "peak_diff", "tr_agg_doy", "tr_peak_doy")
-#dependent_vars  <- c("tr_agg_doy")
+dependent_vars  <- c("peak_diff")
 # Run the function on your dataset
 result <- compare_models(avg_data, dependent_vars)
+result_peak_diff <- compare_models(avg_data, dependent_vars =  c("peak_diff"))
+
+# explore results for individual dependent variables: select the onse with the lowest AIC/with the all random effects
+fin.m.counts <- result$sum_ips$models$random_effect  # lowest AIC
+fin.m.agg <- result$tr_agg_doy$models$random_effect  # lowest AIC
+#fin.m.peak_diff    <- 
+  result$peak_diff
+  
+
+
+
+
+
+
 
 m <- result$tr_agg_doy$models$random_effect$gam
 summary(m)
