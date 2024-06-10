@@ -1948,11 +1948,17 @@ ggplot() +
 
 create_effect_year(p0, avg_data)
 # Create effect plot function with an additional argument to control y-axis labels
-create_effect_year <- function(data, avg_data, line_color = "blue", x_title = "X-axis", 
+create_effect_year <- function(data, avg_data, line_color = "blue", 
+                               x_col = "year", 
+                               y_col = "sum_ips", 
+                               x_title = "X-axis", 
                                y_title = "Y-axis", my_title = '',
                                x_annotate = 0, lab_annotate = "lab ann") {
-  p <- ggplot() +  
-    geom_line(data = avg_data, aes(x = year, y = sum_ips, group = pairID), col = "gray60", alpha = 0.3) +
+  x_col <- ensym(x_col)
+  y_col <- ensym(y_col)
+  
+  p <- ggplot() + 
+    geom_line(data = avg_data, aes(x = !!x_col, y = !!y_col, group = pairID), col = "gray60", alpha = 0.3) +
     geom_line(data = data, aes(x = x, y = predicted), color = line_color) +
     geom_ribbon(data = data, aes(x = x, ymin = conf.low, ymax = conf.high), alpha = 0.25, fill = line_color) +
     labs(x = x_title,
@@ -2053,15 +2059,12 @@ p0 <- ggpredict(fin.m.counts, terms = "year [all]", allow.new.levels = TRUE)
 p1 <- ggpredict(fin.m.counts, terms = "tmp_z_lag1 [all]", allow.new.levels = TRUE)
 p2 <- ggpredict(fin.m.counts, terms = "spei_z_lag2 [all]", allow.new.levels = TRUE)
 p3 <- ggpredict(fin.m.counts, terms = c("tmp_z_lag1", "spei_z_lag2 [-1, 0, 1]"), allow.new.levels = TRUE)
-#p3 <- ggpredict(m.gam3, terms = c("veg_tmp", "spei_z_lag2 [-1, 0, 1]"), allow.new.levels = TRUE)
 
 
 # change the values to allow y lables to fit 
 p0$predicted <- p0$predicted/100
 p0$conf.low  <- p0$conf.low/100
 p0$conf.high <- p0$conf.high/100
-
-
 
 p1$predicted <- p1$predicted/100
 p1$conf.low  <- p1$conf.low/100
@@ -2079,7 +2082,9 @@ avg_data_sum_ips <- avg_data %>%
   mutate(sum_ips = sum_ips/100)
 
 p0.count <- create_effect_year(data = p0, 
-                              avg_data = avg_data_sum_ips, 
+                              avg_data = avg_data_sum_ips,
+                              x_col = "year",
+                              y_col = "sum_ips",
                               line_color = "darkgreen", 
                               x_title = "Year", 
                               y_title = paste(lab_popul_level, '*100'),# "Population level\n[# beetle*100]",
@@ -2121,18 +2126,71 @@ ggarrange(p1.count,p2.count, p3.count)
 
 ### DOY aggregation ---------------------------------------------------------
 summary(fin.m.agg)
-p1 <- ggpredict(fin.m.agg, terms = "veg_tmp [all]", allow.new.levels = TRUE)
-p2 <- ggpredict(fin.m.agg, terms = "spei3_lag3 [all]", allow.new.levels = TRUE)
-p3 <- ggpredict(fin.m.agg, 
-                terms = c("veg_tmp", "spei3_lag3 [-1, 0, 1]"), 
-                #type = "re", 
-                allow.new.levels = TRUE)
+p0 <- ggpredict(fin.m.agg, terms = "year [all]", allow.new.levels = TRUE)
+p1 <- ggpredict(fin.m.agg, terms = "tmp_z_lag1 [all]", allow.new.levels = TRUE)
+p2 <- ggpredict(fin.m.agg, terms = "spei_z_lag2 [all]", allow.new.levels = TRUE)
+p3 <- ggpredict(fin.m.agg, terms = c("tmp_z_lag1", "spei_z_lag2 [-1, 0, 1]"), allow.new.levels = TRUE)
 
+p0$predicted <- (p0$predicted * (doy.end - doy.start)) + doy.start  # Reverse transformation for y-axis
+p0$conf.low  <- (p0$conf.low * (doy.end - doy.start)) + doy.start
+p0$conf.high <- (p0$conf.high * (doy.end - doy.start)) + doy.start
 
+p1$predicted <- (p1$predicted * (doy.end - doy.start)) + doy.start  # Reverse transformation for y-axis
+p1$conf.low  <- (p1$conf.low * (doy.end - doy.start)) + doy.start
+p1$conf.high <- (p1$conf.high * (doy.end - doy.start)) + doy.start
+
+p2$predicted <- (p2$predicted * (doy.end - doy.start)) + doy.start  # Reverse transformation for y-axis
+p2$conf.low  <- (p2$conf.low * (doy.end - doy.start)) + doy.start
+p2$conf.high <- (p2$conf.high * (doy.end - doy.start)) + doy.start
 
 p3$predicted <- (p3$predicted * (doy.end - doy.start)) + doy.start  # Reverse transformation for y-axis
 p3$conf.low  <- (p3$conf.low * (doy.end - doy.start)) + doy.start
 p3$conf.high <- (p3$conf.high * (doy.end - doy.start)) + doy.start
+
+
+# START new plotting
+p0.agg <- create_effect_year(data = p0, 
+                               avg_data = avg_data_sum_ips,
+                               x_col = "year",
+                               y_col = "agg_doy",
+                               line_color = "darkgreen", 
+                               x_title = "Year", 
+                               y_title = lab_colonization_time,
+                               my_title = "", 
+                               x_annotate = 2018, lab_annotate = "***")
+
+(p0.agg)
+p1.agg <- 
+  create_effect_plot(data = p1, avg_data = avg_data_sum_ips, 
+                     x_col = "tmp_z_lag1", y_col = "agg_doy", 
+                     line_color = "red", 
+                     x_title = temp_label , 
+                     y_title = lab_colonization_time, 
+                     #my_title = "Effect of Year on Sum IPS", 
+                     x_annotate = 2, 
+                     lab_annotate = "*")
+
+(p1.agg)
+p2.agg <- create_effect_plot(data = p2, avg_data = avg_data_sum_ips, 
+                               x_col = "spei_z_lag2", y_col = "agg_doy", 
+                               line_color = "blue", 
+                               x_title = spei_label , 
+                               y_title = lab_colonization_time, 
+                               x_annotate = -1, 
+                               lab_annotate = "*")
+(p2.agg)
+p3.agg <- plot_effect_interactions(p3, 
+                                     temp_label = temp_label, 
+                                     y_title = lab_colonization_time,
+                                     x_annotate = 2,
+                                     lab_annotate = "n.s.") 
+
+(p3.agg)
+
+
+# STOP
+
+
 
 
 p1.agg <- create_effect_Y_trans(p1, 
