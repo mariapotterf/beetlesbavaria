@@ -2052,6 +2052,15 @@ spei_label <- 'SPEI [z-score]'
 
 
 
+# Define the transformation function
+transform_predictions <- function(predictions, doy.start, doy.end) {
+  scale_factor <- doy.end - doy.start
+  predictions$predicted <- (predictions$predicted * scale_factor) + doy.start
+  predictions$conf.low  <- (predictions$conf.low * scale_factor) + doy.start
+  predictions$conf.high <- (predictions$conf.high * scale_factor) + doy.start
+  return(predictions)
+}
+
 
 # Assuming 'model' is your glm.nb model
 summary(fin.m.counts)
@@ -2079,7 +2088,8 @@ p3$conf.low  <- p3$conf.low/100
 p3$conf.high <- p3$conf.high/100
 
 avg_data_sum_ips <- avg_data %>% 
-  mutate(sum_ips = sum_ips/100)
+  mutate(sum_ips = sum_ips/100,
+         peak_diff = peak_diff/10)
 
 p0.count <- create_effect_year(data = p0, 
                               avg_data = avg_data_sum_ips,
@@ -2131,24 +2141,14 @@ p1 <- ggpredict(fin.m.agg, terms = "tmp_z_lag1 [all]", allow.new.levels = TRUE)
 p2 <- ggpredict(fin.m.agg, terms = "spei_z_lag2 [all]", allow.new.levels = TRUE)
 p3 <- ggpredict(fin.m.agg, terms = c("tmp_z_lag1", "spei_z_lag2 [-1, 0, 1]"), allow.new.levels = TRUE)
 
-p0$predicted <- (p0$predicted * (doy.end - doy.start)) + doy.start  # Reverse transformation for y-axis
-p0$conf.low  <- (p0$conf.low * (doy.end - doy.start)) + doy.start
-p0$conf.high <- (p0$conf.high * (doy.end - doy.start)) + doy.start
-
-p1$predicted <- (p1$predicted * (doy.end - doy.start)) + doy.start  # Reverse transformation for y-axis
-p1$conf.low  <- (p1$conf.low * (doy.end - doy.start)) + doy.start
-p1$conf.high <- (p1$conf.high * (doy.end - doy.start)) + doy.start
-
-p2$predicted <- (p2$predicted * (doy.end - doy.start)) + doy.start  # Reverse transformation for y-axis
-p2$conf.low  <- (p2$conf.low * (doy.end - doy.start)) + doy.start
-p2$conf.high <- (p2$conf.high * (doy.end - doy.start)) + doy.start
-
-p3$predicted <- (p3$predicted * (doy.end - doy.start)) + doy.start  # Reverse transformation for y-axis
-p3$conf.low  <- (p3$conf.low * (doy.end - doy.start)) + doy.start
-p3$conf.high <- (p3$conf.high * (doy.end - doy.start)) + doy.start
+# Apply transformation to each prediction data frame
+p0 <- transform_predictions(p0, doy.start, doy.end)
+p1 <- transform_predictions(p1, doy.start, doy.end)
+p2 <- transform_predictions(p2, doy.start, doy.end)
+p3 <- transform_predictions(p3, doy.start, doy.end)
 
 
-# START new plotting
+# 
 p0.agg <- create_effect_year(data = p0, 
                                avg_data = avg_data_sum_ips,
                                x_col = "year",
@@ -2188,104 +2188,111 @@ p3.agg <- plot_effect_interactions(p3,
 (p3.agg)
 
 
-# STOP
-
-
-
-
-p1.agg <- create_effect_Y_trans(p1, 
-                                line_color = "red", 
-                                x_title = temp_label, 
-                                y_title = "DOY",
-                                x_annotate = 13,
-                                lab_annotate = "***"#, y_lim = c(80,250)
-                                )
-p2.agg <- create_effect_Y_trans(p2, 
-                                line_color = "blue", 
-                                x_title = "SPEI [dim.]", 
-                                y_title = "DOY",
-                                x_annotate = 0,
-                                lab_annotate = "*"#, y_lim = c(80,250)
-                                )
-p3.agg <- plot_effect_interactions(p3, temp_label = temp_label, 
-                                         y_title = "DOY",
-                                   x_annotate = 13,
-                                   lab_annotate = "*")
-
-p3.agg
 ###### PEak Effect plots ------------------------------------------------------------
 summary(fin.m.peak)
-# Assuming 'model' is your glm.nb model
-p1 <- ggpredict(fin.m.peak, terms = "veg_tmp_lag2 [all]", allow.new.levels = TRUE)
-p2 <- ggpredict(fin.m.peak, terms = "spei3_lag2 [all]", allow.new.levels = TRUE)
-p3 <- ggpredict(fin.m.peak, terms = c("veg_tmp_lag2" ,"spei3_lag2 [-1, 0, 1]"), allow.new.levels = TRUE)
 
-p3$predicted <- (p3$predicted * (doy.end - doy.start)) + doy.start  # Reverse transformation for y-axis
-p3$conf.low  <- (p3$conf.low * (doy.end - doy.start)) + doy.start
-p3$conf.high <- (p3$conf.high * (doy.end - doy.start)) + doy.start
+p0 <- ggpredict(fin.m.peak, terms = "year [all]", allow.new.levels = TRUE)
+p1 <- ggpredict(fin.m.peak, terms = "tmp_z_lag1 [all]", allow.new.levels = TRUE)
+p2 <- ggpredict(fin.m.peak, terms = "spei_z_lag2 [all]", allow.new.levels = TRUE)
+p3 <- ggpredict(fin.m.peak, terms = c("tmp_z_lag1" ,"spei_z_lag2 [-1, 0, 1]"), allow.new.levels = TRUE)
 
 
+# transform values back to DOY (from 0-1)
+p0 <- transform_predictions(p0, doy.start, doy.end)
+p1 <- transform_predictions(p1, doy.start, doy.end)
+p2 <- transform_predictions(p2, doy.start, doy.end)
+p3 <- transform_predictions(p3, doy.start, doy.end)
 
-p1.peak <- create_effect_Y_trans(p1, line_color = "red", x_title = temp_label, 
-                                 y_title = "DOY",
-                                 x_annotate = 13,
-                                 lab_annotate = "*"#, 
-                                 #y_lim = c(130,200) 
-                                 )
+# 
+p0.peak <- create_effect_year(data = p0, 
+                             avg_data = avg_data_sum_ips,
+                             x_col = "year",
+                             y_col = "peak_doy",
+                             line_color = "darkgreen", 
+                             x_title = "Year", 
+                             y_title = lab_peak_time,
+                             my_title = "", 
+                             x_annotate = 2018, lab_annotate = "***")
 
-p2.peak <-create_effect_Y_trans(p2, 
-                                line_color = "blue", 
-                                x_title = "SPEI [dim.]", 
-                                y_title = "DOY",
-                                x_annotate = 0,
-                                lab_annotate = "."#, 
-                               #y_lim = c(130,200)
-                               )
-p3.peak <- plot_effect_interactions(p3, temp_label = temp_label, 
-                                         y_title = "DOY",
-                                    x_annotate = 13,
-                                    lab_annotate = ".")
+(p0.peak)
+p1.peak <- 
+  create_effect_plot(data = p1, avg_data = avg_data_sum_ips, 
+                     x_col = "tmp_z_lag1", y_col = "peak_doy", 
+                     line_color = "red", 
+                     x_title = temp_label , 
+                     y_title = lab_peak_time, 
+                     #my_title = "Effect of Year on Sum IPS", 
+                     x_annotate = 2, 
+                     lab_annotate = "*")
 
+(p1.peak)
+p2.peak <- create_effect_plot(data = p2, avg_data = avg_data_sum_ips, 
+                             x_col = "spei_z_lag2", y_col = "peak_doy", 
+                             line_color = "blue", 
+                             x_title = spei_label , 
+                             y_title = lab_peak_time, 
+                             x_annotate = -1, 
+                             lab_annotate = "*")
+(p2.peak)
+p3.peak <- plot_effect_interactions(p3, 
+                                   temp_label = temp_label, 
+                                   y_title = lab_peak_time,
+                                   x_annotate = 2,
+                                   lab_annotate = "n.s.") 
+
+(p3.peak)
 
 
 
 ### effect plot peak dif ----------------------------------------------------
 # Assuming 'model' is your glm.nb model
 summary(fin.m.peak.diff)
-p1 <- ggpredict(fin.m.peak.diff, terms = "veg_tmp_lag3 [all]", allow.new.levels = TRUE)
-p2 <- ggpredict(fin.m.peak.diff, terms = "spei3_lag3 [all]", allow.new.levels = TRUE)
-p3 <- ggpredict(fin.m.peak.diff, terms = c("veg_tmp_lag3", "spei3_lag3 [-1, 0, 1]"), allow.new.levels = T)
+p0 <- ggpredict(fin.m.peak.diff, terms = "year [all]", allow.new.levels = TRUE)
+p1 <- ggpredict(fin.m.peak.diff, terms = "tmp_z_lag1 [all]", allow.new.levels = TRUE)
+p2 <- ggpredict(fin.m.peak.diff, terms = "spei_z_lag2 [all]", allow.new.levels = TRUE)
+p3 <- ggpredict(fin.m.peak.diff, terms = c("tmp_z_lag1", "spei_z_lag2 [-1, 0, 1]"), allow.new.levels = T)
 
-# change the values to allow y lables to fit 
-p1$predicted <- p1$predicted/10
-p1$conf.low  <- p1$conf.low/10
-p1$conf.high <- p1$conf.high/10
+p0.peak.diff <- create_effect_year(data = p0, 
+                               avg_data = avg_data_sum_ips,
+                               x_col = "year",
+                               y_col = "peak_diff",
+                               line_color = "darkgreen", 
+                               x_title = "Year", 
+                               y_title = lab_peak_growth,
+                               my_title = "", 
+                               x_annotate = 2018, lab_annotate = "***")
 
-p2$predicted <- p2$predicted/10
-p2$conf.low  <- p2$conf.low/10
-p2$conf.high <- p2$conf.high/10
+(p0.peak.diff)
+p1.peak.diff <- 
+  create_effect_plot(data = p1, avg_data = avg_data_sum_ips, 
+                     x_col = "tmp_z_lag1", y_col = "peak_diff", 
+                     line_color = "red", 
+                     x_title = temp_label , 
+                     y_title = lab_peak_growth, 
+                     #my_title = "Effect of Year on Sum IPS", 
+                     x_annotate = 2, 
+                     lab_annotate = "*")
 
-p3$predicted <- p3$predicted/10
-p3$conf.low  <- p3$conf.low/10
-p3$conf.high <- p3$conf.high/10
+(p1.peak.diff)
+p2.peak.diff <- create_effect_plot(data = p2, avg_data = avg_data_sum_ips, 
+                               x_col = "spei_z_lag2", y_col = "peak_diff", 
+                               line_color = "blue", 
+                               x_title = spei_label , 
+                               y_title = lab_peak_growth, 
+                               #my_title = "Effect of Year on Sum IPS", 
+                               x_annotate = -1, 
+                               lab_annotate = "*")
+(p2.peak.diff)
+p3.peak.diff <- plot_effect_interactions(p3, 
+                                     temp_label = temp_label, 
+                                     y_title = lab_peak_growth,
+                                     x_annotate = 2,
+                                     lab_annotate = "n.s.") 
+
+(p3.peak.diff)
+ggarrange(p0.peak.diff,p1.peak.diff,p2.peak.diff,p3.peak.diff)
 
 
-
-
-p1.peak.diff <- create_effect_plot(p1, line_color = "red", x_title = temp_label, 
-                                   y_title = "Counts [#*10]",
-                                   x_annotate = 13,
-                                   lab_annotate = "**"#, y_lim = c(220,3500)
-                                   )
-p2.peak.diff <-create_effect_plot(p2, line_color = "blue", x_title = "SPEI [dim.]", 
-                                  y_title = "Counts [#*10]",
-                                  x_annotate = 0,
-                                  lab_annotate = "**"#, y_lim = c(220,1500)
-                                  )
-p3.peak.diff <- plot_effect_interactions(p3, temp_label = temp_label, 
-                                         y_title = "Counts [#]",
-                                         x_annotate = 13,
-                                         lab_annotate = "n.s.")
 
 
 ### all Effect plots: ips vs climate --------------------------------------------------------
@@ -2313,16 +2320,16 @@ ggsave(filename = 'outFigs/Fig3.png', plot = p.out.clim,
 
 
 p.clim.int <- ggarrange(p3.count, p3.agg, p3.peak, p3.peak.diff, 
-          ncol=2, nrow = 2 , align = 'hv',common.legend = TRUE, legend = 'right',
+          ncol=4, nrow = 1 , align = 'hv',common.legend = TRUE, legend = 'right',
           font.label = list(size = 8, color = "black", face = "plain", family = NULL),
-          labels = c(  "[a] Population level",
-                       "[b] Colonization timing",
-                       "[c] Peak timing",
-                       "[d] Peak growth"))
-windows(6,6)
+          labels = c( paste("[a] ", lab_popul_level),
+                      paste("[b] ", lab_colonization_time ),
+                      paste("[c] ", lab_peak_time ),
+                      paste("[d] ", lab_peak_growth )))
+windows(7,4)
 p.clim.int
 ggsave(filename = 'outFigs/Fig4.png', plot = p.clim.int, 
-       width = 6, height = 6, dpi = 300, bg = 'white')
+       width = 7, height = 4, dpi = 300, bg = 'white')
 
 
 
