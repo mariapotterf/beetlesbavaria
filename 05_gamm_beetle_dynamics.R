@@ -1083,6 +1083,8 @@ avg_data <- dat_spei_lags %>%
             peak_doy    = mean(peak_doy, na.rm = TRUE),
             spei_z_lag2 = mean(spei_z_lag2, na.rm = TRUE),
             tmp_z_lag1  = mean(tmp_z_lag1, na.rm = TRUE),
+            spei_z_lag1 = mean(spei_z_lag1, na.rm = TRUE), # for agg_doy
+            tmp_z_lag2  = mean(tmp_z_lag2, na.rm = TRUE),  # for agg_doy
             x           = mean(x, na.rm = TRUE),
             y           = mean(y, na.rm = TRUE),
             ) %>%
@@ -1200,40 +1202,6 @@ avg_data %>%
 
 
 
-# quick plotting
-fin.m <- m3
-#  m.spei12_no_re_slope47# fin.m.peak.diff
-#!!! --------------------------------------------
-
-# plot in easy way how tdoes the k value affect interaction
-p1 <- ggpredict(fin.m, terms = "year [all]", allow.new.levels = TRUE)
-p2 <- ggpredict(fin.m, terms = "tmp_z_lag1 [all]", allow.new.levels = TRUE)
-p3 <- ggpredict(fin.m, terms = "spei_z_lag2 [all]", allow.new.levels = TRUE)
-p4 <- ggpredict(fin.m, terms = c("tmp_z_lag1", "spei_z_lag2 [-1, 0, 1]"), allow.new.levels = TRUE)
-
-#p_df <- as.data.frame(p3)
-# test simple plot:
-plot1<-ggplot(p1, aes(x = x, y = predicted)) +
-  geom_ribbon(aes(ymin = conf.low, ymax = conf.high, fill = group), alpha = 0.3) +
-  geom_line(aes(color = group, linetype = group), linewidth = 1) +
-  theme_classic2()
-
-plot2<-ggplot(p2, aes(x = x, y = predicted)) +
-  geom_ribbon(aes(ymin = conf.low, ymax = conf.high, fill = group), alpha = 0.3) +
-  geom_line(aes(color = group, linetype = group), linewidth = 1) +
-  theme_classic2()
-
-plot3<-ggplot(p3, aes(x = x, y = predicted)) +
-  geom_ribbon(aes(ymin = conf.low, ymax = conf.high, fill = group), alpha = 0.3) +
-  geom_line(aes(color = group, linetype = group), linewidth = 1) +
-  theme_classic2()
-
-plot4<-ggplot(p4, aes(x = x, y = predicted)) +
-  geom_ribbon(aes(ymin = conf.low, ymax = conf.high, fill = group), alpha = 0.3) +
-  geom_line(aes(color = group, linetype = group), linewidth = 1) +
-  theme_classic2()
-
-ggarrange(plot1,plot2,plot3,plot4, ncol = 4, nrow = 1)
 
 
 AIC(m.re$lme, m.xy$lme )
@@ -1339,16 +1307,191 @@ dependent_vars  <- c("peak_diff")
 # Run the function on your dataset
 result <- compare_models(avg_data, dependent_vars)
 result_peak_diff <- compare_models(avg_data, dependent_vars =  c("peak_diff"))
+#save.image('outData/allModels.RData')
+
+
+
+# test for differet predictors for agg_doy: -------------------------------------
+# tmp_z_lag2 and spei_z_lag1
+m0 <- gamm(tr_agg_doy ~ s(year, k = 7) + 
+              s(tmp_z_lag2, k = 10)  + #
+             s(spei_z_lag1, k = 3),# + 
+            # te(tmp_z_lag2, spei_z_lag1, k = 20) + 
+            # s(x, y, bs = 'gp') + 
+             #s(pairID, bs = 're'),
+             data = avg_data, 
+           family = betar, 
+           correlation = corAR1(form = ~ year | pairID))
+
+
+# compare different families : the gamma seems the best!
+gam.check(m0$gam)
+k.check(m0$gam)
+plot(m0$gam)
+summary(m0$gam)
+
+appraise(fin.m.peak.diff)
+
+m.gamma <- gamm(tr_agg_doy ~ s(year, k = 7) + 
+             s(tmp_z_lag2, k = 10)  + #
+             s(spei_z_lag1, k = 3),# + 
+           data = avg_data, 
+           family = Gamma(link = "log"),
+           correlation = corAR1(form = ~ year | pairID))
+
+appraise(m.gamma$gam)
+
+
+m.quasi <- gamm(tr_agg_doy ~ s(year, k = 7) + 
+                  s(tmp_z_lag2, k = 10)  + #
+                  s(spei_z_lag1, k = 3),# + 
+                data = avg_data, 
+                family = quasibinomial(link = "logit"),
+                correlation = corAR1(form = ~ year | pairID))
+
+appraise(m.quasi$gam)
+
+AIC(m.quasi$lme, m.gamma$lme, m0$lme)
+# !!!! continue here! gamma might be better!
+m1.gamma <- gamm(tr_agg_doy ~ s(year, k = 6) + s(tmp_z_lag2, k = 5) + s(spei_z_lag1, k = 5) + 
+             te(tmp_z_lag2, spei_z_lag1, k = 20) + 
+             s(x, y, bs = 'gp', k = 15) + 
+             s(pairID, bs = 're'),data = avg_data, 
+           family = Gamma(link = "log"),
+           #family = betar, 
+           correlation = corAR1(form = ~ year | pairID))
+m1.gamma.agg <- m1.gamma
+AIC(m1$lme, result$tr_agg_doy$models$random_effect$lme, m1.gamma$lme )  
+plot(m1.gamma$gam, page = 1)
+
+
+m2.gamma <- gamm(tr_peak_doy ~ s(year, k = 6) + s(tmp_z_lag1, k = 5) + s(spei_z_lag2, k = 5) + 
+                   te(tmp_z_lag1, spei_z_lag2, k = 20) + 
+                   s(x, y, bs = 'gp', k = 15) + 
+                   s(pairID, bs = 're'),data = avg_data, 
+                 family = Gamma(link = "log"),
+                 #family = betar, 
+                 correlation = corAR1(form = ~ year | pairID))
+
+appraise(m2.gamma$gam)
+
+m.counts <- gamm(sum_ips ~ s(year, k = 6) + s(tmp_z_lag1, k = 5) + s(spei_z_lag2, k = 5) + 
+                   te(tmp_z_lag1, spei_z_lag2, k = 20) + 
+                   s(x, y, bs = 'gp', k = 15) + 
+                   s(pairID, bs = 're'),data = avg_data, 
+                 family = nb, #Gamma(link = "log"),
+                 #family = betar, 
+                 correlation = corAR1(form = ~ year | pairID))
+
+
+m.peak.diff <- gamm(peak_diff ~ s(year, k = 6) + s(tmp_z_lag1, k = 5) + s(spei_z_lag2, k = 5) + 
+                   te(tmp_z_lag1, spei_z_lag2, k = 20) + 
+                   s(x, y, bs = 'gp', k = 15) + 
+                   s(pairID, bs = 're'),data = avg_data, 
+                 family = nb, #Gamma(link = "log"),
+                 #family = betar, 
+                 correlation = corAR1(form = ~ year | pairID))
+
+
+# remove outliers: Piding
+avg_data_peak_diff <- avg_data %>% 
+  dplyr::filter(!pairID %in% c('Piding', 'Gangkofen'))
+
+m.peak.diff.tw <- gamm(peak_diff ~ s(year, k = 6) +
+                         s(tmp_z_lag1, k = 5) +
+                         s(spei_z_lag2, k = 5) + 
+                      te(tmp_z_lag1, spei_z_lag2, k = 20) + 
+                      s(x, y, bs = 'gp', k = 50) + 
+                      s(pairID, bs = 're'),
+                        data = avg_data_peak_diff, 
+                      family = tw,
+                      correlation = corAR1(form = ~ year | pairID))
+
+appraise(m.peak.diff.tw$gam)
+summary(m.peak.diff.tw$gam)
+k.check(m.peak.diff.tw$gam)
+gam.check(m.peak.diff.tw$gam)
+plot(m.peak.diff.tw$gam, page = 1)
+
+
+
+# rerun for ips_sum
+m.counts.tw <- gamm(sum_ips ~ s(year, k = 6) +
+                         s(tmp_z_lag1, k = 8) +
+                         s(spei_z_lag2, k = 8) + 
+                         te(tmp_z_lag1, spei_z_lag2, k = 20) + 
+                         s(x, y, bs = 'gp', k = 50) + 
+                         s(pairID, bs = 're'),
+                       data = avg_data, 
+                       family = tw,
+                       correlation = corAR1(form = ~ year | pairID))
+
+
+appraise(m.counts.tw$gam)
+summary(m.counts.tw$gam)
+k.check(m.counts.tw$gam)
+gam.check(m.counts.tw$gam)
+plot(m.counts.tw$gam, page = 1)
+
+
+
+
+vif_data <- avg_data_peak_diff[, c("year", "tmp_z_lag1", "spei_z_lag2", "x", "y", "peak_diff")]
+vif_result <- vif(lm(peak_diff ~ ., data = vif_data))
+
+
+plot(fin.m.agg)
+
+
+summary(fin.m)
+# quick plotting
+fin.m <- m.peak.diff.tw$gam
+#!!! --------------------------------------------
+
+# plot in easy way how tdoes the k value affect interaction
+p1 <- ggpredict(fin.m, terms = "year [all]", allow.new.levels = TRUE)
+p2 <- ggpredict(fin.m, terms = "tmp_z_lag1 [all]", allow.new.levels = TRUE)
+p3 <- ggpredict(fin.m, terms = "spei_z_lag2 [all]", allow.new.levels = TRUE)
+p4 <- ggpredict(fin.m, terms = c("tmp_z_lag1", "spei_z_lag2 [-1, 0, 1]"), allow.new.levels = TRUE)
+
+#p_df <- as.data.frame(p3)
+# test simple plot:
+plot1<-ggplot(p1, aes(x = x, y = predicted)) +
+  geom_ribbon(aes(ymin = conf.low, ymax = conf.high, fill = group), alpha = 0.3) +
+  geom_line(aes(color = group, linetype = group), linewidth = 1) +
+  theme_classic2()
+
+plot2<-ggplot(p2, aes(x = x, y = predicted)) +
+  geom_ribbon(aes(ymin = conf.low, ymax = conf.high, fill = group), alpha = 0.3) +
+  geom_line(aes(color = group, linetype = group), linewidth = 1) +
+  theme_classic2()
+
+plot3<-ggplot(p3, aes(x = x, y = predicted)) +
+  geom_ribbon(aes(ymin = conf.low, ymax = conf.high, fill = group), alpha = 0.3) +
+  geom_line(aes(color = group, linetype = group), linewidth = 1) +
+  theme_classic2()
+
+plot4<-ggplot(p4, aes(x = x, y = predicted)) +
+  geom_ribbon(aes(ymin = conf.low, ymax = conf.high, fill = group), alpha = 0.3) +
+  geom_line(aes(color = group, linetype = group), linewidth = 1) +
+  theme_classic2()
+
+ggarrange(plot1,plot2,plot3,plot4, ncol = 4, nrow = 1)
+
+
+
+
+# update& savethe best models: --------------------------------------------------------
 
 # explore results for individual dependent variables: select the onse with the lowest AIC/with the all random effects
 fin.m.counts     <- result$sum_ips$models$random_effect$gam  # lowest AIC
-fin.m.agg        <- result$tr_agg_doy$models$random_effect$gam  # lowest AIC
-fin.m.peak   <- result$tr_peak_doy$models$random_effect$gam  # lowest AIC
-fin.m.peak.diff  <- result_peak_diff$peak_diff$models$random_effect$gam  # lowest AIC
-  
+fin.m.agg        <- m1.gamma#result$tr_agg_doy$models$random_effect$gam  # lowest AIC
+fin.m.peak       <- result$tr_peak_doy$models$random_effect$gam  # lowest AIC
+fin.m.peak.diff  <- m.peak.diff.tw #result_peak_diff$peak_diff$models$random_effect$gam  # lowest AIC
 
 
-summary(fin.m.peak_diff)
+
+
 
 
 
@@ -2070,23 +2213,6 @@ p2 <- ggpredict(fin.m.counts, terms = "spei_z_lag2 [all]", allow.new.levels = TR
 p3 <- ggpredict(fin.m.counts, terms = c("tmp_z_lag1", "spei_z_lag2 [-1, 0, 1]"), allow.new.levels = TRUE)
 
 
-# change the values to allow y lables to fit 
-p0$predicted <- p0$predicted/100
-p0$conf.low  <- p0$conf.low/100
-p0$conf.high <- p0$conf.high/100
-
-p1$predicted <- p1$predicted/100
-p1$conf.low  <- p1$conf.low/100
-p1$conf.high <- p1$conf.high/100
-
-p2$predicted <- p2$predicted/100
-p2$conf.low  <- p2$conf.low/100
-p2$conf.high <- p2$conf.high/100
-
-p3$predicted <- p3$predicted/100
-p3$conf.low  <- p3$conf.low/100
-p3$conf.high <- p3$conf.high/100
-
 avg_data_sum_ips <- avg_data %>% 
   mutate(sum_ips = sum_ips/100,
          peak_diff = peak_diff/10)
@@ -2188,7 +2314,7 @@ p3.agg <- plot_effect_interactions(p3,
 (p3.agg)
 
 
-###### PEak Effect plots ------------------------------------------------------------
+#### Peak Effect plots ------------------------------------------------------------
 summary(fin.m.peak)
 
 p0 <- ggpredict(fin.m.peak, terms = "year [all]", allow.new.levels = TRUE)
@@ -2253,7 +2379,7 @@ p2 <- ggpredict(fin.m.peak.diff, terms = "spei_z_lag2 [all]", allow.new.levels =
 p3 <- ggpredict(fin.m.peak.diff, terms = c("tmp_z_lag1", "spei_z_lag2 [-1, 0, 1]"), allow.new.levels = T)
 
 p0.peak.diff <- create_effect_year(data = p0, 
-                               avg_data = avg_data_sum_ips,
+                               avg_data = dplyr::filter(avg_data_sum_ips, peak_diff <200),
                                x_col = "year",
                                y_col = "peak_diff",
                                line_color = "darkgreen", 
@@ -2302,6 +2428,23 @@ p.count     <- ggarrange(p1.count, p2.count, ncol = 1)
 p.agg       <- ggarrange(p1.agg, p2.agg, ncol = 1)
 p.peak      <- ggarrange(p1.peak, p2.peak, ncol = 1)
 p.peak.diff <- ggarrange(p1.peak.diff, p2.peak.diff, ncol = 1)
+
+
+p.out.year <- ggarrange(p0.count, p0.agg, p0.peak, p0.peak.diff, 
+                        ncol=4, nrow = 1 , align = 'hv', 
+                        font.label = list(size = 8, color = "black", face = "plain", family = NULL),
+                        labels = c( paste("[a] ", lab_popul_level),
+                                    paste("[b] ", lab_colonization_time ),
+                                    paste("[c] ", lab_peak_time ),
+                                    paste("[d] ", lab_peak_growth )))
+
+
+windows(7,4)
+(p.out.year)
+
+windows(7,4)
+(p.out.clim)
+
 
 p.out.clim <- ggarrange(p.count, p.agg, p.peak, p.peak.diff, 
           ncol=4, nrow = 1 , align = 'hv', 
