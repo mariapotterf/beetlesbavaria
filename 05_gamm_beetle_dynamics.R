@@ -66,8 +66,8 @@ library(knitr)   # for table outputs
 # plot labels: 
 lab_popul_level       = "Population level [#]"
 lab_colonization_time = "Aggregation timing [DOY]"
-lab_peak_time         = "Peak swarming\ntiming [DOY]"
-lab_peak_growth       = "Peak swarming\nintensity [#]"
+lab_peak_time         = "Peak swarming timing [DOY]"
+lab_peak_growth       = "Peak swarming intensity [#]"
 
 
 
@@ -155,228 +155,6 @@ nrow(dat_fin)
 
 
 
-# Find teh most influential time lag :  0,1,2,3----------------------------------------------
-
-
-# prepare tables
-
-# specify individual datasets, to limit the NAs values and to scale them
-dat_fin_no_RS <- dat_fin %>% 
-  dplyr::select(-c( wind_beetle, harvest,
-                    Morans_I_log, Morans_I, 
-                    sum_ips_lag1, population_growth, population_growth2))
-
-cols_skip <- c('trapID', 'pairID', 'Morans_I_log', 'Morans_I')
-
-# export new df
-dat_fin_Moran <-  dat_fin %>% 
-  #  dplyr::filter(Morans_I_log > 0 & year %in% 2018:2021) %>%
-  dplyr::select(-wind_beetle, - harvest)
-
-dat_fin_Moran_scaled <-
-  dat_fin_Moran %>% 
-  ungroup(.) %>% 
-  # na.omit() %>% 
-  dplyr::select(-all_of(cols_skip )) %>%
-  # Apply the scale function
-  scale(center = TRUE, scale = TRUE) %>%
-  as.data.frame() %>%
-  # Bind the unscaled columns back
-  bind_cols(dat_fin_Moran %>% dplyr::select(all_of(cols_skip)), .)
-
-
-
-
-# Make first function for each model type: nb, beta, tweedie 
-# make sure that they have the same number of observations!
-
-
-fit_lags_negbin <- function(data, predictors, lags, dependent_var) {
-  results <- list() # Initialize an empty list to store results
-  
-  # Create all lagged variables within the same table
-  for (predictor in predictors) {
-    for (lag in lags) {
-      lagged_var_name <- paste0("lag", lag, "_", predictor)
-      data[[lagged_var_name]] <- dplyr::lag(data[[predictor]], n = lag, default = NA)
-    }
-  }
-  
-  # Remove rows with any NA values in the newly created lag columns to ensure equal observation count across models
-  data_complete_cases <- data %>% 
-    tidyr::drop_na()
-  
-  # Initialize a variable to store AIC for lag0 model for comparison
-  aic_lag0 <- numeric(length(predictors))
-  
-  for (predictor_idx in seq_along(predictors)) {
-    print('1')
-    predictor <- predictors[predictor_idx]
-    
-    # Fit and store AIC for lag0 model first to use as a baseline for comparison
-    lagged_var_name_lag0 <- paste0("lag0_", predictor)
-    formula_lag0 <- as.formula(paste(dependent_var, "~", lagged_var_name_lag0))
-    model_lag0 <- glm.nb(formula_lag0, data = data_complete_cases, na.action = na.exclude)
-    aic_lag0[predictor_idx] <- AIC(model_lag0)
-    
-    for (lag in lags) {
-      print('lags')
-      lagged_var_name <- paste0("lag", lag, "_", predictor)
-      formula <- as.formula(paste(dependent_var, "~", lagged_var_name))
-      model <- glm.nb(formula, data = data_complete_cases, na.action = na.exclude)
-      aic_value <- AIC(model)
-      print(model)
-      print(nrow(data_complete_cases))
-      df_rows <- nrow(data_complete_cases)
-      
-      # Calculate ΔAIC
-      delta_aic <- aic_value - aic_lag0[predictor_idx]
-      
-      # Extract p-value for the lagged variable (adjust if necessary for your model structure)
-      p_value <- coef(summary(model))[lagged_var_name, "Pr(>|z|)"]
-      
-      # Compile information into results list
-      results[[paste(predictor, "Lag", lag)]] <- data.frame(
-        Predictor = predictor,
-        Dependent = dependent_var,
-        Lag = lag,
-        AIC = aic_value,
-        P_Value = p_value,
-        Delta_AIC = delta_aic,
-        df_rows= df_rows
-      )
-    }
-  }
-  
-  # Combine results into a single data frame
-  do.call(rbind, results)
-}
-
-fit_lags_beta <- function(data, predictors, lags, dependent_var) {
-  results <- list() # Initialize an empty list to store results
-  
-  data <- data %>%
-    group_by(trapID) %>%
-    arrange(year, .by_group = TRUE)
-  
-  # Create all lagged variables in one go to keep the observation count uniform across models
-  for (predictor in predictors) {
-    for (lag in lags) {
-      lagged_var_name <- paste0(predictor, "_lag", lag)
-      data[[lagged_var_name]] <- lag(data[[predictor]], n = lag, default = NA)
-    }
-  }
-  
-  # Filter out NA values after creating lagged variables
-  data <- data %>% ungroup() %>% na.omit()
-  
-  # Initialize variables to store AIC for comparison
-  aic_baseline <- numeric(length(predictors))
-  
-  for (predictor_idx in seq_along(predictors)) {
-    predictor <- predictors[predictor_idx]
-    
-    # Fit model for lag0 and store its AIC for baseline comparison
-    model_lag0_formula <- as.formula(paste(dependent_var, "~", paste0(predictor, "_lag0")))
-    model_lag0 <- glmmTMB(model_lag0_formula, family = beta_family(link = "logit"), data = data, 
-                          na.action = na.exclude)
-    aic_baseline[predictor_idx] <- AIC(model_lag0)
-    
-    for (lag in lags) {
-      lagged_var_name <- paste0(predictor, "_lag", lag)
-      model_formula <- as.formula(paste(dependent_var, "~", lagged_var_name))
-      
-      model <- glmmTMB(model_formula, family = beta_family(link = "logit"), data = data, 
-                       na.action = na.exclude)
-      
-      # Extract p-value for the lagged variable
-      summary_model <- summary(model)
-      p_value <- summary_model$coefficients$cond[lagged_var_name, "Pr(>|z|)"]
-      
-      aic_value <- AIC(model)
-      delta_aic <- aic_value - aic_baseline[predictor_idx]
-      
-      # Compile the results
-      results[[paste(predictor, "Lag", lag)]] <- data.frame(
-        Predictor = predictor,
-        Dependent = dependent_var,
-        #Model = paste(predictor, "Lag", lag),
-        
-        Lag = lag,
-        AIC = aic_value,
-        P_Value = p_value,
-        Delta_AIC = delta_aic
-      )
-    }
-  }
-  
-  # Combine all results into a single data frame
-  results_df <- do.call(rbind, results)
-  return(results_df)
-}
-
-fit_lags_tweedie <- function(data, predictors, lags, dependent_var) {
-  results <- list() # Initialize an empty list to store results
-  
-  # Create all lagged variables within the same dataframe
-  data <- data %>%
-    group_by(trapID) %>%
-    arrange(year, .by_group = TRUE)
-  
-  for (predictor in predictors) {
-    for (lag in lags) {
-      lagged_var_name <- paste0(predictor, "_lag", lag)
-      data[[lagged_var_name]] <- lag(data[[predictor]], n = lag, default = NA)
-    }
-  }
-  
-  # Filter out NA values after creating lagged variables
-  data <- data %>% ungroup() %>% na.omit()
-  
-  # Initialize a variable to store AIC for lag0 model for comparison
-  aic_baseline <- numeric(length(predictors))
-  
-  for (predictor_idx in seq_along(predictors)) {
-    predictor <- predictors[predictor_idx]
-    
-    # Fit model for lag0 and store its AIC for baseline comparison
-    lagged_var_name_lag0 <- paste0(predictor, "_lag0")
-    formula_lag0 <- as.formula(paste(dependent_var, "~", lagged_var_name_lag0))
-    model_lag0 <- glmmTMB(formula_lag0, family = tweedie(link = "log"), data = data, 
-                          na.action = na.exclude)
-    aic_baseline[predictor_idx] <- AIC(model_lag0)
-    
-    for (lag in lags) {
-      lagged_var_name <- paste0(predictor, "_lag", lag)
-      formula <- as.formula(paste(dependent_var, "~", lagged_var_name))
-      
-      model <- glmmTMB(formula, family = tweedie(link = "log"), data = data, 
-                       na.action = na.exclude)
-      
-      # Extract p-value for the lagged variable
-      summary_model <- summary(model)
-      p_value <- summary_model$coefficients$cond[lagged_var_name, "Pr(>|z|)"]
-      
-      aic_value <- AIC(model)
-      delta_aic <- aic_value - aic_baseline[predictor_idx]
-      
-      # Compile the results
-      results[[paste(predictor, "Lag", lag)]] <- data.frame(
-        
-        Predictor = predictor,
-        Dependent = dependent_var,
-        Lag = lag,
-        AIC = aic_value,
-        P_Value = p_value,
-        Delta_AIC = delta_aic
-      )
-    }
-  }
-  
-  # Combine all results into a single data frame
-  results_df <- do.call(rbind, results)
-  return(results_df)
-}
 
 
 # Specify predictors and lags ----------------------------
@@ -391,110 +169,6 @@ lags <- 0:3
 #data <- dat_fin # Assuming dat_fin is your dataset
 
   
-### Get lag models, validated by AIC --------------------------------------------
-dat_fin_no_RS_no_agg <- dat_fin_no_RS %>% 
-  dplyr::select(-tr_agg_doy ,-agg_doy )
-
-model_lag_sum_ips <- fit_lags_negbin(dat_fin_no_RS_no_agg, 
-                                     predictors  = predictors_beetle_dyn, 
-                                     lags, 
-                                     dependent_var = "sum_ips")
-
-model_lag_sum_ips_spei <- fit_lags_negbin(dat_fin_no_RS, predictors  = predictors_spei, 
-                                     lags, 
-                                     dependent_var = "sum_ips")
-# spei 3, lag 2 is the best among lags
-model_lag_peak_diff <- fit_lags_negbin(dat_fin_no_RS, 
-                                        predictors  = predictors_beetle_dyn, 
-                                        lags, 
-                                        dependent_var = "peak_diff")
-model_lag_aggDOY <- fit_lags_beta(dat_fin_no_RS, 
-                                   predictors  = predictors_beetle_dyn, 
-                                   lags, 
-                                   dependent_var = "tr_agg_doy")
-model_lag_peakDOY <- fit_lags_beta(dat_fin_no_RS, 
-                                   predictors  = predictors_beetle_dyn, 
-                                   lags, 
-                                   dependent_var = "tr_peak_doy")
-
-model_lag_RS  <- fit_lags_negbin(dat_fin, 
-                                 predictors  = predictors_RS, 
-                                 lags, 
-                                 dependent_var = "wind_beetle")
-
-
-model_lag_Morans_log  <- fit_lags_tweedie(dat_fin_Moran_scaled, 
-                                 predictors  =  predictors_Morans, 
-                                 lags, 
-                                 dependent_var = "Morans_I_log")
-
-model_lag_Morans_old  <- fit_lags_tweedie(dat_fin_Moran_scaled, 
-                                           predictors  =  predictors_Morans, 
-                                           lags, 
-                                           dependent_var = "Morans_I")
-
-
-
-##### simplify lags stats & export tables ----------------------------------------------------
-model_info_counts <- bind_rows(model_lag_sum_ips,
-                    model_lag_peakDOY,
-                    model_lag_aggDOY,
-                    model_lag_peak_diff
-                     ) %>% 
-  mutate(P_Value = round(P_Value     ,3),
-         Delta_AIC = round(Delta_AIC     ,3))
-
-(model_info_counts)
-
-model_lag_Morans <- model_lag_Morans %>% 
-  mutate(P_Value = round(P_Value     ,3),
-         Delta_AIC = round(Delta_AIC     ,3))
-
-
-model_lag_RS <- model_lag_RS %>% 
-  mutate(P_Value = round(P_Value     ,3),
-         Delta_AIC = round(Delta_AIC     ,3))
-
-
-
-# for beetle counts: the lag of limatic predictor by 2 years
-# for RS and Morans: lag of 3 years
-
-##### Export as a nice table in word: ----------------------------------------------
-sjPlot::tab_df(model_info_counts,
-               #col.header = c(as.character(qntils), 'mean'),
-               show.rownames = F,
-               file="outTable/lags_ips_counts.doc",
-               digits = 3) 
-
-sjPlot::tab_df(model_lag_Morans,
-               #col.header = c(as.character(qntils), 'mean'),
-               show.rownames = F,
-               file="outTable/lags_morans.doc",
-               digits = 3) 
-
-sjPlot::tab_df(model_lag_RS,
-               #col.header = c(as.character(qntils), 'mean'),
-               show.rownames = F,
-               file="outTable/lags_RS.doc",
-               digits = 3) 
-
-
-
-
-
-
-
-
-
-
-
-# Run the models based on teh most important lags!! -------------------------------
-# follow rules: test for intividual effects, poly tersm and interactions of teh most 
-# imortant redictors
-# for the most important model
-# report
-
 
 # IPS_counts test based on teh most important lags: lag 2 for spei3 and veg_tmp --------------
 dat_spei_lags <-  dat_fin %>% 
@@ -507,7 +181,6 @@ dat_spei_lags <-  dat_fin %>%
          pairID = as.factor(pairID),
          year_fact = as.factor(year)) %>% 
   arrange(year, .by_group = TRUE) %>%
-  # mutate(sum_ips_log = log(sum_ips +1)) %>% 
   mutate(#sum_ips_lag1 = lag(sum_ips_log, n = 1, default = NA),
          tmp_lag1 = lag(tmp, n = 1, default = NA),
          tmp_lag2 = lag(tmp, n = 2, default = NA),
@@ -554,7 +227,8 @@ dat_dynamics <- dat_fin %>%
                   #spei3, 
                   spei, # spei for veg season
                   tmp_z, prcp_z, spei_z, # z score fr veg season, sd from teh mean reference conditions
-                sum_ips,  peak_doy, peak_diff, tr_agg_doy, tr_peak_doy, agg_doy, peak_doy
+                sum_ips,  peak_doy, peak_diff, tr_agg_doy, tr_peak_doy, agg_doy, peak_doy,
+                x,y
                 ))
 fwrite(dat_dynamics, 'outTable/beetle_dynamic_indicators.csv')
 
@@ -586,11 +260,6 @@ dat_fin_counts_m_scaled <- dat_fin_counts_m %>%
     .fns = ~ scale(.) %>% as.vector()
   ))
 
-# Print the structure of the scaled data
-str(dat_fin_counts_m_scaled)
-summary(dat_fin_counts_m_scaled)
-
-
 
 # Scale and center the remaining numeric columns
 dat_fin_agg_m_scaled <- dat_fin_agg_m %>%
@@ -599,14 +268,9 @@ dat_fin_agg_m_scaled <- dat_fin_agg_m %>%
     .fns = ~ scale(.) %>% as.vector()
   ))
 
-# Print the structure of the scaled data
-str(dat_fin_agg_m_scaled)
-summary(dat_fin_agg_m_scaled)
 
 
 ####GAM: Find the best predictor lags  (simple) --------------------------------------------------------------- 
-# maybe use???
-# 
 dependent_vars_counts <-  c("sum_ips", "peak_diff")
 dependent_vars_doy    <-  c("tr_agg_doy", "tr_peak_doy")
 
@@ -618,17 +282,9 @@ model_metrics_count <- data.frame(Predictor = character(),
 
 # List of dependent variables and predictors:
 # keep only spei3 and spei 12 - for the short term vs long term effect
-selected_predictors <- c(#"spring_tmp", "spring_tmp_lag1", "spring_tmp_lag2","spring_tmp_lag3",
-  #"veg_tmp", "veg_tmp_lag1", "veg_tmp_lag2","veg_tmp_lag3",
+selected_predictors <- c(
   "tmp_z", "tmp_z_lag1", "tmp_z_lag2","tmp_z_lag3" ,
   "spei_z", "spei_z_lag1", "spei_z_lag2","spei_z_lag3") 
-  #"prcp_z", "prcp_z_lag1", "prcp_z_lag2","prcp_z_lag3",
-  #'tmp', 'tmp_1yr', 'tmp_2yr','tmp_3yr',  # averages of tmp
-  #'tmp_z', 'tmp_z_1yr', 'tmp_z_2yr','tmp_z_3yr',  # averages of tmp
- # 'prcp', 'prcp_1yr', 'prcp_2yr','prcp_3yr',  # averages of tmp
- # 'spei', 'spei_1yr', 'spei_2yr','spei_3yr',  # averages of tmp
-  #                       "spei", "spei_lag1", "spei_lag2","spei_lag3"
-#  )
 
 
 
@@ -937,142 +593,8 @@ boxplot(log(dat_fin_counts_m$sum_ips))
 
 
 
-# TEST: GAMM beetle counst with temp autocorr or with previous years beetle counts -------------------------------
 
-# account to temp autocorrelation explicitely, within gamm
-
-# try with gamm, and different specification of the temp autocorrelation
-m7 <- gamm(sum_ips ~ s(year, k =4) + s(tmp_z_lag1, k = 4) + #s(spei) +
-            s(x, y, bs = "gp") + s(trapID, bs = "re"),
-          data = dat_fin_counts_m_scaled, 
-          family = nb,
-          #rho = 0.15, 
-          correlation = corAR1(form = ~ year | trapID))
-
-# add spei
-m8 <- gamm(sum_ips ~ s(year, k =4) + s(tmp_z_lag1, k = 4) + s(spei_z_lag2, k = 4) +
-             s(x, y, bs = "gp") + s(trapID, bs = "re"),
-           data = dat_fin_counts_m_scaled, 
-           family = nb,
-           correlation = corAR1(form = ~ year | trapID))
-
-
-# do not add previous years: instead use groupping on pairID
-# add previous years beetle counts
-# try with uncsaled data: also unscaled z-score
-# as this can be easier to interpret in relationship to climate change??
-m10_unsc <- gamm(sum_ips ~  s(year, k =6) + s(tmp_z_lag1, k = 8) + s(spei_z_lag2, k = 8) +
-              s(x, y, bs = "gp") + 
-                s(pairID, bs = "re"),
-            data = dat_fin_counts_m, 
-            family = nb,
-            correlation = corAR1(form = ~ year | trapID))
-
-
-# try less correlated predictors:
-m10_unsc2 <- gamm(sum_ips ~  s(year, k =6) + s(tmp_z_lag1, k = 8) + s(spei_z_lag2, k = 8) +
-                   s(x, y, bs = "gp") + 
-                   s(pairID, bs = "re"),
-                 data = dat_fin_counts_m, 
-                 family = nb,
-                 correlation = corAR1(form = ~ year | trapID))
-
-
-# try less correlated predictors:
-m10_unsc2_int <- gamm(sum_ips ~  s(year, k =6) + s(tmp_z_lag1, k = 8) + s(spei_z_lag2, k = 8) +
-                        te(tmp_z_lag1, spei_z_lag2, k = 20) + 
-                    s(x, y, bs = "gp") + 
-                    s(pairID, bs = "re"),
-                  data = dat_fin_counts_m, 
-                  family = nb,
-                  correlation = corAR1(form = ~ year | trapID))
-
-AIC(m10_unsc2, m10_unsc) # the tmp_z1 and spei_z2 are the least correlated!
-
-plot(m10_unsc2$gam, page = 1)
-
-# use in interaction different values of tmp then in teh main terms
-# does not converge every time, maybe just skipp the interaction
-m10_unsc_int <- gamm(sum_ips ~  s(year, k =6) + s(tmp_z_lag2, k = 15) + s(spei_z_lag2, k = 15) +
-                       te(tmp_z, spei_z_lag2, k = 30) +
-                   s(x, y, bs = "gp", k =30) + 
-                     s(pairID, bs = "re"),
-                 data = dat_fin_counts_m, 
-                 family = nb,
-                 correlation = corAR1(form = ~ year | trapID))
-cor(dat_fin_counts_m$tmp_z_lag2, dat_fin_counts_m$spei_z_lag2, method = 'pearson' )
-cor(dat_fin_counts_m$tmp_z_lag1, dat_fin_counts_m$spei_z_lag2, method = 'pearson' )
-
-
-
-# the best!!!
-mm <- m10_unsc2_int$gam
-# plot in easy way how tdoes the k value affect interaction
-p1 <- ggpredict(mm, terms = "tmp_z_lag1 [all]", allow.new.levels = TRUE)
-p2 <- ggpredict(mm, terms = "spei_z_lag2 [all]", allow.new.levels = TRUE)
-p3 <- ggpredict(mm, terms = c("tmp_z_lag1", "spei_z_lag2 [-1, 0, 1]"), allow.new.levels = TRUE) #[-1, 0, 1]
-
-p_df <- as.data.frame(p2)
-
-# test simple plot:
-ggplot(p_df, aes(x = x, y = predicted)) +
-  geom_ribbon(aes(ymin = conf.low, ymax = conf.high, fill = group), alpha = 0.3) +
-  geom_line(aes(color = group, linetype = group), linewidth = 1) +
-  #geom_point(data = dat_fin_counts_m, aes(x = spei_z_lag2, y = sum_ips, color=factor(year))) +
- # ylim(0,75000) +
-  #labs(x = "SPEI Lag 2", y = "Sum of Beetle Counts") +
-  theme_classic2()
-
-
-# plot in easy way how tdoes the k value affect interaction
-p1 <- ggpredict(fin.m, terms = "tmp_z_lag2 [all]", allow.new.levels = TRUE)
-p2 <- ggpredict(fin.m, terms = "spei_z_lag2 [all]", allow.new.levels = TRUE)
-p3 <- ggpredict(fin.m, terms = c("tmp_z", "spei_z_lag2 [-1, 0, 1]"), allow.new.levels = TRUE)
-
-p_df <- as.data.frame(p3)
-
-
-# test simple plot:
-ggplot(p3, aes(x = x, y = predicted)) +
-  geom_ribbon(aes(ymin = conf.low, ymax = conf.high, fill = group), alpha = 0.3) +
-  geom_line(aes(color = group, linetype = group), linewidth = 1) +
-  ylim(0,75000) +
-  #labs(x = "SPEI Lag 2", y = "Sum of Beetle Counts") +
-  theme_classic2()
-
-
-
-
-m10_unsc_no_year <- gamm(sum_ips ~  #s(year, k =6) + 
-                           s(tmp_z_lag2, k = 8) + s(spei_z_lag2, k = 8) +
-                   s(x, y, bs = "gp") + s(pairID, bs = "re"),
-                 data = dat_fin_counts_m, 
-                 family = nb,
-                 correlation = corAR1(form = ~ year | trapID))
-
-# treat year as random effect
-m10_re <- gamm(sum_ips ~ s(tmp_z_lag2, k = 8) + s(spei_z_lag2, k = 8) +
-                 s(x, y, bs = "gp") + s(pairID, bs = "re"),
-               data = dat_fin_counts_m, 
-               family = nb,
-               correlation = corAR1(form = ~ year | trapID),
-               random = list(year = ~1))
-
-
-
-AIC(m10_unsc,m10_unsc_no_year,m10_re,m10_unsc_int)
-summary(m10_unsc_no_year$gam)
-gam.check(m10_unsc_no_year$gam)
-plot(m10_unsc$gam, page = 1, shade = T)
-
-#dat_fin_counts_m$AR
-m10 <- gamm(sum_ips ~  s(year, k =6) + s(tmp_z_lag2, k = 8) + s(spei_z_lag2, k = 8) +
-             s(x, y, bs = "gp") + s(pairID, bs = "re"),
-           data = dat_fin_counts_m_scaled, 
-           family = nb,
-           correlation = corAR1(form = ~ year | trapID))
-
-# Calculate average counts for each trap pair
+# Calculate average counts for each trap pair ------------------------------------
 avg_data <- dat_spei_lags %>%
   group_by(pairID, year) %>%
   summarise(sum_ips     = mean(sum_ips, na.rm = TRUE),
@@ -1091,9 +613,9 @@ avg_data <- dat_spei_lags %>%
   ungroup(.) %>% 
   na.omit()
 
+fwrite(avg_data, 'outTable/fin_tab_avg.csv')
 
-
-# test on averaged design
+# test on averaged design ----------------------------------------------------------------
 # try less correlated predictors:
 m1 <- gamm(sum_ips ~  s(year, k =6) + s(tmp_z_lag1, k = 8) + s(spei_z_lag2, k = 4) +
                         te(tmp_z_lag1, spei_z_lag2, k = 15) + 
@@ -1156,7 +678,7 @@ vgm_res <- variogram(residuals ~ 1, data = spatial_data, locations = ~ x + y)
 plot(vgm_res, main = "Variogram of Residuals (Model m2)")
 # residual seems not to be spatialy autocorrelated!
 
-# Automate approach??? SUM_IPS ----------------------
+# Automate predictor selection: SUM_IPS ----------------------
 
 
 
@@ -1307,82 +829,74 @@ dependent_vars  <- c("peak_diff")
 # Run the function on your dataset
 result <- compare_models(avg_data, dependent_vars)
 result_peak_diff <- compare_models(avg_data, dependent_vars =  c("peak_diff"))
-#save.image('outData/allModels.RData')
 
 
 
-# test for differet predictors for agg_doy: -------------------------------------
-# tmp_z_lag2 and spei_z_lag1
-m0 <- gamm(tr_agg_doy ~ s(year, k = 7) + 
-              s(tmp_z_lag2, k = 10)  + #
-             s(spei_z_lag1, k = 3),# + 
-            # te(tmp_z_lag2, spei_z_lag1, k = 20) + 
-            # s(x, y, bs = 'gp') + 
-             #s(pairID, bs = 're'),
-             data = avg_data, 
-           family = betar, 
-           correlation = corAR1(form = ~ year | pairID))
-
-
-# compare different families : the gamma seems the best!
-gam.check(m0$gam)
-k.check(m0$gam)
-plot(m0$gam)
-summary(m0$gam)
-
-appraise(fin.m.peak.diff)
+###### AGG DOY ------------------------------------
 
 m.gamma <- gamm(tr_agg_doy ~ s(year, k = 7) + 
              s(tmp_z_lag2, k = 10)  + #
              s(spei_z_lag1, k = 3),# + 
-           data = avg_data, 
+           data = avg_data_filt, 
            family = Gamma(link = "log"),
            correlation = corAR1(form = ~ year | pairID))
 
 appraise(m.gamma$gam)
 
 
-m.quasi <- gamm(tr_agg_doy ~ s(year, k = 7) + 
-                  s(tmp_z_lag2, k = 10)  + #
-                  s(spei_z_lag1, k = 3),# + 
-                data = avg_data, 
-                family = quasibinomial(link = "logit"),
-                correlation = corAR1(form = ~ year | pairID))
+# gamme is better then quasi and betar!
+# filter extreme values: occuring too late in a year ()
+avg_data_agg <- avg_data %>% 
+  dplyr::filter(tr_agg_doy < 0.54)
 
-appraise(m.quasi$gam)
-
-AIC(m.quasi$lme, m.gamma$lme, m0$lme)
-# !!!! continue here! gamma might be better!
-m1.gamma <- gamm(tr_agg_doy ~ s(year, k = 6) + s(tmp_z_lag2, k = 5) + s(spei_z_lag1, k = 5) + 
+# m1.agg.gamma one converges well!! - but seems very wiggly in teh iteraction
+m1.agg.gamma <- gamm(tr_agg_doy ~ s(year, k = 6) + 
+                       s(tmp_z_lag2, k = 7) + 
+                       s(spei_z_lag1, k = 5) + 
              te(tmp_z_lag2, spei_z_lag1, k = 20) + 
-             s(x, y, bs = 'gp', k = 15) + 
-             s(pairID, bs = 're'),data = avg_data, 
+             #s(x, y, bs = 'gp', k = 15) + 
+             s(pairID, bs = 're'),
+             data = avg_data_agg , 
            family = Gamma(link = "log"),
-           #family = betar, 
            correlation = corAR1(form = ~ year | pairID))
-m1.gamma.agg <- m1.gamma
-AIC(m1$lme, result$tr_agg_doy$models$random_effect$lme, m1.gamma$lme )  
-plot(m1.gamma$gam, page = 1)
+
+# test simpler model, change spline type: works well without xy!
+m2.agg.gamma <- gamm(tr_agg_doy ~ s(year, k = 6) + 
+                       s(tmp_z_lag2, k = 3,bs = "cs") + 
+                       s(spei_z_lag1, k = 3) + 
+                       te(tmp_z_lag2, spei_z_lag1, k = 8, bs = "cs") + 
+                       #s(x, y, bs = 'gp', k = 30) + 
+                       s(pairID, bs = 're'),
+                     data = avg_data_agg , 
+                     family = Gamma(link = "log"),
+                     correlation = corAR1(form = ~ year | pairID))
+
+AIC(m2.agg.gamma$lme, m1.agg.gamma$lme)
+#boxplot(avg_data_agg$tr_agg_doy)
+summary(m2.agg.gamma$gam)
+appraise(m2.agg.gamma$gam)
+k.check(m2.agg.gamma$gam)
+gam.check(m2.agg.gamma$gam)
+plot(m2.agg.gamma$gam, page = 1)
 
 
-m2.gamma <- gamm(tr_peak_doy ~ s(year, k = 6) + s(tmp_z_lag1, k = 5) + s(spei_z_lag2, k = 5) + 
+###### PEAK DOY ------------------------------------
+m.peak.gamma <- gamm(tr_peak_doy ~ s(year, k = 6) + s(tmp_z_lag1, k = 5) + 
+                       s(spei_z_lag2, k = 5) + 
                    te(tmp_z_lag1, spei_z_lag2, k = 20) + 
-                   s(x, y, bs = 'gp', k = 15) + 
-                   s(pairID, bs = 're'),data = avg_data, 
+                   s(x, y, bs = 'gp', k = 50) + 
+                   s(pairID, bs = 're'),
+                   data = avg_data_filt, 
                  family = Gamma(link = "log"),
-                 #family = betar, 
                  correlation = corAR1(form = ~ year | pairID))
 
-appraise(m2.gamma$gam)
+appraise(m.peak.gamma$gam)
+plot(m.peak.gamma$gam, page = 1)
+k.check(m.peak.gamma$gam)
+gam.check(m.peak.gamma$gam)
+summary(m.peak.gamma$gam)
 
-m.counts <- gamm(sum_ips ~ s(year, k = 6) + s(tmp_z_lag1, k = 5) + s(spei_z_lag2, k = 5) + 
-                   te(tmp_z_lag1, spei_z_lag2, k = 20) + 
-                   s(x, y, bs = 'gp', k = 15) + 
-                   s(pairID, bs = 're'),data = avg_data, 
-                 family = nb, #Gamma(link = "log"),
-                 #family = betar, 
-                 correlation = corAR1(form = ~ year | pairID))
-
+###### PEAK DIFF TW  ------------------------------------
 
 m.peak.diff <- gamm(peak_diff ~ s(year, k = 6) + s(tmp_z_lag1, k = 5) + s(spei_z_lag2, k = 5) + 
                    te(tmp_z_lag1, spei_z_lag2, k = 20) + 
@@ -1415,14 +929,19 @@ plot(m.peak.diff.tw$gam, page = 1)
 
 
 
-# rerun for ips_sum
+
+###### SUM IPS TW  ------------------------------------
+avg_data_filt <- avg_data %>% 
+  dplyr::filter(!pairID %in% pair_outliers )
+
+
 m.counts.tw <- gamm(sum_ips ~ s(year, k = 6) +
-                         s(tmp_z_lag1, k = 8) +
+                         s(tmp_z_lag1, k = 5) +
                          s(spei_z_lag2, k = 8) + 
                          te(tmp_z_lag1, spei_z_lag2, k = 20) + 
-                         s(x, y, bs = 'gp', k = 50) + 
+                        # s(x, y, bs = 'gp', k = 70) + 
                          s(pairID, bs = 're'),
-                       data = avg_data, 
+                       data = avg_data_filt, 
                        family = tw,
                        correlation = corAR1(form = ~ year | pairID))
 
@@ -1440,19 +959,18 @@ vif_data <- avg_data_peak_diff[, c("year", "tmp_z_lag1", "spei_z_lag2", "x", "y"
 vif_result <- vif(lm(peak_diff ~ ., data = vif_data))
 
 
-plot(fin.m.agg)
+appraise(fin.m.agg)
 
 
 summary(fin.m)
-# quick plotting
-fin.m <- m.peak.diff.tw$gam
-#!!! --------------------------------------------
+##### quick plotting -----------------------------------------------
+fin.m <- fin.m.agg#$gam
 
 # plot in easy way how tdoes the k value affect interaction
 p1 <- ggpredict(fin.m, terms = "year [all]", allow.new.levels = TRUE)
-p2 <- ggpredict(fin.m, terms = "tmp_z_lag1 [all]", allow.new.levels = TRUE)
-p3 <- ggpredict(fin.m, terms = "spei_z_lag2 [all]", allow.new.levels = TRUE)
-p4 <- ggpredict(fin.m, terms = c("tmp_z_lag1", "spei_z_lag2 [-1, 0, 1]"), allow.new.levels = TRUE)
+p2 <- ggpredict(fin.m, terms = "tmp_z_lag2 [all]", allow.new.levels = TRUE)
+p3 <- ggpredict(fin.m, terms = "spei_z_lag1 [all]", allow.new.levels = TRUE)
+p4 <- ggpredict(fin.m, terms = c("tmp_z_lag2", "spei_z_lag1 [-1, 0, 1]"), allow.new.levels = TRUE)
 
 #p_df <- as.data.frame(p3)
 # test simple plot:
@@ -1476,21 +994,30 @@ plot4<-ggplot(p4, aes(x = x, y = predicted)) +
   geom_line(aes(color = group, linetype = group), linewidth = 1) +
   theme_classic2()
 
-ggarrange(plot1,plot2,plot3,plot4, ncol = 4, nrow = 1)
+ggarrange(plot1,plot2,plot3,plot4, ncol = 2, nrow = 2)
 
 
 
 
-# update& savethe best models: --------------------------------------------------------
+# update& save the best models: --------------------------------------------------------
 
 # explore results for individual dependent variables: select the onse with the lowest AIC/with the all random effects
-fin.m.counts     <- result$sum_ips$models$random_effect$gam  # lowest AIC
-fin.m.agg        <- m1.gamma#result$tr_agg_doy$models$random_effect$gam  # lowest AIC
-fin.m.peak       <- result$tr_peak_doy$models$random_effect$gam  # lowest AIC
-fin.m.peak.diff  <- m.peak.diff.tw #result_peak_diff$peak_diff$models$random_effect$gam  # lowest AIC
+fin.m.counts     <- m.counts.tw$gam #result$sum_ips$models$random_effect$gam  # lowest AIC
+fin.m.agg        <- m2.agg.gamma$gam #m1.gamma$gam#result$tr_agg_doy$models$random_effect$gam  # lowest AIC
+fin.m.peak       <- m.peak.gamma$gam #m.peak.diff.tw$gam #result$tr_peak_doy$models$random_effect$gam  # lowest AIC
+fin.m.peak.diff  <- m.peak.diff.tw$gam #result_peak_diff$peak_diff$models$random_effect$gam  # lowest AIC
 
 
-
+save(fin.m.counts, 
+     fin.m.agg, 
+     fin.m.peak,
+     fin.m.peak.diff,
+     m.counts.tw,
+     m1.gamma,
+     m.peak.gamma,
+     m.peak.diff.tw,
+     avg_data,
+     file = "outData/fin_models.RData")
 
 
 
@@ -1539,37 +1066,6 @@ df_no_sign <- dat_fin_counts_m_scaled_no_outliers %>%
 dat_fin_counts_m_scaled_no_outliers <- dat_fin_counts_m_scaled_no_outliers %>%
   mutate(significance = as.factor(ifelse(pairID %in% significant_traps$pairID, "sig", "ref"))) 
 
-m <- gam(sum_ips ~ s(tmp_z, k = 4) + s(spei_z, k = 4) + 
-           significance + 
-           trapID,  # this induces collinearity/concurvity
-         family = nb(),
-         method ='REML', 
-         dat_fin_counts_m_scaled_no_outliers)
-
-summary(m)
-check_concurvity(m)
-plot(m, page = 1)
-
-# try model just for different location stypes: signigicantly ifferent or similar to the ref
-m.sign <- gam(sum_ips ~ s(tmp_z, k = 4) + s(spei_z, k = 4),# + 
-          # significance + 
-          # trapID,  # this induces collinearity/concurvity
-         family = nb(),
-         method ='REML', 
-         df_sign)
-
-summary(m.sign)
-m.no_sign <- gam(sum_ips ~ s(tmp_z, k = 4) + s(spei_z, k = 4),# + 
-              # significance + 
-              # trapID,  # this induces collinearity/concurvity
-              family = nb(),
-              method ='REML', 
-              df_no_sign)
-
-plot(m.no_sign, page = 1)
-summary(m.no_sign)
-
-# no meaningful to check for them separately
 
 # get list of outliers and remove the traps --------------------------------------
 
@@ -1629,82 +1125,6 @@ p_ips_counts_log <- ggplot(climate_data, aes(x = significance, y = log(sum_ips),
 
 windows()
 ggarrange(p_temp, p_spei,p_ips_counts, nrow = 3) # p_ips_counts_log,
-
-
-
-# Perform t-tests to compare climate variables
-t_test_tmp <- t.test(tmp_z_lag1 ~ significance, data = climate_data)
-t_test_spei <- t.test(spei_z_lag2 ~ significance, data = climate_data)
-
-print(t_test_tmp)
-print(t_test_spei)
-
-
-# run t test for years
-
-
-# Assume climate_data is your data frame and it has columns year, tmp_z_lag1, spei_z_lag2, and significance
-
-# Initialize lists to store results
-t_test_tmp_results <- list()
-t_test_spei_results <- list()
-
-# Get unique years
-years <- unique(climate_data$year)
-
-# Loop through each year and perform t-tests
-for (year in years) {
-  # Filter data for the current year
-  data_year <- climate_data %>% filter(year == !!year)
-  
-  # Perform t-test for tmp_z_lag1
-  t_test_tmp <- t.test(tmp_z_lag1 ~ significance, data = data_year)
-  t_test_tmp_results[[as.character(year)]] <- round(t_test_tmp$p.value, 2)
-  
-  # Perform t-test for spei_z_lag2
-  t_test_spei <- t.test(spei_z_lag2 ~ significance, data = data_year)
-  t_test_spei_results[[as.character(year)]] <- round(t_test_spei$p.value,2)
-}
-
-# Convert results to data frames
-t_test_tmp_results_df <- data.frame(year = names(t_test_tmp_results), p_value_tmp = unlist(t_test_tmp_results))
-t_test_spei_results_df <- data.frame(year = names(t_test_spei_results), p_value_spei = unlist(t_test_spei_results))
-
-# Print the results
-print(t_test_tmp_results_df)
-print(t_test_spei_results_df)
-
-
-
-# run for current tmps
-# Initialize lists to store results
-t_test_tmp_results <- list()
-t_test_spei_results <- list()
-
-# Get unique years
-years <- unique(climate_data$year)
-
-# Loop through each year and perform t-tests
-for (year in years) {
-  # Filter data for the current year
-  data_year <- climate_data %>% filter(year == !!year)
-  
-  # Perform t-test for tmp_z_lag1
-  t_test_tmp <- t.test(tmp_z ~ significance, data = data_year)
-  t_test_tmp_results[[as.character(year)]] <- round(t_test_tmp$p.value,2)
-  
-  # Perform t-test for spei_z_lag2
-  t_test_spei <- t.test(spei_z ~ significance, data = data_year)
-  t_test_spei_results[[as.character(year)]] <- round(t_test_spei$p.value,2)
-}
-
-# Convert results to data frames
-t_test_tmp_results_df <- data.frame(year = names(t_test_tmp_results), p_value_tmp = unlist(t_test_tmp_results))
-t_test_spei_results_df <- data.frame(year = names(t_test_spei_results), p_value_spei = unlist(t_test_spei_results))
-
-# Print the results
-print(t_test_tmp_results_df)
-print(t_test_spei_results_df)
 
 
 
@@ -1978,10 +1398,10 @@ means_dat_fin_year <-
                  sd_peak_doy    = sd(peak_doy, na.rm = T),
                  sd_peak_diff   = sd(peak_diff, na.rm = T)) %>% 
   mutate(Population_level       = stringr::str_glue("{round(mean_sum_ips,1)}±{round(sd_sum_ips,1)}"),
-         Aggregation_DOY       = stringr::str_glue("{round(mean_agg_doy,1)}±{round(sd_agg_doy,1)}"),
-         Peak_growth_DOY        = stringr::str_glue("{round(mean_peak_doy,1)}±{round(sd_peak_doy,1)}"),
-         Peak_growth            = stringr::str_glue("{round(mean_peak_diff,1)}±{round(sd_peak_diff,1)}")) %>% 
-  dplyr::select(year, Population_level, Colonization_DOY, Peak_growth_DOY,Peak_growth) 
+         Aggregation_timing       = stringr::str_glue("{round(mean_agg_doy,1)}±{round(sd_agg_doy,1)}"),
+         Peak_swarming_timing     = stringr::str_glue("{round(mean_peak_doy,1)}±{round(sd_peak_doy,1)}"),
+         Peak_swarming_intensity  = stringr::str_glue("{round(mean_peak_diff,1)}±{round(sd_peak_diff,1)}")) %>% 
+  dplyr::select(year, Population_level, Aggregation_timing, Peak_swarming_timing,Peak_swarming_intensity) 
 
 
 (means_dat_fin_year)
@@ -1995,72 +1415,14 @@ sjPlot::tab_df(means_dat_fin_year,
                digits = 0) 
 
 
-# Spagetti plots: development over time ----------------------------------------
 
 
 
-plot_data_with_average <- function(data, y_var, y_label, my_title) {
-  # Convert the y_var argument to a symbol to use in aes()
-  y_var_sym <- rlang::sym(y_var)
-  
-  data %>%
-    ungroup() %>%
-    filter(year %in% 2015:2021) %>%
-    ggplot(aes(x = year, y = !!y_var_sym, group = trapID)) +
-    labs(x = 'Year', y = y_label, title = my_title) +
-    geom_line(alpha = 0.1) +  
-    stat_summary(
-      aes(x = year, y = !!y_var_sym, group = 1), 
-      fun = mean,  # Calculate the mean for each year
-      geom = "line", 
-      color = "red",  # Ensure the average line is also red
-      linewidth = 1  # Make the average line slightly thicker than individual lines
-    ) +
-    # stat_summary(
-    #   aes(x = year, y = !!y_var_sym, group = 1),
-    #   fun.data = mean_sdl,  # Calculate mean and standard deviation
-    #   fun.args = list(mult = 1),  # 'mult = 1' for 1 SD, 'mult = 2' for 2 SDs, etc.
-    #   geom = "errorbar",  # Use error bars to represent the SD
-    #   width = 0.1,
-    #   col = 'red'  # SD indicators in red
-    # ) +
-    
-    theme_minimal(base_size = 10) +
-    theme(
-      aspect.ratio = 1, 
-      panel.grid.major = element_blank(), 
-      panel.grid.minor = element_blank(), 
-      panel.background = element_rect(fill = "white", colour = "black")
-    )
-}
-
-# Example usage:
-p_spagett_ips       <- plot_data_with_average(dat_fin, "sum_ips", lab_popul_level, '[a]')
-p_spagett_agg_doy   <- plot_data_with_average(dat_fin, "agg_doy", lab_colonization_time, '[b]')
-p_spagett_peak_doy  <- plot_data_with_average(dat_fin, "peak_doy", lab_peak_time, '[c]')
-p_spagett_peak_diff <- plot_data_with_average(dat_fin, "peak_diff", lab_peak_growth, '[d]')
-
-windows(7,6)
-p_spagetti <- ggarrange(p_spagett_ips, 
-          p_spagett_agg_doy, 
-          p_spagett_peak_doy, 
-          p_spagett_peak_diff, ncol = 2,nrow = 2, align = 'hv')
-
-ggsave(filename = 'outFigs/Fig1.png', plot = p_spagetti, width = 7, height = 6, dpi = 300, bg = 'white')
+#cor(avg_data_sum_ips$tmp_z, avg_data_sum_ips$sum_ips)
+# Make table for response and predictor variables for models:
 
 
-# save models -------------------------------------------------------------
 
-# 
-# 
-save( fin.m.agg,
-      fin.m.counts,
-      fin.m.peak,
-      fin.m.peak.diff,
-      file="outData/fin_models.Rdata")
-# 
-# 
-# 
 
 
 # Effect plots ------------------------------------------------------------
@@ -2069,29 +1431,22 @@ save( fin.m.agg,
 # define plotiing functions
 
 my_theme_square <- function() {
-  theme_minimal(base_size = 10) +
+  theme_minimal(base_size = 8) +
     theme(
-      aspect.ratio = 1, 
+      #aspect.ratio = 1, 
       axis.ticks.y = element_line(),
       axis.ticks.x = element_line(),
       panel.grid.major = element_blank(), 
       panel.grid.minor = element_blank(), 
-      panel.background = element_rect(fill = "white", colour = "black")
+      panel.background = element_rect(fill = "white", colour = "black"),
+      legend.position = "bottom",
+      axis.title.y = element_blank()
     ) 
 }
 
-#ggplot(p0, aes(x = x, y = predicted, ymin = conf.low, ymax = conf.high)) +
-  #geom_line() +
-  #geom_ribbon(alpha = 0.1) +
-ggplot() +  
-  geom_line(data = avg_data, aes(x = year, y = sum_ips / 100, group = pairID), col = "gray20", alpha = 0.1) +
-  geom_line(data = p0, aes(x = x, y = predicted), col = 'blue') +
-  geom_ribbon(data = p0, aes(x = x, y = predicted, ymin = conf.low, ymax = conf.high), alpha = 0.2, fill = 'blue') +
-  my_theme_square() 
 
-create_effect_year(p0, avg_data)
 # Create effect plot function with an additional argument to control y-axis labels
-create_effect_year <- function(data, avg_data, line_color = "blue", 
+create_effect_year <- function(data, avg_data, line_color = "grey40", 
                                x_col = "year", 
                                y_col = "sum_ips", 
                                x_title = "X-axis", 
@@ -2101,7 +1456,7 @@ create_effect_year <- function(data, avg_data, line_color = "blue",
   y_col <- ensym(y_col)
   
   p <- ggplot() + 
-    geom_line(data = avg_data, aes(x = !!x_col, y = !!y_col, group = pairID), col = "gray60", alpha = 0.3) +
+    geom_line(data = avg_data, aes(x = !!x_col, y = !!y_col, group = pairID), col = "gray70", alpha = 0.4) +
     geom_line(data = data, aes(x = x, y = predicted), color = line_color) +
     geom_ribbon(data = data, aes(x = x, ymin = conf.low, ymax = conf.high), alpha = 0.25, fill = line_color) +
     labs(x = x_title,
@@ -2140,35 +1495,12 @@ create_effect_plot <- function(data, avg_data,
 
 
 
-# change y-axis into days (from 0-1)
-create_effect_Y_trans <- function(data, line_color = "blue", x_title = "X-axis", y_title = "Y-axis", #y_lim = c(0, 1), 
-                                  my_title = '',
-                                  x_annotate = 0, lab_annotate = "lab ann") {
-  data$predicted <- (data$predicted * (doy.end - doy.start)) + doy.start  # Reverse transformation for y-axis
-  data$conf.low  <- (data$conf.low * (doy.end - doy.start)) + doy.start
-  data$conf.high <- (data$conf.high * (doy.end - doy.start)) + doy.start
-  
-  p<- ggplot(data, aes(x = x, y = predicted, ymin = conf.low, ymax = conf.high)) +
-    geom_line(color = line_color) +
-    geom_ribbon(alpha = 0.1, fill = line_color) +
-    labs(x = x_title, y = y_title, title = my_title) +
-   # ylim(y_lim) +
-  #  scale_x_continuous(breaks = c(-2, -1, 0, 1, 2), limits = c(-2.7, 2.7)) + # Set x-axis breaks and limits
-    my_theme_square() + 
-    annotate("text", x = x_annotate, y = Inf, label = lab_annotate, hjust = 0.5, vjust = 1.5)
-  
-  return(p)
-  
- }
-
-
-
-
 # plot interactions
-plot_effect_interactions <- function(data, temp_label, y_title,x_annotate = 0, lab_annotate = "lab ann") {
+plot_effect_interactions <- function(data, temp_label = 'Temp', y_title = 'y_title',x_annotate = 0, lab_annotate = "lab ann") {
   #library(ggplot2)
   
- p<- ggplot(data, aes(x = x, y = predicted, ymin = conf.low, ymax = conf.high)) +
+ p<- 
+   ggplot(data, aes(x = x, y = predicted, ymin = conf.low, ymax = conf.high)) +
     geom_ribbon(aes(ymin = conf.low, ymax = conf.high, fill = group), alpha = 0.3) +
     geom_line(aes(color = group, linetype = group), linewidth = 1) +
     labs(x = temp_label,
@@ -2176,27 +1508,38 @@ plot_effect_interactions <- function(data, temp_label, y_title,x_annotate = 0, l
          fill = "SPEI\nlevels",
          color = "SPEI\nlevels",
          linetype = "SPEI\nlevels") +  # Fixed "y_title" to "y" for correct y-axis label argument
-   my_theme_square() + 
-   guides(color = guide_legend(ncol = 1), 
-           fill = guide_legend(ncol = 1),
-           linetype = guide_legend(ncol = 1)) +
+  
+   guides(color = guide_legend(nrow = 1), 
+           fill = guide_legend(nrow = 1),
+           linetype = guide_legend(nrow = 1)) +
     annotate("text", x = x_annotate, y = Inf, 
-             label = lab_annotate, hjust = 0.5, vjust = 1.5)
+             label = lab_annotate, hjust = 0.5, vjust = 1.5) +
+   my_theme_square() +
+   theme(legend.position = "bottom")
   
   return(p)
 }
 
+plot_effect_interactions(p3)
 
-### Beetle counts -----------------------------------------------------------
-# plot only significant terms
+##### PLOT: IPS SUM counts -----------------------------------------------------------
 
-temp_label <- "Temperature [z-score]" #expression(paste("Temperature [", degree, "C]", sep=""))
+temp_label <- "Temp. [z-score]" #expression(paste("Temperature [", degree, "C]", sep=""))
 spei_label <- 'SPEI [z-score]'
 
 
 
 # Define the transformation function
-transform_predictions <- function(predictions, doy.start, doy.end) {
+adjust_predictions_counts <- function(df, divisor) {
+  df <- as.data.frame(df)
+  df$predicted <- df$predicted  / divisor
+  df$conf.low <- df$conf.low / divisor
+  df$conf.high <- df$conf.high / divisor
+  return(df)
+}
+
+
+transform_predictions_DOY <- function(predictions, doy.start, doy.end) {
   scale_factor <- doy.end - doy.start
   predictions$predicted <- (predictions$predicted * scale_factor) + doy.start
   predictions$conf.low  <- (predictions$conf.low * scale_factor) + doy.start
@@ -2212,7 +1555,13 @@ p1 <- ggpredict(fin.m.counts, terms = "tmp_z_lag1 [all]", allow.new.levels = TRU
 p2 <- ggpredict(fin.m.counts, terms = "spei_z_lag2 [all]", allow.new.levels = TRUE)
 p3 <- ggpredict(fin.m.counts, terms = c("tmp_z_lag1", "spei_z_lag2 [-1, 0, 1]"), allow.new.levels = TRUE)
 
+divisor_population <- 100
+p0 <- adjust_predictions_counts(p0, divisor_population)
+p1 <- adjust_predictions_counts(p1, divisor_population)
+p2 <- adjust_predictions_counts(p2, divisor_population)
+p3 <- adjust_predictions_counts(p3, divisor_population)
 
+# get update table for the line an pint plotting
 avg_data_sum_ips <- avg_data %>% 
   mutate(sum_ips = sum_ips/100,
          peak_diff = peak_diff/10)
@@ -2224,10 +1573,10 @@ p0.count <- create_effect_year(data = p0,
                               line_color = "darkgreen", 
                               x_title = "Year", 
                               y_title = paste(lab_popul_level, '*100'),# "Population level\n[# beetle*100]",
-                              my_title = "", 
+                              my_title = paste("[a]", 'Population level', '\n[#*100]'), 
                               x_annotate = 2018, lab_annotate = "***")
 
-(p0.count)
+#(p0.count)
 p1.count <- 
   create_effect_plot(data = p1, avg_data = avg_data_sum_ips, 
                      x_col = "tmp_z_lag1", y_col = "sum_ips", 
@@ -2236,9 +1585,9 @@ p1.count <-
                      y_title = paste(lab_popul_level, '*100'), 
                      #my_title = "Effect of Year on Sum IPS", 
                      x_annotate = 2, 
-                     lab_annotate = "*")
+                     lab_annotate = "n.s.")
 
-(p1.count)
+#(p1.count)
 p2.count <- create_effect_plot(data = p2, avg_data = avg_data_sum_ips, 
                                x_col = "spei_z_lag2", y_col = "sum_ips", 
                                line_color = "blue", 
@@ -2246,32 +1595,32 @@ p2.count <- create_effect_plot(data = p2, avg_data = avg_data_sum_ips,
                                y_title = paste(lab_popul_level, '*100'), 
                                #my_title = "Effect of Year on Sum IPS", 
                                x_annotate = -1, 
-                               lab_annotate = "*")
-(p2.count)
+                               lab_annotate = "**")
+#(p2.count)
 p3.count <- plot_effect_interactions(p3, 
                                      temp_label = temp_label, 
                                      y_title = paste(lab_popul_level, '*100'),
                                      x_annotate = 2,
-                                     lab_annotate = "n.s.") 
+                                     lab_annotate = "***") 
 
-(p3.count)
-ggarrange(p1.count,p2.count, p3.count)
-
-
+#(p3.count)
+#ggarrange(p0.count,p1.count,p2.count, p3.count)
 
 
-### DOY aggregation ---------------------------------------------------------
+
+
+##### PLOT DOY aggregation ---------------------------------------------------------
 summary(fin.m.agg)
 p0 <- ggpredict(fin.m.agg, terms = "year [all]", allow.new.levels = TRUE)
-p1 <- ggpredict(fin.m.agg, terms = "tmp_z_lag1 [all]", allow.new.levels = TRUE)
-p2 <- ggpredict(fin.m.agg, terms = "spei_z_lag2 [all]", allow.new.levels = TRUE)
-p3 <- ggpredict(fin.m.agg, terms = c("tmp_z_lag1", "spei_z_lag2 [-1, 0, 1]"), allow.new.levels = TRUE)
+p1 <- ggpredict(fin.m.agg, terms = "tmp_z_lag2 [all]", allow.new.levels = TRUE)
+p2 <- ggpredict(fin.m.agg, terms = "spei_z_lag1 [all]", allow.new.levels = TRUE)
+p3 <- ggpredict(fin.m.agg, terms = c("tmp_z_lag2", "spei_z_lag1 [-1, 0, 1]"), allow.new.levels = TRUE)
 
 # Apply transformation to each prediction data frame
-p0 <- transform_predictions(p0, doy.start, doy.end)
-p1 <- transform_predictions(p1, doy.start, doy.end)
-p2 <- transform_predictions(p2, doy.start, doy.end)
-p3 <- transform_predictions(p3, doy.start, doy.end)
+p0 <- transform_predictions_DOY(p0, doy.start, doy.end)
+p1 <- transform_predictions_DOY(p1, doy.start, doy.end)
+p2 <- transform_predictions_DOY(p2, doy.start, doy.end)
+p3 <- transform_predictions_DOY(p3, doy.start, doy.end)
 
 
 # 
@@ -2282,7 +1631,7 @@ p0.agg <- create_effect_year(data = p0,
                                line_color = "darkgreen", 
                                x_title = "Year", 
                                y_title = lab_colonization_time,
-                               my_title = "", 
+                               my_title = paste("[b]", 'Aggregation timing', '\n[DOY]'),  
                                x_annotate = 2018, lab_annotate = "***")
 
 (p0.agg)
@@ -2294,7 +1643,7 @@ p1.agg <-
                      y_title = lab_colonization_time, 
                      #my_title = "Effect of Year on Sum IPS", 
                      x_annotate = 2, 
-                     lab_annotate = "*")
+                     lab_annotate = "***")
 
 (p1.agg)
 p2.agg <- create_effect_plot(data = p2, avg_data = avg_data_sum_ips, 
@@ -2303,18 +1652,18 @@ p2.agg <- create_effect_plot(data = p2, avg_data = avg_data_sum_ips,
                                x_title = spei_label , 
                                y_title = lab_colonization_time, 
                                x_annotate = -1, 
-                               lab_annotate = "*")
+                               lab_annotate = "n.s.")
 (p2.agg)
 p3.agg <- plot_effect_interactions(p3, 
                                      temp_label = temp_label, 
                                      y_title = lab_colonization_time,
                                      x_annotate = 2,
-                                     lab_annotate = "n.s.") 
+                                     lab_annotate = "***") 
 
 (p3.agg)
 
 
-#### Peak Effect plots ------------------------------------------------------------
+#### PLOT: Peak DOY  ------------------------------------------------------------
 summary(fin.m.peak)
 
 p0 <- ggpredict(fin.m.peak, terms = "year [all]", allow.new.levels = TRUE)
@@ -2324,10 +1673,10 @@ p3 <- ggpredict(fin.m.peak, terms = c("tmp_z_lag1" ,"spei_z_lag2 [-1, 0, 1]"), a
 
 
 # transform values back to DOY (from 0-1)
-p0 <- transform_predictions(p0, doy.start, doy.end)
-p1 <- transform_predictions(p1, doy.start, doy.end)
-p2 <- transform_predictions(p2, doy.start, doy.end)
-p3 <- transform_predictions(p3, doy.start, doy.end)
+p0 <- transform_predictions_DOY(p0, doy.start, doy.end)
+p1 <- transform_predictions_DOY(p1, doy.start, doy.end)
+p2 <- transform_predictions_DOY(p2, doy.start, doy.end)
+p3 <- transform_predictions_DOY(p3, doy.start, doy.end)
 
 # 
 p0.peak <- create_effect_year(data = p0, 
@@ -2337,7 +1686,7 @@ p0.peak <- create_effect_year(data = p0,
                              line_color = "darkgreen", 
                              x_title = "Year", 
                              y_title = lab_peak_time,
-                             my_title = "", 
+                             my_title = paste("[c]", 'Peak swarming\ntiming', '[DOY]'),  
                              x_annotate = 2018, lab_annotate = "***")
 
 (p0.peak)
@@ -2349,7 +1698,7 @@ p1.peak <-
                      y_title = lab_peak_time, 
                      #my_title = "Effect of Year on Sum IPS", 
                      x_annotate = 2, 
-                     lab_annotate = "*")
+                     lab_annotate = "n.s.")
 
 (p1.peak)
 p2.peak <- create_effect_plot(data = p2, avg_data = avg_data_sum_ips, 
@@ -2358,25 +1707,36 @@ p2.peak <- create_effect_plot(data = p2, avg_data = avg_data_sum_ips,
                              x_title = spei_label , 
                              y_title = lab_peak_time, 
                              x_annotate = -1, 
-                             lab_annotate = "*")
+                             lab_annotate = "***")
 (p2.peak)
 p3.peak <- plot_effect_interactions(p3, 
                                    temp_label = temp_label, 
                                    y_title = lab_peak_time,
                                    x_annotate = 2,
-                                   lab_annotate = "n.s.") 
+                                   lab_annotate = "***") 
 
 (p3.peak)
 
 
 
-### effect plot peak dif ----------------------------------------------------
-# Assuming 'model' is your glm.nb model
+##### PLOT: Peak diff  ----------------------------------------------------
+fin.m.peak.diff #<- fin.m.peak.diff$gam
 summary(fin.m.peak.diff)
 p0 <- ggpredict(fin.m.peak.diff, terms = "year [all]", allow.new.levels = TRUE)
 p1 <- ggpredict(fin.m.peak.diff, terms = "tmp_z_lag1 [all]", allow.new.levels = TRUE)
 p2 <- ggpredict(fin.m.peak.diff, terms = "spei_z_lag2 [all]", allow.new.levels = TRUE)
 p3 <- ggpredict(fin.m.peak.diff, terms = c("tmp_z_lag1", "spei_z_lag2 [-1, 0, 1]"), allow.new.levels = T)
+
+
+divisor_diff <- 10
+p0 <- adjust_predictions_counts(p0, divisor_diff)
+p1 <- adjust_predictions_counts(p1, divisor_diff)
+p2 <- adjust_predictions_counts(p2, divisor_diff)
+p3 <- adjust_predictions_counts(p3, divisor_diff)
+
+
+
+
 
 p0.peak.diff <- create_effect_year(data = p0, 
                                avg_data = dplyr::filter(avg_data_sum_ips, peak_diff <200),
@@ -2385,52 +1745,121 @@ p0.peak.diff <- create_effect_year(data = p0,
                                line_color = "darkgreen", 
                                x_title = "Year", 
                                y_title = lab_peak_growth,
-                               my_title = "", 
+                               my_title = paste("[d]", 'Peak swarming\nintensity', '[#*10]'),  
                                x_annotate = 2018, lab_annotate = "***")
 
-(p0.peak.diff)
+#(p0.peak.diff)
 p1.peak.diff <- 
-  create_effect_plot(data = p1, avg_data = avg_data_sum_ips, 
+  create_effect_plot(data = p1, 
+                     avg_data =  dplyr::filter(avg_data_sum_ips, peak_diff <200), 
                      x_col = "tmp_z_lag1", y_col = "peak_diff", 
                      line_color = "red", 
                      x_title = temp_label , 
                      y_title = lab_peak_growth, 
                      #my_title = "Effect of Year on Sum IPS", 
                      x_annotate = 2, 
-                     lab_annotate = "*")
+                     lab_annotate = ".")
 
-(p1.peak.diff)
-p2.peak.diff <- create_effect_plot(data = p2, avg_data = avg_data_sum_ips, 
+#(p1.peak.diff)
+p2.peak.diff <- create_effect_plot(data = p2,
+                                   avg_data =  dplyr::filter(avg_data_sum_ips, peak_diff <200), 
                                x_col = "spei_z_lag2", y_col = "peak_diff", 
                                line_color = "blue", 
                                x_title = spei_label , 
                                y_title = lab_peak_growth, 
                                #my_title = "Effect of Year on Sum IPS", 
                                x_annotate = -1, 
-                               lab_annotate = "*")
-(p2.peak.diff)
+                               lab_annotate = "n.s.")
+#(p2.peak.diff)
 p3.peak.diff <- plot_effect_interactions(p3, 
                                      temp_label = temp_label, 
                                      y_title = lab_peak_growth,
                                      x_annotate = 2,
-                                     lab_annotate = "n.s.") 
+                                     lab_annotate = "***") 
 
-(p3.peak.diff)
+#(p3.peak.diff)
 ggarrange(p0.peak.diff,p1.peak.diff,p2.peak.diff,p3.peak.diff)
+
+
+
+
+# put in teh same figure? --------------------------------------------------------
+# remove labels, keep only labels on top
+
+
+#lab_popul_level <- 
+#lab_colonization_time
+#lab_peak_time
+#lab_peak_growth
+
+p.full.year <- ggarrange(p0.count, p0.agg, p0.peak, p0.peak.diff, 
+                         ncol=4, nrow = 1 , #align = 'hv', 
+                         font.label = list(size = 8, color = "black", face = "plain", family = NULL) )
+
+(p.full.year)
+
+p.temp <-  ggarrange(p1.count, p1.agg, p1.peak, p1.peak.diff, 
+                     ncol=4, nrow = 1 , align = 'hv', 
+                     font.label = list(size = 8, color = "black", face = "plain", family = NULL))
+
+
+p.spei <-  ggarrange(p2.count, p2.agg, p2.peak, p2.peak.diff, 
+                     ncol=4, nrow = 1 , align = 'hv', 
+                     font.label = list(size = 8, color = "black", face = "plain", family = NULL))
+
+
+p.int <- ggarrange(p3.count, p3.agg, p3.peak, p3.peak.diff, 
+                   ncol=4, nrow = 1 , align = 'hv',common.legend = TRUE, legend = 'bottom',
+                   font.label = list(size = 8, color = "black", face = "plain", family = NULL))
+windows(7,8)
+full_preds <- ggarrange(p.full.year,p.temp, p.spei, p.int, 
+                        ncol = 1, nrow= 4, 
+                        align = 'hv', heights = c(1, 1, 1, 1.1),
+                        widths = c(1, 1, 1, 1))
+
+(full_preds)
+ggsave(filename = 'outFigs/Fig_full_eff.png', plot = full_preds, 
+       width = 7.5, height = 8, dpi = 300, bg = 'white')
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
 
 ### all Effect plots: ips vs climate --------------------------------------------------------
 
-# put together individual plots for temp spei
+
+
+# put together individual plots for climate
 p.count     <- ggarrange(p1.count, p2.count, ncol = 1)
 p.agg       <- ggarrange(p1.agg, p2.agg, ncol = 1)
 p.peak      <- ggarrange(p1.peak, p2.peak, ncol = 1)
 p.peak.diff <- ggarrange(p1.peak.diff, p2.peak.diff, ncol = 1)
 
 
-p.out.year <- ggarrange(p0.count, p0.agg, p0.peak, p0.peak.diff, 
+
+
+
+
+
+
+
+
+
+
+
+# PLOT: Temporal development ----------------------------------
+p.full.year <- ggarrange(p0.count, p0.agg, p0.peak, p0.peak.diff, 
                         ncol=4, nrow = 1 , align = 'hv', 
                         font.label = list(size = 8, color = "black", face = "plain", family = NULL),
                         labels = c( paste("[a] ", lab_popul_level),
@@ -2439,11 +1868,8 @@ p.out.year <- ggarrange(p0.count, p0.agg, p0.peak, p0.peak.diff,
                                     paste("[d] ", lab_peak_growth )))
 
 
-windows(7,4)
-(p.out.year)
-
-windows(7,4)
-(p.out.clim)
+windows(7,5)
+(p.full.year)
 
 
 p.out.clim <- ggarrange(p.count, p.agg, p.peak, p.peak.diff, 
@@ -2469,10 +1895,15 @@ p.clim.int <- ggarrange(p3.count, p3.agg, p3.peak, p3.peak.diff,
                       paste("[b] ", lab_colonization_time ),
                       paste("[c] ", lab_peak_time ),
                       paste("[d] ", lab_peak_growth )))
-windows(7,4)
+windows(7,2)
 p.clim.int
 ggsave(filename = 'outFigs/Fig4.png', plot = p.clim.int, 
        width = 7, height = 4, dpi = 300, bg = 'white')
+
+
+
+
+
 
 
 
