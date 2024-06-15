@@ -1,10 +1,10 @@
-## -----------------------------------------------------
-#
-# Process volume data : tree damage from LWF
-#
-# -----------------------------------------------------
 
-# Goal: do beetle counts (+ lags) predict tree damage?  
+
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+# LInk trap data with damage volume and RS observation
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+# Goal: do beetle counts/dynamics preds (+ lags) predict tree damage?  
 
 # from LWF: the damage volume+ geometries
 #  - read tables
@@ -82,7 +82,12 @@ library(lmtest)
 # colors
 library(RColorBrewer)
 
+library(mgcv)
+library(mgcViz)
+library(lme4)
 #library(knitr)   # for table outputs
+
+library(forcats)  # reorder by factor
 
 
 
@@ -91,7 +96,10 @@ library(RColorBrewer)
 # load cleaned data
 load("outData/ips_counts.Rdata")
 load("outData/spatial.Rdata")
+dat_dynamics <- fread( 'outTable/beetle_dynamic_indicators.csv')
 
+
+source("my_functions.R")
 # Get beetle counts - corrected, instead of previous 'dat'
 # - dat.ips.clean      # dat <- fread(paste(myPath, outFolder, "dat.csv", sep = "/"))
 # - max.diff.doy       # get DOY of max increase
@@ -126,14 +134,14 @@ df_ID   <- unique(df_damage$AELF_district_ID)  # 337 district numbers
 
 #### Process beetle sums/year/trap --------------------------------------------
 # add beetle counts to trap locations per year 
-ips_sum <- 
+sum_ips <- 
   dat.ips.clean %>% 
   group_by(year,falsto_name) %>% 
-  dplyr::summarize(sum_beetle = sum(fangmenge, na.rm = T)) 
+  dplyr::summarize(sum_ips = sum(fangmenge, na.rm = T)) 
 
 # convert to sf object, crs 3035
-ips_sum_sf <-  xy_sf_expand %>%  left_join(ips_sum, by = c("falsto_name", 'year')) 
-#st_is_valid(ips_sum_sf_trans)
+sum_ips_sf <-  xy_sf_expand %>%  left_join(sum_ips, by = c("falsto_name", 'year')) 
+#st_is_valid(sum_ips_sf_trans)
 
 # change projection & convert to terra
 my_crs = st_crs(disturb_year)
@@ -143,36 +151,36 @@ my_crs = st_crs(disturb_year)
 sf_districts_trans <- st_transform(sf_districts, crs = my_crs) # st_crs(disturb_year))
 v_districts        <-  terra::vect(sf_districts_trans) # convert to terra
 
-ips_sum_sf_trans  <- st_transform(ips_sum_sf, crs = my_crs)
-v_ips_sum         <- vect(ips_sum_sf_trans)
+sum_ips_sf_trans  <- st_transform(sum_ips_sf, crs = my_crs)
+v_sum_ips         <- vect(sum_ips_sf_trans)
 
 
 # works well for terra! 
 plot(forest)
 plot(disturb_type)
-plot(v_ips_sum, add = T)
+plot(v_sum_ips, add = T)
 
 
 
 # simplify terra object:
 v_districts_simpl <- simplifyGeom(v_districts, tolerance=20, preserveTopology=TRUE, makeValid=TRUE)
-v_ips_sum_simpl   <- simplifyGeom(v_ips_sum, tolerance=20, preserveTopology=TRUE, makeValid=TRUE)
+v_sum_ips_simpl   <- simplifyGeom(v_sum_ips, tolerance=20, preserveTopology=TRUE, makeValid=TRUE)
 
 
-writeVector(v_ips_sum_simpl, 'outSpatial/XY_beetle_sum_years.gpkg', overwrite=TRUE) 
+writeVector(v_sum_ips_simpl, 'outSpatial/XY_beetle_sum_years.gpkg', overwrite=TRUE) 
 
 #  does simplification work? yes!!
 plot(v_districts_simpl)
-plot(v_ips_sum_simpl, add = T, col = 'red')
+plot(v_sum_ips_simpl, add = T, col = 'red')
 
-identical(crs(v_districts_simpl), crs(v_ips_sum_simpl))
+identical(crs(v_districts_simpl), crs(v_sum_ips_simpl))
 
 
-# Process rasters ------------------------------------------------------------
+# Read rasters ------------------------------------------------------------
 # there is an aditiona row in the damage data with district ID 0 - I can remove that
 
 
-###### crop the rasters: they are for whole germany, crop to Bavaria --------------------------
+###### crop  rasters to Bavaria --------------------------
 dist_year_crop <- terra::crop(disturb_year, v_districts_simpl)
 dist_type_crop <- terra::crop(disturb_type, v_districts_simpl)
 forest_crop    <- terra::crop(forest,       v_districts_simpl)
@@ -182,18 +190,16 @@ crs(disturb_type) <- crs(dist_year_crop)
 crs(forest_crop)  <- crs(dist_year_crop)
 
 
-# Simplify the df districts geometry -------------------------------
+### Process department shp and extract revier ID  -------------------------------
 sf_simpled <- st_as_sf(v_districts_simpl) #st_simplify(sf_districts_trans, dTolerance = 20, preserveTopology = TRUE)
 
 identical(crs(sf_simpled), crs(v_districts_simpl))
-
-###### convert districts poly to raster ------------------------------------
 
 # get extend and set correct projectipn
 ext <- as(extent(sf_simpled), 'SpatialPolygons')  # treat raster as from raster, not terra package
 ext <- st_as_sf(ext)
 
-identical(crs(ips_sum_sf_trans), crs(ext))
+identical(crs(sum_ips_sf_trans), crs(ext))
 
 # efine teh crs first - it was NA
 st_crs(ext) <- my_crs# st_crs(raster(disturb_year))
@@ -202,7 +208,7 @@ st_crs(ext) <- my_crs# st_crs(raster(disturb_year))
 
 st_crs(sf_simpled) == st_crs(ext) 
 st_crs(disturb_year) == st_crs(ext) 
-st_crs(ips_sum_sf_trans) == st_crs(ext) 
+st_crs(sum_ips_sf_trans) == st_crs(ext) 
 
 # create a base raster to rasteroize to it
 base_raster = raster(dist_year_crop)
@@ -214,26 +220,13 @@ grid_sel_ras <- fasterize::fasterize(grid_sel,
                                      #raster(dist_year_crop), 
                                      field = "forstrev_1") # name the new rasters as polygon ids  #, field = "forstrev_1"
 
-
-#ips_sum_sf_trans2  <- st_transform(ips_sum_sf_trans, crs = my_crs)
-# try of geometry fits - does not fit!!!
-plot(grid_sel_ras)
-plot(ips_sum_sf_trans ,add = T)
-
-plot(rast(grid_sel_ras))
-plot(vect(ips_sum_sf_trans) ,add = T)
-
 # assigne the crs manually! differet assigenement for vector and raster
 crs(grid_sel_ras)              <- crs(sf_simpled)
-st_crs(ips_sum_sf_trans)       <- crs(sf_simpled)
-
-
-#ips_sum_sf_trans <- st_transform(ips_sum_sf_trans, crs_raster@projargs)
-
+st_crs(sum_ips_sf_trans)       <- crs(sf_simpled)
 
 # Extract CRS again after transformation
 crs_raster <- crs(grid_sel_ras)
-crs_vector <- st_crs(ips_sum_sf_trans)
+crs_vector <- st_crs(sum_ips_sf_trans)
 
 # Confirm they are now the same
 identical(as.character(crs_raster), crs_vector$wkt)  # Should return TRUE
@@ -241,24 +234,23 @@ identical(as.character(crs_raster), crs_vector$wkt)  # Should return TRUE
 
 # check if the crs fits! YES
 st_crs(grid_sel_ras)       == st_crs(sf_simpled)
-st_crs(grid_sel_ras)       == st_crs(ips_sum_sf_trans)
-#st_crs(rast(grid_sel_ras)) == st_crs(vect(ips_sum_sf_trans))
-#crs(rast(grid_sel_ras))    == crs(vect(ips_sum_sf_trans))
+st_crs(grid_sel_ras)       == st_crs(sum_ips_sf_trans)
 
 
 # extract the 'reviers ID' (from the districts) to the beetle counts data 
 district_ID <- terra::extract(rast(grid_sel_ras),
-                              v_ips_sum_simpl,
-                            #  vect(ips_sum_sf_trans), 
+                              v_sum_ips_simpl,
+                            #  vect(sum_ips_sf_trans), 
                               df = TRUE, bind = TRUE )
 
-#### Link beetle counts vs damage volume per department (sub district)  -------------------------------------------------------
+#### Link beetle counts vs damage volume per department -------------------------------------------------------
 ips_damage_district <- district_ID %>% 
   as.data.frame() %>% 
   rename(forstrev_1 = layer)
 
 
-# join trap counts with damage data
+# join trap counts with volume damage data and beetle dynamics indicators;
+# average per trap pair to not have duplicate records
 ips_damage_merge <- ips_damage_district %>% 
   left_join(df_damage, by = c('forstrev_1' = 'AELF_district_ID',
                               'year' = 'Year')) %>% 
@@ -268,324 +260,28 @@ ips_damage_merge <- ips_damage_district %>%
   # lag tree damage: does beetle counts (or their lags) predict tree damage?:
   group_by(falsto_name) %>% 
   arrange(year, .by_group = TRUE) %>%
-  mutate(sum_beetle_lag1  = lag(sum_beetle, n = 1, default = NA),
-         sum_beetle_lag2  = lag(sum_beetle, n = 2, default = NA, order_by = year))
-
-# remove NAs
-ips_damage_clean <- na.omit(ips_damage_merge)
-
-# get log values - makes it nice for damaged volume
-ips_damage_clean$log_sum_beetle              <- log(ips_damage_clean$sum_beetle + 1)
-ips_damage_clean$log_sum_beetle_lag1         <- log(ips_damage_clean$sum_beetle_lag1 + 1)
-ips_damage_clean$log_sum_beetle_lag2         <- log(ips_damage_clean$sum_beetle_lag2 + 1)
-ips_damage_clean$log_damaged_volume_total_m3 <- log(ips_damage_clean$damaged_volume_total_m3 + 1)
-
-
-# try correlation
-cor(ips_damage_clean$sum_beetle, ips_damage_clean$damaged_volume_total_m3, method = 'spearman')
-cor(ips_damage_clean$sum_beetle_lag1, ips_damage_clean$damaged_volume_total_m3, method = 'spearman')
-cor(ips_damage_clean$sum_beetle_lag2, ips_damage_clean$damaged_volume_total_m3, method = 'spearman')
-
-
-
-# try correlation: of the log values: the same values!
-cor(ips_damage_clean$log_sum_beetle, ips_damage_clean$log_damaged_volume_total_m3)
-cor(ips_damage_clean$log_sum_beetle_lag1, ips_damage_clean$log_damaged_volume_total_m3)
-cor(ips_damage_clean$log_sum_beetle_lag2, ips_damage_clean$log_damaged_volume_total_m3)
-
-#library(glm)
-m_lag0 <- glm(log_damaged_volume_total_m3 ~ log_sum_beetle, data = ips_damage_clean, family = gaussian())
-m_lag1 <- glm(log_damaged_volume_total_m3 ~ log_sum_beetle_lag1, data = ips_damage_clean, family = gaussian())
-m_lag2 <- glm(log_damaged_volume_total_m3 ~ log_sum_beetle_lag2, data = ips_damage_clean, family = gaussian())
-
-m_poly <- glm(formula = log_damaged_volume_total_m3 ~ log_sum_beetle + I(log_sum_beetle^2), family = gaussian(), data = ips_damage_clean)
-# the lag0 is teh best from AIC, also teh variance explained: 6% for lag0
-AIC(m_lag0,m_lag1,m_lag2,m_poly)
-BIC(m_lag0,m_lag1,m_lag2)
-#r2(m_lag0,m_lag1,m_lag2)
-summary(m_poly)
-simulateResiduals(m_poly, plot = T)
-plot(allEffects(m_poly))
-
-##### gam ---------------
-library(mgcv)
-gam_model_lag0 <- gam(log_damaged_volume_total_m3 ~ s(log_sum_beetle), family = gaussian(), data = ips_damage_clean)
-gam_model_lag1 <- gam(log_damaged_volume_total_m3 ~ s(log_sum_beetle_lag1), family = gaussian(), data = ips_damage_clean)
-gam_model_lag2 <- gam(log_damaged_volume_total_m3 ~ s(log_sum_beetle_lag2), family = gaussian(), data = ips_damage_clean)
-
-plot(gam_model_lag0)
-
-AIC(gam_model_lag0,gam_model_lag1, gam_model_lag2, m_lag0,m_lag1,m_lag2,m_poly, gam_model_lag0_6) # ,gam_model_0_6
-
-# test k size
-gam_model_lag0_3 <- gam(log_damaged_volume_total_m3 ~ s(log_sum_beetle, k =3), family = gaussian(), data = ips_damage_clean)
-gam_model_lag0_6 <- gam(log_damaged_volume_total_m3 ~ s(log_sum_beetle, k =4), family = gaussian(), data = ips_damage_clean)
-
-# try without logs - wrong! better to stick with 
-gam_model_0_6 <- gam(damaged_volume_total_m3 ~ s(sum_beetle, k =6), family = tw(), data = ips_damage_clean)
-
-plot(gam_model_lag0_3)
-plot(gam_model_lag0_6)
-plot(gam_model_0_6)
-summary(gam_model_0_6)
-
-AIC(gam_model_0_6,gam_model_lag0_6 )
-summary(gam_model_lag0_6) # the best!!!
-
-# include random effects
-gam_tw1 <- gam(damaged_volume_total_m3 ~ s(sum_beetle, k = 3) + s(year,
-                                                                               k = 3) , family = tw(),method = "REML", data = ips_damage_clean)
-AIC(gam_model_0_6, gam_tw1)
-plot(gamm_fit, page = 1)
-
-
-# !!! try the account for autocorrelation -------------
-library(nlme)
-
-# Fit a GAMM model with AR(1) autocorrelation structure
-gamm_fit <- gam(damaged_volume_total_m3 ~ s(sum_beetle, k = 3) + s(year, k = 5),
-                 data = ips_damage_clean,
-                # random = list(forstrev_1  = ~1),
-                # correlation = corAR1(form = ~ year | forstrev_1 ),  # AR(1) within each location
-                 method = "REML",
-                 family = tw())
-
-# Summary of the fit
-summary(gamm_fit$gam)
-summary(gamm_fit$lme)  # Check the output of the mixed effects component, especially the correlation structure
-
-# plot using ggeffects:
-p1 <- ggpredict(gam_model_lag0_6, terms = "log_sum_beetle [all]", allow.new.levels = TRUE)
-
-ggplot(p1, aes(x = x, y = predicted, ymin = conf.low, ymax = conf.high)) +
-  geom_line(color = 'blue') +
-  geom_ribbon(alpha = 0.1, fill = "blue") +
-  labs(y = "Effect on Log Damaged Volume (m^3)", x = "Log Sum Beetle") +
-  theme_classic()
-#pred_effects <- ggpredict(gam_model_lag0_6, terms = "log_sum_beetle")
-
-#p <- plot(pred_effects) + 
-#  labs(y = "Effect on Log Damaged Volume (m^3)", x = "Log Sum Beetle") +
-#  ggtitle("Predicted Effects of Log Sum Beetle on Tree Damage Volume")
-#print(p)
-
-# Function to convert log values to original scale and interpret
-interpret_effect <- function(log_beetle) {
-  beetle_count <- exp(log_beetle)
-  damaged_volume <- exp(predict(gam_model_lag0_6, newdata = data.frame(log_sum_beetle = log_beetle)))
-  cat("With a beetle count of", round(beetle_count), "we predict a tree damage volume of approximately", round(damaged_volume), "cubic meters.\n")
-}
-
-# Example usage
-interpret_effect(8)
-
-
-library(lme4)
-mixed_model <- lmer(log_damaged_volume_total_m3 ~ log_sum_beetle + (1 | falsto_name  ) + (1 | year), data = ips_damage_clean)
-mixed_model_poly <- lmer(log_damaged_volume_total_m3 ~ poly(log_sum_beetle,2) + (1 | falsto_name  ) + (1 | year), data = ips_damage_clean)
-
-#mixed_model_poly <- lmer(log_damaged_volume_total_m3 ~ log_sum_beetle*falsto_name + (1 | falsto_name  ), data = ips_damage_clean)
-
-
-summary(mixed_model_poly)
-r2(mixed_model_poly)
-plot(mixed_model)
-plot(allEffects(mixed_model_poly))
-AIC(mixed_model,gam_model_lag0_6,mixed_model_poly)
-
-# try glm again with teh factor
-m_level_lag0 <- glm(log_damaged_volume_total_m3 ~ log_sum_beetle +  pop_level, data = ips_damage_clean, family = gaussian())
-#m_level_poly <- glm(log_damaged_volume_total_m3 ~ poly(log_sum_beetle,2) +  pop_level, data = ips_damage_clean, family = gaussian())
-m_level_poly2 <- glm(log_damaged_volume_total_m3 ~ poly(log_sum_beetle,2), data = ips_damage_clean, family = gaussian())
-
-
-summary(m_level_lag0)
-plot(allEffects(m_level_poly2))
-
-AIC(m_level_poly,m_level_lag0,m_level_poly2)
-
-boxplot(ips_damage_clean$log_sum_beetle)
-# check relationship by years
-ips_damage_clean %>% 
-  ggplot(aes(x = log_sum_beetle,
-             y = log_damaged_volume_total_m3)) +
-  geom_point() +
-  geom_smooth() #+
-  #facet_wrap(.~year)
-
-
-# use a gamma to predictthe tree damage (continuous,positive)
-# Fitting a Gamma model
-gamma_m_lag0 <- glm(damaged_volume_total_m3 ~ sum_beetle, family = Gamma(link = "log"), data = ips_damage_clean)
-gamma_m_lag1 <- glm(damaged_volume_total_m3 ~ sum_beetle_lag1, family = Gamma(link = "log"), data = ips_damage_clean)
-gamma_m_lag2 <- glm(damaged_volume_total_m3 ~ sum_beetle_lag2, family = Gamma(link = "log"), data = ips_damage_clean)
-
-AIC(gamma_m_lag0, gamma_m_lag1, gamma_m_lag2)
-simulateResiduals(gamma_m_lag0, plot = T)
-
-# r2(gamma_m_lag0, gamma_m_lag1, gamma_m_lag2)
-
-# try tweedie???
-ips_damage_clean$sum_beetle_scaled <- scale(ips_damage_clean$sum_beetle)
-ips_damage_clean$sum_beetle_lag1_scaled <- scale(ips_damage_clean$sum_beetle_lag1)
-ips_damage_clean$sum_beetle_lag2_scaled <- scale(ips_damage_clean$sum_beetle_lag2)
-
-# run without scaling: running into convergence issues; too long runnning time
-#' tw_lag0 <- glmmTMB(damaged_volume_total_m3 ~ sum_beetle_scaled, family = tweedie(link = "log"), 
-#'                    data = ips_damage_clean, 
-#'                       na.action = na.exclude)
-#' tw_lag1 <- glmmTMB(damaged_volume_total_m3 ~ sum_beetle_lag1_scaled, family = tweedie(link = "log"), 
-#'                    data = ips_damage_clean, 
-#'                    na.action = na.exclude)
-#' tw_lag2 <- glmmTMB(damaged_volume_total_m3 ~ sum_beetle_lag2_scaled, family = tweedie(link = "log"), 
-#'                    data = ips_damage_clean, 
-#'                    na.action = na.exclude)
-
-#AIC(tw_lag0, tw_lag1,tw_lag2)
-#simulateResiduals(gamma_m_lag0, plot = T)
-#plot(allEffects(m3))
-
-
-# get variance explained: for Gamma distribution, this is a pseudo r2
+  rename(trapID = falsto_name) %>%  
+   # add beetle dynamics variables 
+  left_join(dat_dynamics) %>%
+  group_by(trapID)  %>% 
+  mutate(sum_ips_lag1  = lag(sum_ips, n = 1, default = NA, order_by = year),
+         sum_ips_lag2  = lag(sum_ips, n = 2, default = NA, order_by = year),
+         agg_doy_lag1  = lag(agg_doy, n = 1, default = NA, order_by = year),
+         agg_doy_lag2  = lag(agg_doy, n = 2, default = NA, order_by = year),
+         peak_doy_lag1  = lag(peak_doy, n = 1, default = NA, order_by = year),
+         peak_doy_lag2  = lag(peak_doy, n = 2, default = NA, order_by = year),
+         peak_diff_lag1  = lag(peak_diff, n = 1, default = NA, order_by = year),
+         peak_diff_lag2  = lag(peak_diff, n = 2, default = NA, order_by = year))  %>% 
+  ungroup(.) %>% 
+  mutate(pairID = as.factor(pairID),
+         trapID = as.factor(trapID))
+  
+  
 
 
 
-
-# Kriging -----------------------------------------------------------------------
-
-# rasterzie
-# xv <- rasterize(v_districts_simpl, dist_year_crop, fun=sum)
-# plot(xv)
-# 
-# # convert spatRast to raster format
-# back_rst <- raster(xv)
-# 
-# plot(v_ips_sum_simpl, add = T )
-# plot(v_ips_sum_2015, add = T , col = 'red')
-# 
-# 
-# plot(back_rst )
-# plot(trap_data, add = T , col = 'red')
-# 
-# 
-# 
-# # test kriging: chat gpt
-# 
-# # Load necessary libraries
-# library(terra)
-# library(gstat)
-# 
-# # Create some sample spatial data
-# set.seed(123)
-# coords <- cbind(runif(50, 0, 10), runif(50, 0, 10))
-# values <- sin(coords[,1]) + cos(coords[,2]) + rnorm(50, 0, 0.1)
-# 
-# # Create a SpatVector object with the sample data
-# sp_data <- vect(data.frame(x = coords[,1], y = coords[,2], z = values), geom = c("x", "y"))
-# 
-# # Convert to SpatialPointsDataFrame
-# sp_data_spdf <- as(sp_data, "Spatial")
-# 
-# # Create a raster template
-# rast_template <- rast(xmin=0, xmax=10, ymin=0, ymax=10, resolution=0.1)
-# 
-# # Convert raster template to SpatialPixelsDataFrame
-# rast_template_spdf <- as(rast_template, "Spatial")
-# 
-# # Create a gstat object for ordinary kriging
-# g <- gstat(id="z", formula=z~1, data=sp_data_spdf)
-# 
-# # Compute and fit variogram
-# vgm_model <- variogram(z~1, sp_data_spdf)
-# fit_vgm <- fit.variogram(vgm_model, model=vgm("Sph"))
-# 
-# # Perform kriging
-# krig_result <- predict(g, newdata=rast_template_spdf, model=fit_vgm)
-# 
-# # Convert the result to a SpatRaster
-# krig_raster <- rast(krig_result)
-# 
-# # Plot the result
-# plot(krig_raster, main="Kriging Interpolation")
-# points(sp_data, col="red", pch=16)
-# 
-# 
-# 
-# 
-# 
-# # interpolate the beetle trap ata overBavaria/ year
-# # link better with the reported damage data on teh district levels
-# library(gstat)
-# 
-# v_ips_sum_2015 <- v_ips_sum[v_ips_sum$year == 2015, ]
-# 
-# #convert to sf object
-# trap_data <- st_as_sf(v_ips_sum_2015)
-# 
-# 
-# 
-# interpolate(p, tps)
-# 
-# 
-# # Create a vast_as_sf()# Create a variogram
-# vgm_model <- variogram(sum_beetle ~ 1, trap_data)
-# 
-# 
-# # Fit a variogram model
-# fit_model1 <- fit.variogram(vgm_model, model = vgm(psill=1, model="Exp", range=1, nugget=0.1))
-# 
-# # Fit a variogram model with the estimated parameters from the semivariogram plot
-# fit_model2 <- fit.variogram(vgm_model, model = vgm(psill = 8e7, model = "Exp", range = 100000, nugget = 2e7))
-# 
-# #grid_sel_ras_sf <- raster::raster(grid_sel_ras)
-# #grid_spdf <- as(grid_sel_ras, "SpatialPixelsDataFrame")
-# #crs(grid_spdf) <- crs(raster(dist_year_crop))
-# #identical(crs(grid_spdf), crs(raster(dist_year_crop)))
-# 
-# # Step 2: Perform Kriging
-# kriging_result <- krige(sum_beetle                 ~ 1, trap_data, newdata = back_rst, model = fit_model2)
-# 
-# # Optional: Convert kriging result back to RasterLayer if needed
-# kriging_raster <- raster(kriging_result)
-# 
-# 
-# 
-# # Perform Kriging
-# kriging_result <- krige(count ~ 1, trap_data, newdata =grid_sel_ras, model = fit_model2)
-# grid_sel_ras
-# 
-# # Convert the result to a raster for visualization
-# r_interpolated <- rast(kriging_result)
-# 
-# # Plot the interpolated raster
-# plot(r_interpolated, main = "Interpolated Bark Beetle Counts")
-# 
-# 
-# # test krigin on Meuse ---------------------
-# library(sp)
-# data(meuse)
-# coordinates(meuse) = ~x+y
-# data(meuse.grid)
-# gridded(meuse.grid) = ~x+y
-# m <- vgm(.59, "Sph", 874, .04)
-# # ordinary kriging:
-# x <- krige(log(zinc)~1, meuse, meuse.grid, model = m)
-# spplot(x["var1.pred"], main = "ordinary kriging predictions")
-# spplot(x["var1.var"],  main = "ordinary kriging variance")
-# # simple kriging:
-# x <- krige(log(zinc)~1, meuse, meuse.grid, model = m, beta = 5.9)
-# # residual variogram:
-# m <- vgm(.4, "Sph", 954, .06)
-# # universal block kriging:
-# x <- krige(log(zinc)~x+y, meuse, meuse.grid, model = m, block = c(40,40))
-# spplot(x["var1.pred"], main = "universal kriging predictions")
-# 
-# 
-# 
-# 
-# 
-
-# merge disturbance rasters together; check n of cells---------------------------------------
+# Extract RS data   -------------------------------------------------------------
+# merge disturbance rasters together; check n of cells 
 ncell(grid_sel_ras)
 ncell(dist_year_crop)
 ncell(dist_type_crop)
@@ -662,49 +358,693 @@ df_cor <- df_all %>%
                                             method = "spearman", use = "complete.obs"))
 
 
-#### correlations per location: beetle counts vs damage volume --------------------
+#### MAP: correlations per XY: beetle counts vs damage volume --------------------
 df_cor_counts_damage <- 
   ips_damage_clean %>% 
   #dplyr::filter(!ID %in% c(0, 50104, 60613,62705)) %>% # exlude if there is missing data
   group_by(falsto_name,forstrev_1        ) %>% 
-  dplyr::summarize(spearm_cor_lag0 = cor(damaged_volume_total_m3, sum_beetle, 
+  dplyr::summarize(spearm_cor_lag0 = cor(damaged_volume_total_m3, sum_ips, 
                                            method = "spearman", use = "complete.obs"),
-                   spearm_cor_lag1 = cor(damaged_volume_total_m3, sum_beetle_lag1 , 
+                   spearm_cor_lag1 = cor(damaged_volume_total_m3, sum_ips_lag1 , 
                                             method = "spearman", use = "complete.obs"),
-                   spearm_cor_lag2 = cor(damaged_volume_total_m3, sum_beetle_lag2 , 
+                   spearm_cor_lag2 = cor(damaged_volume_total_m3, sum_ips_lag2 , 
                                         method = "spearman", use = "complete.obs"))
 
 
-#### correlations per disctrict: beetle counts vs RS damage --------------------------
+#### MAP: correlations per district: beetle counts vs RS damage --------------------------
 # merge based on the district ID, subset the data as the traps do not cover the whole 
 # bavaria's districts
+
+# Final table: for RS and for damaged volume ----------------------------------
+
+# keep datasets separated, as RS has lower number of years
+# run analysis for trap vs RS damage
+# trap vs damaged volume
+
 df_traps_RS_damage <-  
-ips_damage_clean %>%  
+  ips_damage_clean %>%  
   left_join(df_all,
              by = c("forstrev_1" =   "ID",
                               "year" = "year",
                     "damaged_volume_total_m3" = "damaged_volume_total_m3") ) %>% 
-  mutate(falsto_name = as.factor(falsto_name))
+  mutate(trapID = as.factor(trapID)) %>% 
+  group_by(pairID, year) %>% 
+ summarise(sum_ips = mean(sum_ips, na.rm = T),
+           agg_doy = mean(agg_doy, na.rm = T),
+           peak_doy= mean(peak_doy, na.rm = T),
+           peak_diff= mean(peak_diff, na.rm = T),
+           damage_vol= mean(damaged_volume_total_m3, na.rm = T),
+           x = mean(x, na.rm = T),
+           y = mean(y, na.rm = T),
+           RS_wind_beetle = mean(RS_wind_beetle, na.rm = T),
+            sum_ips_lag1 = mean(sum_ips_lag1, na.rm = T),
+           sum_ips_lag2 = mean(sum_ips_lag2, na.rm = T),
+           log_sum_ips_lag1 = mean(log(sum_ips_lag1), na.rm = T),
+           log_sum_ips_lag2 = mean(log(sum_ips_lag2), na.rm = T),
+           agg_doy_lag1 = mean(agg_doy_lag1, na.rm = T),
+           agg_doy_lag2 = mean(agg_doy_lag2, na.rm = T),
+           peak_doy_lag1 = mean(peak_doy_lag1, na.rm = T),
+           peak_doy_lag2 = mean(peak_doy_lag2, na.rm = T),
+           peak_diff_lag1 = mean(peak_diff_lag1, na.rm = T),
+           peak_diff_lag2 = mean(peak_diff_lag2, na.rm = T)
+           ) %>%
+ ungroup(.) %>% 
+ mutate(log_sum_ips = log(sum_ips)) %>% 
+  mutate(f_year = as.factor(year))
+  
+
+###### create final tables for RS data and volume data 
+
+fin_dat_RS <- df_traps_RS_damage %>% 
+  na.omit()
+
+dim(fin_dat_RS)
+
+fin_dat_damage <- df_traps_RS_damage %>% 
+  dplyr::select(-RS_wind_beetle) %>% 
+  na.omit() 
+
+dim(fin_dat_damage)
+
+# Find lags and predictors -------------------------------------------------------
+##### Find lags: damage volume  -------------
+dependent_damage <-  c("damage_vol")
+
+# Initialize a data frame to store AIC values and deviance explained
+model_metrics_damage <- data.frame(Predictor = character(), 
+                                  Dependent = character(), 
+                                  AIC = numeric(), 
+                                  R_squared = numeric())
+
+# list predictors to test
+selected_predictors <- c('sum_ips', 'sum_ips_lag1','sum_ips_lag2',
+                         'log_sum_ips', 'log_sum_ips_lag1','sum_ips_lag2',
+                         'agg_doy'   , 'agg_doy_lag1', 'agg_doy_lag2' ,
+                         'peak_doy', 'peak_doy_lag1','peak_doy_lag2',
+                         'peak_diff', 'peak_diff_lag1',  'peak_diff_lag2'
+) 
 
 
-df_traps_RS_damage_mean <- df_traps_RS_damage %>% 
-  mutate(pairID = as.factor(str_sub(falsto_name, 1, -3)),
-         year_fact = as.factor(year)) %>% 
-  group_by(pairID, year_fact) %>% 
-  summarise(log_sum_beetle = mean(log_sum_beetle, na.rm =T),
-            RS_wind_beetle = mean(RS_wind_beetle, na.rm =T)) %>% 
-  na.omit() %>% 
+
+# Loop over each dependent variable
+for (dep in dependent_damage) {
+  #print(dep)
+  # Loop over each predictor
+  for (pred in selected_predictors) {
+    print(pred)
+    # Fit the model
+    formula <- as.formula(paste(dep, "~ s(", pred, ", by = f_year, k = 8) + s(year, k=5) +s(x, y, bs = 'gp', k = 20)"))
+    
+    #print(formula)
+    model <- gamm(formula,  family = tw,
+                  method = 'REML',  
+                  data = fin_dat_damage,
+                  correlation = corAR1(form = ~ year | pairID))
+    
+    # Extract model summary
+    model_summary <- summary(model$gam)
+    
+    # Store the AIC value and deviance explained
+    model_metrics_damage <- rbind(model_metrics_damage, data.frame(Predictor = pred, 
+                                                                 Dependent = dep, 
+                                                                 AIC = AIC(model$lme), 
+                                                                 R_squared = round(model_summary$r.sq*100,1)
+    ))
+  }
+}
+
+# View the AIC values and deviance explained
+
+(model_metrics_damage)
+
+
+
+####### Find predicors  lags: RS   -------------
+dependent_RS <-  c("RS_wind_beetle")
+
+# Initialize a data frame to store AIC values and deviance explained
+model_metrics_RS <- data.frame(Predictor = character(), 
+                                   Dependent = character(), 
+                                   AIC = numeric(), 
+                                   R_squared = numeric())
+
+
+# Loop over each dependent variable
+for (dep in dependent_RS) {
+  #print(dep)
+  # Loop over each predictor
+  for (pred in selected_predictors) {
+    print(pred)
+    # Fit the model
+    formula <- as.formula(paste(dep, "~ s(", pred, ", by = f_year, k = 8) + s(year, k=4) +s(x, y, bs = 'gp', k = 20)"))
+    print(formula)
+    #print(formula)
+    model <- gamm(formula,  family = tw,
+                  method = 'REML',  
+                  data = fin_dat_RS,
+                  correlation = corAR1(form = ~ year | pairID))
+    
+    # Extract model summary
+    model_summary <- summary(model$gam)
+    
+    # Store the AIC value and deviance explained
+    model_metrics_RS <- rbind(model_metrics_RS, data.frame(Predictor = pred, 
+                                                                   Dependent = dep, 
+                                                                   AIC = AIC(model$lme), 
+                                                                   R_squared = round(model_summary$r.sq*100,1)
+    ))
+  }
+}
+
+# View the AIC values and deviance explained
+
+(model_metrics_RS)
+
+# merge two tables into one
+model_lag_counts_damage_RS <- rbind(model_metrics_RS,
+                           model_metrics_damage) %>% 
   distinct()
 
 
+# Export as a nice table in word:
+sjPlot::tab_df(model_lag_counts_damage_RS,
+               #col.header = c(as.character(qntils), 'mean'),
+               show.rownames = FALSE,
+               file="outTable/find_lag_predict_damage_by_counts.doc",
+               digits = 1) 
+
+
+# plot the best predictors and lags: ----------------------------------------
+
+# first order the data:
+
+average_R_squared <- model_lag_counts_damage_RS %>%
+  group_by(Predictor) %>%
+  summarize(avg_R_squared = mean(R_squared)) %>%
+  arrange(desc(avg_R_squared))
+
+
+# Merge the average R_squared back to the original data
+
+model_lag_counts_damage_RS_avg <- model_lag_counts_damage_RS %>%
+  left_join(average_R_squared, by = "Predictor") %>%
+  mutate(Predictor = fct_reorder(Predictor, R_squared, .desc = TRUE))
+
+
+
+model_lag_counts_damage_RS_avg %>% 
+  ggplot(aes(x = Predictor, y = R_squared, col = Dependent)) +
+  geom_segment(aes(x = Predictor, 
+                   xend = Predictor, 
+                   y = 0, 
+                   yend = R_squared), color = "grey") +
+  geom_point(size = 4) +
+  theme_classic2() +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1))
+
+
+
+library(stringr)
+
+p_lags_observed_damage <- 
+  model_lag_counts_damage_RS %>% 
+  dplyr::filter(!str_detect(Predictor, "log")) %>%
+  mutate(Predictor = ifelse(str_detect(Predictor, "lag"), 
+                            Predictor, 
+                            paste0(Predictor, "_lag0"))) %>% 
+  dplyr::select(-AIC) %>% 
+  pivot_wider(names_from = Dependent, 
+              values_from = c(R_squared)) %>% 
+  arrange(-damage_vol ) %>% 
+ # mutate(Predictor = case_when())
+  mutate(Predictor = gsub("sum_ips", "Pop. lev.", Predictor)) %>% 
+  mutate(Predictor = gsub("agg_doy", "Agg. timing", Predictor)) %>% 
+  mutate(Predictor = gsub("peak_doy", "Peak s. timing", Predictor)) %>% 
+  mutate(Predictor = gsub("peak_diff", "Peak s. intens.", Predictor)) %>% 
+  mutate(Predictor = as.factor(Predictor)) %>%
+  mutate(Predictor = fct_reorder(Predictor, -damage_vol)) %>% 
+  ggplot() +
+    geom_segment( aes(x=Predictor, xend=Predictor, 
+                      y=damage_vol, yend=RS_wind_beetle  ), color="grey",lwd = 1.2) +
+    geom_point( aes(x=Predictor, y=RS_wind_beetle, color = "RS_wind_beetle"), size=3 ) +
+    geom_point( aes(x=Predictor, y=damage_vol,color = "damage_vol" ),  size=3 )  +
+    scale_color_manual(values = c("RS_wind_beetle" = rgb(0.2, 0.7, 0.1, 0.5), 
+                                  "damage_vol" = rgb(0.7, 0.2, 0.1, 0.5)),
+                       labels = c("RS_wind_beetle" = "Remote sensing\n[# pixels]",
+                                  "damage_vol" =  expression("Forest inventory [m"^3*"]"))) +
+    labs(y = expression("Adjusted R"^2*"[%]"),
+         x = "",
+         color = 'Beetle tree mortality\nsource')+
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust=1),
+        legend.position = 'right')
+  
+windows(6,3.5)
+p_lags_observed_damage
+
+ggsave(filename = 'outFigs/observation_vs_predictors_lags.png', 
+       plot = p_lags_observed_damage, width = 6, 
+       height = 3.5, dpi = 300, bg = 'white')
+
+
+#### Spearman correlation matrix between predictors -------------------------------------------------------
+
+# Extract the relevant columns from the data
+data_selected <- fin_dat_damage[selected_predictors]
+
+cor_matrix <- cor(data_selected, use = "pairwise.complete.obs", method = "spearman")
+windows()
+corrplot::corrplot(cor_matrix)
+
+# inspect relationships:
+pairs(damage_vol ~  sum_ips + sum_ips_lag1 + sum_ips_lag2 +
+        agg_doy    + agg_doy_lag1 +  agg_doy_lag2  +
+        peak_doy +  peak_doy_lag1 + peak_doy_lag2 +
+        peak_diff +  peak_diff_lag1 +   peak_diff_lag2, data = ips_damage_clean)
+# fin_dat_damage
+
+# check for outliers? -------------------------------------------------------------
+#what is the histogram?
+View(ips_damage_clean$damage_vol)
+boxplot(log(ips_damage_clean$damage_vol))
+
+
+# remove NAs
+ips_damage_clean <- na.omit(ips_damage_merge)
+
+# get log values - makes it nice for damaged volume
+ips_damage_clean$log_sum_ips              <- log(ips_damage_clean$sum_ips + 1)
+ips_damage_clean$log_sum_ips              <- log(ips_damage_clean$sum_ips + 1)
+
+# filter outliers from dependent and the predictors variables!  ---------------
+ips_damage_clean_no_outliers <- ips_damage_clean %>% 
+  mutate(log_damage_vol = log(damage_vol + 1)) %>% 
+  dplyr::filter(log_damage_vol>5,
+                log_sum_ips > 8.4)
+
+
+hist(ips_damage_clean_no_outliers$log_damage_vol)
+hist(ips_damage_clean_no_outliers$sum_ips)
+
+ips_damage_clean_no_outliers$log_sum_ips_lag1         <- log(ips_damage_clean_no_outliers$sum_ips_lag1 + 1)
+ips_damage_clean_no_outliers$log_sum_ips_lag2         <- log(ips_damage_clean_no_outliers$sum_ips_lag2 + 1)
+ips_damage_clean_no_outliers$log_damaged_vol          <- log(ips_damage_clean_no_outliers$damage_vol + 1)
+
+
+# try correlation
+cor(ips_damage_clean_no_outliers$sum_ips, ips_damage_clean_no_outliers$damage_vol, method = 'spearman')
+cor(ips_damage_clean_no_outliers$sum_ips_lag1, ips_damage_clean_no_outliers$damage_vol, method = 'spearman')
+cor(ips_damage_clean_no_outliers$sum_ips_lag2, ips_damage_clean_no_outliers$damage_vol, method = 'spearman')
+
+# try correlation: of the log values: the same values!
+cor(ips_damage_clean$log_sum_ips, ips_damage_clean$damage_vol)
+cor(ips_damage_clean$log_sum_ips_lag1, ips_damage_clean$damage_vol)
+cor(ips_damage_clean$log_sum_ips_lag2, ips_damage_clean$damage_vol)
+
+
+
+
+
+
+
+
+
+
+
+
+# DAMAGE VOLUME model: play with model diagnostics ---------------------------------------
+m1 <- gamm(damage_vol ~ s(year,k = 4) + 
+             s(log_sum_ips,k = 5)+ 
+             #s(pairID, bs = 're') +
+             s(x, y, bs = 'gp', k = 30),
+           family = tw, #Gamma(link = "log"), # nb,
+           method = 'REML',  
+           data = fin_dat_damage,
+           correlation = corAR1(form = ~ year | pairID))
+
+
+m2 <- gamm(damage_vol ~ s(year,k = 5) + 
+             s(log_sum_ips,k = 8)+ 
+             #s(pairID, bs = 're') +
+             s(x, y, bs = 'gp', k = 70),
+           family = tw, #Gamma(link = "log"), # nb,
+           method = 'REML',  
+           data = fin_dat_damage,
+           correlation = corAR1(form = ~ year | pairID))
+
+# add year as factor to allow relatioship to change over years
+m3 <- gamm(damage_vol ~ s(year,k = 5) + 
+             s(log_sum_ips, by = f_year, k = 8)+ 
+             #s(pairID, bs = 're') +
+             s(x, y, bs = 'gp', k = 20),
+           family = tw, #Gamma(link = "log"), # nb,
+           method = 'REML',  
+           data = fin_dat_damage,
+           correlation = corAR1(form = ~ year | pairID))
+
+# add year as factor to allow relatioship to change over years
+m4 <- gamm(damage_vol ~ s(f_year,k = 5, bs = "re") + 
+             s(log_sum_ips, by = f_year, k = 8)+ 
+             #s(pairID, bs = 're') +
+             s(x, y, bs = 'gp', k = 20),
+           family = tw, #Gamma(link = "log"), # nb,
+           method = 'REML',  
+           data = fin_dat_damage,
+           correlation = corAR1(form = ~ year | pairID))
+fin.m.damage <- m3$gam
+
+
+AIC(m1$lme, m2$lme, m3$lme,m4$lme)
+appraise(m3$gam)
+summary(m3$gam)
+plot(m3$gam, page = 1)
+gam.check(m3$gam)
+k.check(m.int$gam)
+
+
+
+# RS model: play with model diagnostics ---------------------------------------
+# use teh most important predictor: sum_ips_lag1
+boxplot(log(fin_dat_RS$RS_wind_beetle + 0.01))
+boxplot(fin_dat_RS$RS_wind_beetle)
+boxplot(log(fin_dat_damage$damage_vol))
+hist(fin_dat_RS$RS_wind_beetle)
+# if using log values, the data do not seems as outliers
+
+plot(x = sum_ips_lag1, y = RS_wind_beetle, data = fin_dat_RS)
+
+fin_dat_RS %>% 
+  ggplot(aes(x = sum_ips_lag1,
+             y = RS_wind_beetle)) + 
+  geom_point()+
+  geom_smooth() +
+  scale_y_log10() +
+  scale_x_log10()
+
+
+fin_dat_damage %>% 
+  ggplot(aes(x = sum_ips,
+             y = damage_vol)) + 
+  geom_point()+
+  geom_smooth() +
+  scale_y_log10() +
+  scale_x_log10()
+
+
+fin_dat_RS_clean <- fin_dat_RS %>% 
+  dplyr::filter(RS_wind_beetle <2000)
+
+#increase complexity to assure the convergence  ------------------------------------------------------------------
+m1 <- gamm(RS_wind_beetle ~ #s(year,k = 4) + 
+             s(log_sum_ips_lag1, k = 15), #+ 
+             #s(log_sum_ips_lag1, by = f_year, k = 20)+ 
+             # #s(pairID, bs = 're') +
+             # s(x, y, bs = 'gp', k = 50),
+           family = tw, 
+           method = 'REML',  
+           data = fin_dat_RS_clean,
+           correlation = corAR1(form = ~ year | pairID))
+
+
+m2 <- gamm(RS_wind_beetle ~ s(year,k = 4) + 
+             s(log_sum_ips_lag1, k = 15), #+ 
+           #s(log_sum_ips_lag1, by = f_year, k = 20)+ 
+           # #s(pairID, bs = 're') +
+           # s(x, y, bs = 'gp', k = 50),
+           family = tw, 
+           method = 'REML',  
+           data = fin_dat_RS_clean,
+           correlation = corAR1(form = ~ year | pairID))
+
+
+m3.RS <- gamm(RS_wind_beetle ~ s(year,k = 4) + 
+             s(log_sum_ips_lag1, by = f_year, k = 20) + 
+           #s(log_sum_ips_lag1, by = f_year, k = 20)+ 
+           #s(pairID, bs = 're'), # +
+            s(x, y, bs = 'tp', k = 40),
+           family = tw, 
+           method = 'REML',  
+           data = fin_dat_RS_clean,
+           correlation = corAR1(form = ~ year | pairID))
+
+
+
+AIC(m1$lme, m2$lme, m3$lme, m4$lme)
+
+
+
+
+fin.m.RS <- m3.RS$gam
+
+
+appraise(m3$gam)
+summary(m3$gam)
+plot(m3$gam, page = 1)
+gam.check(m3$gam)
+k.check(m3$gam)
+
+# prepare two plots as output: 
+# merge together the predicted data by year, log sum ips for RS, NFI
+# export in a single plot
+# use log scales 
+
+
+
+# Effect plots ----------------------------------------------------
+summary(fin.m.RS)
+summary(fin.m.damage)
+
+
+
+# plot field based damage --------------------------
+
+# Assuming 'model' is your glm.nb model
+summary(fin.m.damage)
+p0 <- ggpredict(fin.m.damage, terms = "year [all]", allow.new.levels = TRUE)
+p1 <- ggpredict(fin.m.damage, terms = "log_sum_ips [all]", allow.new.levels = TRUE)
+
+p0.damage <- create_effect_year(data = p0, 
+                               avg_data = fin_dat_damage,
+                               x_col = "year",
+                               y_col = "damage_vol",
+                               line_color = "darkgreen", 
+                               x_title = "Year", 
+                               y_title = paste(lab_popul_level, '*100'),# "Population level\n[# beetle*100]",
+                               my_title = paste("[a]", 'Field based tree mortality', '\n[#*100]'), 
+                               x_annotate = 2019, lab_annotate = "***") + 
+  scale_y_log10()
+
+(p0.damage)
+p1.count <- 
+  create_effect_plot(data = p1, 
+                     avg_data = fin_dat_damage, 
+                     x_col = "log_sum_ips", 
+                     y_col = "damage_vol", 
+                     line_color = "grey30", 
+                     x_title = 'Population level [log(counts)]' , 
+                     y_title = paste(lab_popul_level, '*100'), 
+                     #my_title = "Effect of Year on Sum IPS", 
+                     x_annotate = 9.5, 
+                     lab_annotate = "**") +
+  scale_y_log10()
+
+(p1.count)
+
+#### RS based damage -----------------------------------------
+
+# Assuming 'model' is your glm.nb model
+summary(fin.m.RS)
+p0 <- ggpredict(fin.m.RS, terms = "year [all]", allow.new.levels = TRUE)
+p1 <- ggpredict(fin.m.RS, terms = "log_sum_ips_log1 [all]", allow.new.levels = TRUE)
+
+p0.damage <- create_effect_year(data = p0, 
+                                avg_data = fin_dat_RS,
+                                x_col = "year",
+                                y_col = "RS_wind_beetle",
+                                line_color = "darkgreen", 
+                                x_title = "Year", 
+                                y_title = paste(lab_popul_level, '*100'),# "Population level\n[# beetle*100]",
+                                my_title = paste("[a]", 'Field based tree mortality', '\n[#*100]'), 
+                                x_annotate = 2019, lab_annotate = "***") + 
+  scale_y_log10()
+
+(p0.damage)
+p1.count <- 
+  create_effect_plot(data = p1, 
+                     avg_data = fin_dat_damage, 
+                     x_col = "log_sum_ips", 
+                     y_col = "RS_wind_beetle", 
+                     line_color = "grey30", 
+                     x_title = 'Population level [log(counts)]' , 
+                     y_title = paste(lab_popul_level, '*100'), 
+                     #my_title = "Effect of Year on Sum IPS", 
+                     x_annotate = 9.5, 
+                     lab_annotate = "**") +
+  scale_y_log10()
+
+(p1.count)
+
+
+
+
+
+##### quick plotting -----------------------------------------------
+
+# Make predictions for log_sum_ips across different years
+pred <- ggpredict(fin.m.damage, terms = c("log_sum_ips [all]", "year"))
+
+
+# Plot the predictions using ggplot2
+ggplot(pred, aes(x = x, y = predicted, color = group)) + 
+  geom_ribbon(aes(ymin = conf.low, ymax = conf.high, fill = group), alpha = 0.3) +
+  geom_line(aes(color = group, linetype = group), linewidth = 1) +
+ # theme_classic2()
+ # geom_line() +
+ # scale_y_log10() +  # Transform the x-axis to a log scale
+ # labs(x = "sum_ips", 
+ #      y = "Predicted Damage Volume", color = "Year", title = "Predicted Damage Volume by Year") +
+  theme_classic2() +
+  facet_grid(.~group)
+
+
+fin.m <- m3$gam#$gam
+appraise(fin.m)
+
+# plot in easy way how tdoes the k value affect interaction
+p1 <- ggpredict(fin.m, terms = "year [all]", allow.new.levels = TRUE)
+p2 <- ggpredict(fin.m, terms = "log_sum_ips [all]", allow.new.levels = TRUE)
+#p3 <- ggpredict(fin.m, terms = "spei_z_lag1 [all]", allow.new.levels = TRUE)
+#p4 <- ggpredict(fin.m, terms = c("tmp_z_lag2", "spei_z_lag1 [-1, 0, 1]"), allow.new.levels = TRUE)
+
+#p_df <- as.data.frame(p3)
+# test simple plot:
+plot1<-ggplot(p1, aes(x = x, y = predicted)) +
+  geom_ribbon(aes(ymin = conf.low, ymax = conf.high, fill = group), alpha = 0.3) +
+  geom_line(aes(color = group, linetype = group), linewidth = 1) +
+  theme_classic2()
+
+plot2<-ggplot(p2, aes(x = x, y = predicted)) +
+  geom_ribbon(aes(ymin = conf.low, ymax = conf.high, fill = group), alpha = 0.3) +
+  geom_line(aes(color = group, linetype = group), linewidth = 1) +
+  theme_classic2()
+
+plot3<-ggplot(p3, aes(x = x, y = predicted)) +
+  geom_ribbon(aes(ymin = conf.low, ymax = conf.high, fill = group), alpha = 0.3) +
+  geom_line(aes(color = group, linetype = group), linewidth = 1) +
+  theme_classic2()
+
+plot4<-ggplot(p4, aes(x = x, y = predicted)) +
+  geom_ribbon(aes(ymin = conf.low, ymax = conf.high, fill = group), alpha = 0.3) +
+  geom_line(aes(color = group, linetype = group), linewidth = 1) +
+  theme_classic2()
+
+ggarrange(plot1,plot2,plot3,plot4, ncol = 2, nrow = 2)
+
+
+
+
+# to build a model: 
+#    add xy coordinates
+#    add RS damage data
+
+# select proper family: thebest is gamma!
+m1.poison <- gamm(damage_vol ~ s(sum_ips, k = 3) + s(year, k = 5),
+                  data = ips_damage_clean,
+                  family = poisson,
+                  method = 'REML',
+                  correlation = corAR1(form = ~ year | pairID))
+
+
+
+m1.tw <- gamm(damage_vol ~ s(sum_ips, k = 3) + s(year, k = 5),
+              data = ips_damage_clean,
+              family = tw,
+              method = 'REML',
+              correlation = corAR1(form = ~ year | pairID))
+
+m1.nb <- gamm(damage_vol ~ s(sum_ips, k = 3) + s(year, k = 5),
+              data = ips_damage_clean,
+              family = nb,
+              method = 'REML',
+              correlation = corAR1(form = ~ year | pairID))
+
+m1.gamma <- gamm(damage_vol ~ s(sum_ips, k = 3) + s(year, k = 5),
+                 data = ips_damage_clean,
+                 family = Gamma(link = "log"),
+                 method = 'REML',
+                 correlation = corAR1(form = ~ year | pairID))
+
+m1.gamma.simpl <- gam(damage_vol ~ s(sum_ips, k = 3) + s(year, k = 5),
+                      data = ips_damage_clean,
+                      family = Gamma(link = "log"),
+                      method = 'REML')
+
+# definitely better to use autocorrelation structure!
+AIC(m1.gamma$lme, m1.tw$lme, m1.nb$lme,m1.poison$lme,m1.gamma.simpl)
+appraise(m1.nb$gam)
+
+# go for gamm
+
+m2 <- gamm(damage_vol ~ s(sum_ips_lag1  , k = 3) + s(year, k = 5),
+           data = ips_damage_clean,
+           family = tw,
+           correlation = corAR1(form = ~ year | pairID))
+
+m3 <- gamm(damage_vol ~ s(sum_ips_lag2  , k = 3) + s(year, k = 5),
+           data = ips_damage_clean,
+           family = tw,
+           correlation = corAR1(form = ~ year | pairID))
+
+#!!!!
+AIC(m1$lme,m2$lme,m3$lme)
+summary(m2$gam)
+gam.check(m2$gam)
+k.check(m2$gam)
+appraise(m2$gam)
+
+
+
+# test, if beetle predictors affects damage and what is teh most important lag:
+
+
+
+# plot using ggeffects:
+p1 <- ggpredict(gam_model_lag0_6, terms = "log_sum_ips [all]", allow.new.levels = TRUE)
+
+ggplot(p1, aes(x = x, y = predicted, ymin = conf.low, ymax = conf.high)) +
+  geom_line(color = 'blue') +
+  geom_ribbon(alpha = 0.1, fill = "blue") +
+  labs(y = "Effect on Log Damaged Volume (m^3)", x = "Log Sum Beetle") +
+  theme_classic()
+#pred_effects <- ggpredict(gam_model_lag0_6, terms = "log_sum_ips")
+
+#p <- plot(pred_effects) + 
+#  labs(y = "Effect on Log Damaged Volume (m^3)", x = "Log Sum Beetle") +
+#  ggtitle("Predicted Effects of Log Sum Beetle on Tree Damage Volume")
+#print(p)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 # try with avrages
-m0<- gam(RS_wind_beetle ~ s(log_sum_beetle) + s(pairID, bs = 're'), 
+m0<- gam(RS_wind_beetle ~ s(log_sum_ips) + s(pairID, bs = 're'), 
          family = nb(),data =df_traps_RS_damage_mean) 
 
-m_fixed<- gam(RS_wind_beetle ~ s(log_sum_beetle, k = 15) + year_fact, 
+m_fixed<- gam(RS_wind_beetle ~ s(log_sum_ips, k = 15) + year_fact, 
          family = nb(),data =df_traps_RS_damage_mean) 
 
-m_fixed<- gam(RS_wind_beetle ~ s(log_sum_beetle, k = 15) + year_fact, 
+m_fixed<- gam(RS_wind_beetle ~ s(log_sum_ips, k = 15) + year_fact, 
               family = nb(),data =df_traps_RS_damage_mean) 
 
 
@@ -714,14 +1054,14 @@ check_concurvity(m_fixed)
   
 # try simple gams: how do beetle counts represent the RS damage?
 
-m0<- gam(RS_wind_beetle ~ s(sum_beetle) + s(falsto_name, bs = 're'), family = nb(),data =df_traps_RS_damage) 
-m1<- gam(RS_wind_beetle ~ s(sum_beetle_lag1 ) + s(falsto_name, bs = 're'), family = nb(),data =df_traps_RS_damage) 
-m2<- gam(RS_wind_beetle ~ s(sum_beetle_lag1)+ s(falsto_name, bs = 're'), family = nb(),data =df_traps_RS_damage) 
+m0<- gam(RS_wind_beetle ~ s(sum_ips) + s(falsto_name, bs = 're'), family = nb(),data =df_traps_RS_damage) 
+m1<- gam(RS_wind_beetle ~ s(sum_ips_lag1 ) + s(falsto_name, bs = 're'), family = nb(),data =df_traps_RS_damage) 
+m2<- gam(RS_wind_beetle ~ s(sum_ips_lag1)+ s(falsto_name, bs = 're'), family = nb(),data =df_traps_RS_damage) 
 
 
-m0_log<- gam(RS_wind_beetle ~ s(log_sum_beetle) + s(falsto_name, bs = 're'), family = nb(),data =df_traps_RS_damage) 
-m1_log<- gam(RS_wind_beetle ~ s(log_sum_beetle_lag1 ) + s(falsto_name, bs = 're'), family = nb(),data =df_traps_RS_damage) 
-m2_log<- gam(RS_wind_beetle ~ s(log_sum_beetle_lag1)+s(falsto_name, bs = 're'), family = nb(),data =df_traps_RS_damage) 
+m0_log<- gam(RS_wind_beetle ~ s(log_sum_ips) + s(falsto_name, bs = 're'), family = nb(),data =df_traps_RS_damage) 
+m1_log<- gam(RS_wind_beetle ~ s(log_sum_ips_lag1 ) + s(falsto_name, bs = 're'), family = nb(),data =df_traps_RS_damage) 
+m2_log<- gam(RS_wind_beetle ~ s(log_sum_ips_lag1)+s(falsto_name, bs = 're'), family = nb(),data =df_traps_RS_damage) 
 
 
 summary(m)
@@ -793,31 +1133,10 @@ cor_shp_counts_dmg <- sf_simpled %>%
 
 
 
-### --------------------------
-
-# Check correlation: is there any correlation, overall pattern? oevrall sum over years for damage/RS data? 
-df_all %>% 
-  ggplot(aes(x = RS_harvest,
-             y= damaged_volume_total_m3)) +
-  geom_point() +
-  geom_smooth()
+# PLOTS 
 
 
-df_all %>% 
-  ggplot(aes(x = RS_wind_beetle,
-             y= damaged_volume_total_m3)) +
-  geom_point() +
-  geom_smooth()  # extreme is RS_wind_beetle
-
-df_all %>% 
-  ggplot(aes(x = RS_sum,
-             y= damaged_volume_total_m3)) +
-  geom_point() +
-  geom_smooth()
-
-
-
-# plot correlation with beetle counts & tree damage ----------------------------------
+# MAP: plot correlation with beetle counts & tree damage ----------------------------------
 ggplot(cor_shp) +
    geom_sf(color = 'grey93', 
             fill  = 'grey93') + 
@@ -969,26 +1288,6 @@ df_all %>%
   geom_smooth() + 
   facet_wrap(.~year, scales = 'free')
 
-#damaged_volume_total_m3
-
-View(df_all)
-
-# log values
-df_all$log_RS_wind_beetle          <- log(df_all$RS_wind_beetle + 1)
-df_all$log_damaged_volume_total_m3<- log(df_all$damaged_volume_total_m3 + 1)
-
-# try different functions and seettings - not finished!
-gam_RS_1 <- gam(log_RS_wind_beetle ~ s(log_damaged_volume_total_m3, k = 3) + s(year,
-                                                                               k = 3) + s(ID, bs = 'fs', k = 30) +, family = gaussian(),method = "REML", data = df_all)
 
 
-
-# GAM Trap vs RS damage data ----------------------------------------------
-
-
-
-summary(gam_RS_1)
-plot(gam_RS_1, page = 1)
-library(gratia)
-gam.check(gam_RS_1)
 
