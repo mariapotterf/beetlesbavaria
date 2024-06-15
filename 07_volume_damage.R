@@ -800,12 +800,12 @@ m4.RS <- gamm(RS_wind_beetle ~ s(year,k = 4) +
 
 
 
-AIC(m0$lme, m1$lme,m1.2$lme, m2$lme, m3$lme)
+AIC(m0$lme, m1$lme,m1.2$lme, m2$lme, m3$lme, m4.RS$lme)
 
 
 
-
-fin.m.RS <- m3.RS$gam
+# the best model!
+fin.m.RS <- m3$gam
 
 
 appraise(m3$gam)
@@ -827,7 +827,7 @@ summary(fin.m.damage)
 
 
 
-# plot field based damage --------------------------
+# PLOT: field based damage --------------------------
 
 # Assuming 'model' is your glm.nb model
 summary(fin.m.damage)
@@ -866,9 +866,9 @@ p1.count <-
 # Assuming 'model' is your glm.nb model
 summary(fin.m.RS)
 p0 <- ggpredict(fin.m.RS, terms = "year [all]", allow.new.levels = TRUE)
-p1 <- ggpredict(fin.m.RS, terms = "log_sum_ips_log1 [all]", allow.new.levels = TRUE)
+p1 <- ggpredict(fin.m.RS, terms = "log_sum_ips_lag1 [all]", allow.new.levels = TRUE)
 
-p0.damage <- create_effect_year(data = p0, 
+p0.RS <- create_effect_year(data = p0, 
                                 avg_data = fin_dat_RS,
                                 x_col = "year",
                                 y_col = "RS_wind_beetle",
@@ -879,220 +879,27 @@ p0.damage <- create_effect_year(data = p0,
                                 x_annotate = 2019, lab_annotate = "***") + 
   scale_y_log10()
 
-(p0.damage)
-p1.count <- 
+(p0.RS)
+p1.RS <- 
   create_effect_plot(data = p1, 
-                     avg_data = fin_dat_damage, 
-                     x_col = "log_sum_ips", 
+                     avg_data = fin_dat_RS, 
+                     x_col = "log_sum_ips_lag1", 
                      y_col = "RS_wind_beetle", 
                      line_color = "grey30", 
                      x_title = 'Population level [log(counts)]' , 
                      y_title = paste(lab_popul_level, '*100'), 
                      #my_title = "Effect of Year on Sum IPS", 
                      x_annotate = 9.5, 
-                     lab_annotate = "**") +
+                     lab_annotate = "*") +
   scale_y_log10()
 
-(p1.count)
+(p1.RS)
 
 
 
 
 
 ##### quick plotting -----------------------------------------------
-
-# Make predictions for log_sum_ips across different years
-pred <- ggpredict(fin.m.damage, terms = c("log_sum_ips [all]", "year"))
-
-
-# Plot the predictions using ggplot2
-ggplot(pred, aes(x = x, y = predicted, color = group)) + 
-  geom_ribbon(aes(ymin = conf.low, ymax = conf.high, fill = group), alpha = 0.3) +
-  geom_line(aes(color = group, linetype = group), linewidth = 1) +
- # theme_classic2()
- # geom_line() +
- # scale_y_log10() +  # Transform the x-axis to a log scale
- # labs(x = "sum_ips", 
- #      y = "Predicted Damage Volume", color = "Year", title = "Predicted Damage Volume by Year") +
-  theme_classic2() +
-  facet_grid(.~group)
-
-
-fin.m <- m3$gam#$gam
-appraise(fin.m)
-
-# plot in easy way how tdoes the k value affect interaction
-p1 <- ggpredict(fin.m, terms = "year [all]", allow.new.levels = TRUE)
-p2 <- ggpredict(fin.m, terms = "log_sum_ips [all]", allow.new.levels = TRUE)
-#p3 <- ggpredict(fin.m, terms = "spei_z_lag1 [all]", allow.new.levels = TRUE)
-#p4 <- ggpredict(fin.m, terms = c("tmp_z_lag2", "spei_z_lag1 [-1, 0, 1]"), allow.new.levels = TRUE)
-
-#p_df <- as.data.frame(p3)
-# test simple plot:
-plot1<-ggplot(p1, aes(x = x, y = predicted)) +
-  geom_ribbon(aes(ymin = conf.low, ymax = conf.high, fill = group), alpha = 0.3) +
-  geom_line(aes(color = group, linetype = group), linewidth = 1) +
-  theme_classic2()
-
-plot2<-ggplot(p2, aes(x = x, y = predicted)) +
-  geom_ribbon(aes(ymin = conf.low, ymax = conf.high, fill = group), alpha = 0.3) +
-  geom_line(aes(color = group, linetype = group), linewidth = 1) +
-  theme_classic2()
-
-plot3<-ggplot(p3, aes(x = x, y = predicted)) +
-  geom_ribbon(aes(ymin = conf.low, ymax = conf.high, fill = group), alpha = 0.3) +
-  geom_line(aes(color = group, linetype = group), linewidth = 1) +
-  theme_classic2()
-
-plot4<-ggplot(p4, aes(x = x, y = predicted)) +
-  geom_ribbon(aes(ymin = conf.low, ymax = conf.high, fill = group), alpha = 0.3) +
-  geom_line(aes(color = group, linetype = group), linewidth = 1) +
-  theme_classic2()
-
-ggarrange(plot1,plot2,plot3,plot4, ncol = 2, nrow = 2)
-
-
-
-
-# to build a model: 
-#    add xy coordinates
-#    add RS damage data
-
-# select proper family: thebest is gamma!
-m1.poison <- gamm(damage_vol ~ s(sum_ips, k = 3) + s(year, k = 5),
-                  data = ips_damage_clean,
-                  family = poisson,
-                  method = 'REML',
-                  correlation = corAR1(form = ~ year | pairID))
-
-
-
-m1.tw <- gamm(damage_vol ~ s(sum_ips, k = 3) + s(year, k = 5),
-              data = ips_damage_clean,
-              family = tw,
-              method = 'REML',
-              correlation = corAR1(form = ~ year | pairID))
-
-m1.nb <- gamm(damage_vol ~ s(sum_ips, k = 3) + s(year, k = 5),
-              data = ips_damage_clean,
-              family = nb,
-              method = 'REML',
-              correlation = corAR1(form = ~ year | pairID))
-
-m1.gamma <- gamm(damage_vol ~ s(sum_ips, k = 3) + s(year, k = 5),
-                 data = ips_damage_clean,
-                 family = Gamma(link = "log"),
-                 method = 'REML',
-                 correlation = corAR1(form = ~ year | pairID))
-
-m1.gamma.simpl <- gam(damage_vol ~ s(sum_ips, k = 3) + s(year, k = 5),
-                      data = ips_damage_clean,
-                      family = Gamma(link = "log"),
-                      method = 'REML')
-
-# definitely better to use autocorrelation structure!
-AIC(m1.gamma$lme, m1.tw$lme, m1.nb$lme,m1.poison$lme,m1.gamma.simpl)
-appraise(m1.nb$gam)
-
-# go for gamm
-
-m2 <- gamm(damage_vol ~ s(sum_ips_lag1  , k = 3) + s(year, k = 5),
-           data = ips_damage_clean,
-           family = tw,
-           correlation = corAR1(form = ~ year | pairID))
-
-m3 <- gamm(damage_vol ~ s(sum_ips_lag2  , k = 3) + s(year, k = 5),
-           data = ips_damage_clean,
-           family = tw,
-           correlation = corAR1(form = ~ year | pairID))
-
-#!!!!
-AIC(m1$lme,m2$lme,m3$lme)
-summary(m2$gam)
-gam.check(m2$gam)
-k.check(m2$gam)
-appraise(m2$gam)
-
-
-
-# test, if beetle predictors affects damage and what is teh most important lag:
-
-
-
-# plot using ggeffects:
-p1 <- ggpredict(gam_model_lag0_6, terms = "log_sum_ips [all]", allow.new.levels = TRUE)
-
-ggplot(p1, aes(x = x, y = predicted, ymin = conf.low, ymax = conf.high)) +
-  geom_line(color = 'blue') +
-  geom_ribbon(alpha = 0.1, fill = "blue") +
-  labs(y = "Effect on Log Damaged Volume (m^3)", x = "Log Sum Beetle") +
-  theme_classic()
-#pred_effects <- ggpredict(gam_model_lag0_6, terms = "log_sum_ips")
-
-#p <- plot(pred_effects) + 
-#  labs(y = "Effect on Log Damaged Volume (m^3)", x = "Log Sum Beetle") +
-#  ggtitle("Predicted Effects of Log Sum Beetle on Tree Damage Volume")
-#print(p)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-# try with avrages
-m0<- gam(RS_wind_beetle ~ s(log_sum_ips) + s(pairID, bs = 're'), 
-         family = nb(),data =df_traps_RS_damage_mean) 
-
-m_fixed<- gam(RS_wind_beetle ~ s(log_sum_ips, k = 15) + year_fact, 
-         family = nb(),data =df_traps_RS_damage_mean) 
-
-m_fixed<- gam(RS_wind_beetle ~ s(log_sum_ips, k = 15) + year_fact, 
-              family = nb(),data =df_traps_RS_damage_mean) 
-
-
-check_concurvity(m_fixed)
-  summary(m_fixed)
-  plot(m_fixed, page =1)
-  
-# try simple gams: how do beetle counts represent the RS damage?
-
-m0<- gam(RS_wind_beetle ~ s(sum_ips) + s(falsto_name, bs = 're'), family = nb(),data =df_traps_RS_damage) 
-m1<- gam(RS_wind_beetle ~ s(sum_ips_lag1 ) + s(falsto_name, bs = 're'), family = nb(),data =df_traps_RS_damage) 
-m2<- gam(RS_wind_beetle ~ s(sum_ips_lag1)+ s(falsto_name, bs = 're'), family = nb(),data =df_traps_RS_damage) 
-
-
-m0_log<- gam(RS_wind_beetle ~ s(log_sum_ips) + s(falsto_name, bs = 're'), family = nb(),data =df_traps_RS_damage) 
-m1_log<- gam(RS_wind_beetle ~ s(log_sum_ips_lag1 ) + s(falsto_name, bs = 're'), family = nb(),data =df_traps_RS_damage) 
-m2_log<- gam(RS_wind_beetle ~ s(log_sum_ips_lag1)+s(falsto_name, bs = 're'), family = nb(),data =df_traps_RS_damage) 
-
-
-summary(m)
-AIC(m0, m1, m2,m0_log,m1_log,m2_log)
-plot(m0, page = 1, shade = T)
-plot(m1, page = 1, shade = T)
-plot(m2_log, page = 1, shade = T)
-
-summary(m2_log)
-
-check_concurvity(m2_log)
-
-
-df_cor_counts_damage_long <- df_cor_counts_damage %>% 
-  pivot_longer(-c(falsto_name, forstrev_1))
-
-df_cor_counts_damage_long %>% 
-  ggplot(aes(y = value, group =factor(name), fill = name)) +
-  geom_boxplot()
-
 
 # to exclude  RS wind beetle in Passau 2018??? no!
 
