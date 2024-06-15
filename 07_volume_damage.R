@@ -85,6 +85,7 @@ library(RColorBrewer)
 library(mgcv)
 library(mgcViz)
 library(lme4)
+library(gratia)
 #library(knitr)   # for table outputs
 
 library(forcats)  # reorder by factor
@@ -362,7 +363,7 @@ df_cor <- df_all %>%
 df_cor_counts_damage <- 
   ips_damage_clean %>% 
   #dplyr::filter(!ID %in% c(0, 50104, 60613,62705)) %>% # exlude if there is missing data
-  group_by(falsto_name,forstrev_1        ) %>% 
+  group_by(trapID,forstrev_1        ) %>% 
   dplyr::summarize(spearm_cor_lag0 = cor(damaged_volume_total_m3, sum_ips, 
                                            method = "spearman", use = "complete.obs"),
                    spearm_cor_lag1 = cor(damaged_volume_total_m3, sum_ips_lag1 , 
@@ -526,7 +527,7 @@ model_lag_counts_damage_RS <- rbind(model_metrics_RS,
   distinct()
 
 
-# Export as a nice table in word:
+####  Export as a nice table in word: ------------------------------------------
 sjPlot::tab_df(model_lag_counts_damage_RS,
                #col.header = c(as.character(qntils), 'mean'),
                show.rownames = FALSE,
@@ -545,7 +546,6 @@ average_R_squared <- model_lag_counts_damage_RS %>%
 
 
 # Merge the average R_squared back to the original data
-
 model_lag_counts_damage_RS_avg <- model_lag_counts_damage_RS %>%
   left_join(average_R_squared, by = "Predictor") %>%
   mutate(Predictor = fct_reorder(Predictor, R_squared, .desc = TRUE))
@@ -610,7 +610,7 @@ ggsave(filename = 'outFigs/observation_vs_predictors_lags.png',
 #### Spearman correlation matrix between predictors -------------------------------------------------------
 
 # Extract the relevant columns from the data
-data_selected <- fin_dat_damage[selected_predictors]
+data_selected <- df_traps_RS_damage[selected_predictors]
 
 cor_matrix <- cor(data_selected, use = "pairwise.complete.obs", method = "spearman")
 windows()
@@ -620,52 +620,16 @@ corrplot::corrplot(cor_matrix)
 pairs(damage_vol ~  sum_ips + sum_ips_lag1 + sum_ips_lag2 +
         agg_doy    + agg_doy_lag1 +  agg_doy_lag2  +
         peak_doy +  peak_doy_lag1 + peak_doy_lag2 +
-        peak_diff +  peak_diff_lag1 +   peak_diff_lag2, data = ips_damage_clean)
+        peak_diff +  peak_diff_lag1 +   peak_diff_lag2, data = df_traps_RS_damage)
 # fin_dat_damage
 
 # check for outliers? -------------------------------------------------------------
-#what is the histogram?
-View(ips_damage_clean$damage_vol)
-boxplot(log(ips_damage_clean$damage_vol))
 
-
-# remove NAs
-ips_damage_clean <- na.omit(ips_damage_merge)
-
-# get log values - makes it nice for damaged volume
-ips_damage_clean$log_sum_ips              <- log(ips_damage_clean$sum_ips + 1)
-ips_damage_clean$log_sum_ips              <- log(ips_damage_clean$sum_ips + 1)
-
-# filter outliers from dependent and the predictors variables!  ---------------
-ips_damage_clean_no_outliers <- ips_damage_clean %>% 
+# filter outliers from dependent and the predictors variables! 
+ips_damage_clean_no_outliers <- df_traps_RS_damage %>% 
   mutate(log_damage_vol = log(damage_vol + 1)) %>% 
   dplyr::filter(log_damage_vol>5,
                 log_sum_ips > 8.4)
-
-
-hist(ips_damage_clean_no_outliers$log_damage_vol)
-hist(ips_damage_clean_no_outliers$sum_ips)
-
-ips_damage_clean_no_outliers$log_sum_ips_lag1         <- log(ips_damage_clean_no_outliers$sum_ips_lag1 + 1)
-ips_damage_clean_no_outliers$log_sum_ips_lag2         <- log(ips_damage_clean_no_outliers$sum_ips_lag2 + 1)
-ips_damage_clean_no_outliers$log_damaged_vol          <- log(ips_damage_clean_no_outliers$damage_vol + 1)
-
-
-# try correlation
-cor(ips_damage_clean_no_outliers$sum_ips, ips_damage_clean_no_outliers$damage_vol, method = 'spearman')
-cor(ips_damage_clean_no_outliers$sum_ips_lag1, ips_damage_clean_no_outliers$damage_vol, method = 'spearman')
-cor(ips_damage_clean_no_outliers$sum_ips_lag2, ips_damage_clean_no_outliers$damage_vol, method = 'spearman')
-
-# try correlation: of the log values: the same values!
-cor(ips_damage_clean$log_sum_ips, ips_damage_clean$damage_vol)
-cor(ips_damage_clean$log_sum_ips_lag1, ips_damage_clean$damage_vol)
-cor(ips_damage_clean$log_sum_ips_lag2, ips_damage_clean$damage_vol)
-
-
-
-
-
-
 
 
 
@@ -673,7 +637,8 @@ cor(ips_damage_clean$log_sum_ips_lag2, ips_damage_clean$damage_vol)
 
 
 # DAMAGE VOLUME model: play with model diagnostics ---------------------------------------
-m1 <- gamm(damage_vol ~ s(year,k = 4) + 
+# only sum ips
+m1 <- gamm(damage_vol ~ #s(year,k = 4) + 
              s(log_sum_ips,k = 5)+ 
              #s(pairID, bs = 're') +
              s(x, y, bs = 'gp', k = 30),
@@ -682,15 +647,29 @@ m1 <- gamm(damage_vol ~ s(year,k = 4) +
            data = fin_dat_damage,
            correlation = corAR1(form = ~ year | pairID))
 
-
-m2 <- gamm(damage_vol ~ s(year,k = 5) + 
-             s(log_sum_ips,k = 8)+ 
+# only years
+m1.1 <- gamm(damage_vol ~ s(year,k = 4) + 
+            # s(log_sum_ips,k = 5)+ 
              #s(pairID, bs = 're') +
-             s(x, y, bs = 'gp', k = 70),
+             s(x, y, bs = 'gp', k = 30),
            family = tw, #Gamma(link = "log"), # nb,
            method = 'REML',  
            data = fin_dat_damage,
            correlation = corAR1(form = ~ year | pairID))
+
+
+AIC(m1$lme, m1.1$lme)
+
+# both years and years sums
+m2 <- gamm(damage_vol ~ s(year,k = 4) + 
+             s(log_sum_ips,k = 5)+ 
+             #s(pairID, bs = 're') +
+             s(x, y, bs = 'gp', k = 30),
+           family = tw, #Gamma(link = "log"), # nb,
+           method = 'REML',  
+           data = fin_dat_damage,
+           correlation = corAR1(form = ~ year | pairID))
+
 
 # add year as factor to allow relatioship to change over years
 m3 <- gamm(damage_vol ~ s(year,k = 5) + 
@@ -702,24 +681,19 @@ m3 <- gamm(damage_vol ~ s(year,k = 5) +
            data = fin_dat_damage,
            correlation = corAR1(form = ~ year | pairID))
 
-# add year as factor to allow relatioship to change over years
-m4 <- gamm(damage_vol ~ s(f_year,k = 5, bs = "re") + 
-             s(log_sum_ips, by = f_year, k = 8)+ 
-             #s(pairID, bs = 're') +
-             s(x, y, bs = 'gp', k = 20),
-           family = tw, #Gamma(link = "log"), # nb,
-           method = 'REML',  
-           data = fin_dat_damage,
-           correlation = corAR1(form = ~ year | pairID))
+
+# including both is teh best
+AIC(m1$lme, m1.1$lme, m2$lme, m3$lme)
+
 fin.m.damage <- m3$gam
 
 
-AIC(m1$lme, m2$lme, m3$lme,m4$lme)
+AIC(m1$lme, m2$lme, m3$lme)
 appraise(m3$gam)
 summary(m3$gam)
 plot(m3$gam, page = 1)
 gam.check(m3$gam)
-k.check(m.int$gam)
+k.check(m3$gam)
 
 
 
@@ -755,29 +729,66 @@ fin_dat_RS_clean <- fin_dat_RS %>%
   dplyr::filter(RS_wind_beetle <2000)
 
 #increase complexity to assure the convergence  ------------------------------------------------------------------
-m1 <- gamm(RS_wind_beetle ~ #s(year,k = 4) + 
-             s(log_sum_ips_lag1, k = 15), #+ 
+
+# evaluate again: rurrent year and two previous lags, just to make sure
+m0 <- gamm(RS_wind_beetle ~ #s(year,k = 4) + 
+             s(log_sum_ips, k = 15)+ 
              #s(log_sum_ips_lag1, by = f_year, k = 20)+ 
              # #s(pairID, bs = 're') +
-             # s(x, y, bs = 'gp', k = 50),
+             s(x, y, bs = 'tp', k = 50),
            family = tw, 
            method = 'REML',  
            data = fin_dat_RS_clean,
            correlation = corAR1(form = ~ year | pairID))
 
 
+
+m1 <- gamm(RS_wind_beetle ~ #s(year,k = 4) + 
+             s(log_sum_ips_lag1, k = 15)+ 
+             #s(log_sum_ips_lag1, by = f_year, k = 20)+ 
+             # #s(pairID, bs = 're') +
+              s(x, y, bs = 'tp', k = 50),
+           family = tw, 
+           method = 'REML',  
+           data = fin_dat_RS_clean,
+           correlation = corAR1(form = ~ year | pairID))
+
+
+m1.2 <- gamm(RS_wind_beetle ~ #s(year,k = 4) + 
+             s(log_sum_ips_lag2, k = 15)+ 
+             #s(log_sum_ips_lag1, by = f_year, k = 20)+ 
+             # #s(pairID, bs = 're') +
+             s(x, y, bs = 'tp', k = 50),
+           family = tw, 
+           method = 'REML',  
+           data = fin_dat_RS_clean,
+           correlation = corAR1(form = ~ year | pairID))
+
+
+# check for only year
 m2 <- gamm(RS_wind_beetle ~ s(year,k = 4) + 
-             s(log_sum_ips_lag1, k = 15), #+ 
+            # s(log_sum_ips_lag1, k = 15), #+ 
            #s(log_sum_ips_lag1, by = f_year, k = 20)+ 
            # #s(pairID, bs = 're') +
-           # s(x, y, bs = 'gp', k = 50),
+           s(x, y, bs = 'tp', k = 50),
            family = tw, 
            method = 'REML',  
            data = fin_dat_RS_clean,
            correlation = corAR1(form = ~ year | pairID))
 
 
-m3.RS <- gamm(RS_wind_beetle ~ s(year,k = 4) + 
+m3 <- gamm(RS_wind_beetle ~ s(year,k = 4) + 
+             s(log_sum_ips_lag1, k = 15)+ 
+           #s(log_sum_ips_lag1, by = f_year, k = 20)+ 
+           # #s(pairID, bs = 're') +
+            s(x, y, bs = 'tp', k = 50),
+           family = tw, 
+           method = 'REML',  
+           data = fin_dat_RS_clean,
+           correlation = corAR1(form = ~ year | pairID))
+
+
+m4.RS <- gamm(RS_wind_beetle ~ s(year,k = 4) + 
              s(log_sum_ips_lag1, by = f_year, k = 20) + 
            #s(log_sum_ips_lag1, by = f_year, k = 20)+ 
            #s(pairID, bs = 're'), # +
@@ -789,7 +800,7 @@ m3.RS <- gamm(RS_wind_beetle ~ s(year,k = 4) +
 
 
 
-AIC(m1$lme, m2$lme, m3$lme, m4$lme)
+AIC(m0$lme, m1$lme,m1.2$lme, m2$lme, m3$lme)
 
 
 
