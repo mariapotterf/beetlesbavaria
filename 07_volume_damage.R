@@ -416,16 +416,30 @@ df_traps_RS_damage <-
 
 ###### create final tables for RS data and volume data 
 
-fin_dat_RS <- df_traps_RS_damage %>% 
-  na.omit()
-
-dim(fin_dat_RS)
-
 fin_dat_damage <- df_traps_RS_damage %>% 
   dplyr::select(-RS_wind_beetle) %>% 
   na.omit() 
 
 dim(fin_dat_damage)
+
+
+fin_dat_damage %>% 
+  ggplot(aes(x = log(sum_ips),
+             y = log(damage_vol))) +
+  geom_point() +
+  geom_smooth()
+
+# do not remove outliers here
+
+
+fin_dat_RS <- df_traps_RS_damage %>% 
+  na.omit()
+
+dim(fin_dat_RS)
+
+
+
+
 
 # Find lags and predictors -------------------------------------------------------
 ##### Find lags: damage volume  -------------
@@ -834,6 +848,8 @@ summary(fin.m.damage)
 p0 <- ggpredict(fin.m.damage, terms = "year [all]", allow.new.levels = TRUE)
 p1 <- ggpredict(fin.m.damage, terms = "log_sum_ips [all]", allow.new.levels = TRUE)
 
+p1$x <- exp(p1$x) # convert to original values
+
 p0.damage <- create_effect_year(data = p0, 
                                avg_data = fin_dat_damage,
                                x_col = "year",
@@ -841,62 +857,70 @@ p0.damage <- create_effect_year(data = p0,
                                line_color = "darkgreen", 
                                x_title = "Year", 
                                y_title = paste(lab_popul_level, '*100'),# "Population level\n[# beetle*100]",
-                               my_title = paste("[a]", 'Field based tree mortality', '\n[#*100]'), 
+                               my_title = expression("[a] Field observation m"^3*""), #paste("[a]", "", expression(m^3)), 
                                x_annotate = 2019, lab_annotate = "***") + 
   scale_y_log10()
 
 (p0.damage)
-p1.count <- 
+p1.damage <- 
   create_effect_plot(data = p1, 
                      avg_data = fin_dat_damage, 
-                     x_col = "log_sum_ips", 
+                     x_col = "sum_ips", 
                      y_col = "damage_vol", 
                      line_color = "grey30", 
                      x_title = 'Population level [log(counts)]' , 
                      y_title = paste(lab_popul_level, '*100'), 
                      #my_title = "Effect of Year on Sum IPS", 
-                     x_annotate = 9.5, 
+                     x_annotate = 10^4, 
                      lab_annotate = "**") +
-  scale_y_log10()
+  scale_y_log10() +
+  scale_x_log10()
 
-(p1.count)
+(p1.damage)
 
-#### RS based damage -----------------------------------------
+##### PLOT RS based damage -----------------------------------------
 
 # Assuming 'model' is your glm.nb model
 summary(fin.m.RS)
 p0 <- ggpredict(fin.m.RS, terms = "year [all]", allow.new.levels = TRUE)
 p1 <- ggpredict(fin.m.RS, terms = "log_sum_ips_lag1 [all]", allow.new.levels = TRUE)
 
+p1$x <- exp(p1$x) # convert beetle log counts to original counts
+
 p0.RS <- create_effect_year(data = p0, 
-                                avg_data = fin_dat_RS,
+                                avg_data = fin_dat_RS_clean,
                                 x_col = "year",
                                 y_col = "RS_wind_beetle",
                                 line_color = "darkgreen", 
                                 x_title = "Year", 
                                 y_title = paste(lab_popul_level, '*100'),# "Population level\n[# beetle*100]",
-                                my_title = paste("[a]", 'Field based tree mortality', '\n[#*100]'), 
-                                x_annotate = 2019, lab_annotate = "***") + 
-  scale_y_log10()
+                                my_title = paste("[b]", 'Remote sensing observation', '\n[#]'), 
+                                x_annotate = 2018.5, lab_annotate = "***") + 
+  scale_y_log10() +
+  scale_x_log10()
 
 (p0.RS)
 p1.RS <- 
   create_effect_plot(data = p1, 
-                     avg_data = fin_dat_RS, 
-                     x_col = "log_sum_ips_lag1", 
+                     avg_data = fin_dat_RS_clean, 
+                     x_col = "sum_ips_lag1", 
                      y_col = "RS_wind_beetle", 
                      line_color = "grey30", 
-                     x_title = 'Population level [log(counts)]' , 
+                     x_title = 'Population level [#]' , 
                      y_title = paste(lab_popul_level, '*100'), 
                      #my_title = "Effect of Year on Sum IPS", 
-                     x_annotate = 9.5, 
+                     x_annotate = 10^4, 
                      lab_annotate = "*") +
-  scale_y_log10()
+  scale_y_log10() +
+  scale_x_log10()
 
 (p1.RS)
 
 
-
+p.comp2 <- ggarrange(p0.damage, p1.damage, 
+          p0.RS,
+           p1.RS, align = 'hv')
+ggsave()
 
 
 ##### quick plotting -----------------------------------------------
