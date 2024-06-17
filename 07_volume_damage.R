@@ -400,18 +400,7 @@ sjPlot::tab_df(observation_mortality_year,
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-# get correlations
+# Correlate between RS and volume data m3 ---------------------------------------------------
 df_cor <- df_all %>% 
   dplyr::filter(!ID %in% c(0, 50104, 60613,62705)) %>% # exlude if there is missing data
   group_by(ID) %>% 
@@ -424,16 +413,16 @@ df_cor <- df_all %>%
 
 
 #### MAP: correlations per XY: beetle counts vs damage volume --------------------
-df_cor_counts_damage <- 
-  ips_damage_clean %>% 
-  #dplyr::filter(!ID %in% c(0, 50104, 60613,62705)) %>% # exlude if there is missing data
-  group_by(trapID,forstrev_1        ) %>% 
-  dplyr::summarize(spearm_cor_lag0 = cor(damaged_volume_total_m3, sum_ips, 
-                                           method = "spearman", use = "complete.obs"),
-                   spearm_cor_lag1 = cor(damaged_volume_total_m3, sum_ips_lag1 , 
-                                            method = "spearman", use = "complete.obs"),
-                   spearm_cor_lag2 = cor(damaged_volume_total_m3, sum_ips_lag2 , 
-                                        method = "spearman", use = "complete.obs"))
+# df_cor_counts_damage <- 
+#   ips_damage_clean %>% 
+#   #dplyr::filter(!ID %in% c(0, 50104, 60613,62705)) %>% # exlude if there is missing data
+#   group_by(trapID,forstrev_1        ) %>% 
+#   dplyr::summarize(spearm_cor_lag0 = cor(damaged_volume_total_m3, sum_ips, 
+#                                            method = "spearman", use = "complete.obs"),
+#                    spearm_cor_lag1 = cor(damaged_volume_total_m3, sum_ips_lag1 , 
+#                                             method = "spearman", use = "complete.obs"),
+#                    spearm_cor_lag2 = cor(damaged_volume_total_m3, sum_ips_lag2 , 
+#                                         method = "spearman", use = "complete.obs"))
 
 
 #### MAP: correlations per district: beetle counts vs RS damage --------------------------
