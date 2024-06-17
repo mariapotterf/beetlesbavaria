@@ -2,6 +2,8 @@
 # get variograms for all indicators of beetle dynamics
 # adress better spatial synchonization
 
+rm(list=ls()) 
+gc()
 
 # get libs ----------------------------------------------------------------
 
@@ -29,24 +31,12 @@ load("outData/spatial.Rdata")
 dat_dynamics <- fread( 'outTable/beetle_dynamic_indicators.csv')
 
 
-# Spatial data: 
-sort(unique(xy_sf_expand$falsto_name))
-
-
-# get coordinates from sf object
-xy_df <- data.frame(x = sf::st_coordinates(xy_sf_expand)[,"X"],
-                    y = sf::st_coordinates(xy_sf_expand)[,"Y"],
-                    year = xy_sf_expand$year,
-                    trapID = xy_sf_expand$falsto_name)
-
-xy_df <- distinct(xy_df)
-my_crs <- crs(xy_sf_expand)
 
 
 # Merge beetle dynamics inicators with XYs
 dat_dynamics_xy <- 
   dat_dynamics %>% 
-    left_join(xy_df, by = c("trapID", 'year')) %>% 
+   # left_join(xy_df, by = c("trapID", 'year', 'x', 'y')) %>% 
   # remove years woith NAs:
   dplyr::filter(year %in% 2015:2021) %>% 
   mutate(log_sum_ips = log(sum_ips),
@@ -63,7 +53,8 @@ cutoff = 300000
 
 # for all variables:
 get_variogram <- function(i, var_name, cutoff = 300000) {
-  i = 2015
+  #i = 2015
+  #var_name = 'log_sum_ips'
   # Slice specific year
   ips_sum_sub <- dat_dynamics_xy %>%
     filter(year == i)
@@ -83,38 +74,38 @@ get_variogram <- function(i, var_name, cutoff = 300000) {
   
   #!!!
   # Calculate the Nugget (gamma at the smallest distance)
-  nugget <- mean(variogram_data$gamma[1:5])
+  #nugget <- mean(variogram_raw$gamma[1:5])
   
   # Estimate the Sill (average gamma at the highest distances, e.g., last 3-5 points)
-  sill <- mean(variogram_data$gamma[(nrow(variogram_data)-2):nrow(variogram_data)])
+  #sill <- mean(variogram_raw$gamma[(nrow(variogram_raw)-2):nrow(variogram_raw)])
   
   # Estimate the Range (distance where the variogram levels off, e.g., 
   # first row where gamma is near the sill)
-  range <- variogram_data$dist[which.max(variogram_data$gamma >= sill * 0.95)]
+  #range <- variogram_raw$dist[which.max(variogram_raw$gamma >= sill * 0.95)]
   
   # Specify the initial variogram model
-  initial_model <- vgm(psill = sill - nugget, model = "Exp", range = range, nugget = nugget)
+  #initial_model <- vgm(psill = sill - nugget, model = "Mat", range = range, nugget = nugget)
   
   # Fit the variogram model to the empirical data
-  fitted_variogram <- fit.variogram(variogram_data, model = initial_model)
+  #fitted_variogram <- fit.variogram(variogram_raw, model = initial_model)
   
   # Extract fitted parameters
-  fitted_nugget <- fitted_variogram$psill[1]
-  fitted_sill <- sum(fitted_variogram$psill)
-  fitted_range <- fitted_variogram$range[2]
+  #fitted_nugget <- fitted_variogram$psill[1]
+  #fitted_sill   <- sum(fitted_variogram$psill)
+  #fitted_range  <- fitted_variogram$range[2]
   
   # Create a data frame with the initial and fitted parameters
-  df <- data.frame(year = year,
-                   variable = variable,
-                   initial_nugget = nugget,
-                   initial_sill = sill,
-                   initial_range = range,
-                   fitted_nugget = fitted_nugget,
-                   fitted_sill = fitted_sill,
-                   fitted_range = fitted_range
-  )
+  #df <- data.frame(year           = i,
+  #                 variable       = var_name,
+  #                 #initial_nugget = nugget,
+  #                 #initial_sill   = sill,
+  #                 #initial_range  = range,
+  #                 fitted_nugget  = fitted_nugget,
+  #                 fitted_sill    = fitted_sill,
+  #                 fitted_range   = fitted_range
+  #)
   
-  return(df)
+  #return(df)
   #!!!
   
   # Return the variogram data frame
@@ -169,7 +160,8 @@ fit_variogram <- function(variogram_data) {
  # variogram_data <- variogram_results_ls[[25]]
   year = unique(variogram_data$year)
   variable = unique(variogram_data$variable)
- # (variable)
+  print(variable)
+  print(year)
   #plot(variogram_data)
   
   # Scale semivariances and distances
@@ -260,34 +252,45 @@ sjPlot::tab_df(out_tab_variograms,
 
 # Plot using ggplot2
 combined_results_sub <- combined_results %>% 
-  mutate(year_color = ifelse(year %in% 2018:2020, "red", "grey")) %>% 
+ # mutate(year_color = ifelse(year %in% 2018:2020, "red", "grey")) %>% 
   dplyr::filter(dist <190000) %>% 
   mutate(variable = factor(variable, 
                            levels = c('log_sum_ips', 'tr_agg_doy', 'tr_peak_doy', 'log_peak_diff'),
                            labels = c('Population level\n[#]', 'Aggregation timing\n[DOY]', 
                                       'Peak swarming\ntiming [DOY]', "Peak swarming\nintensity [#]"))) #%>%
 
-p_vario_color <- combined_results_sub %>% 
+p_vario_color <- 
+  combined_results_sub %>% 
     ggplot(aes(x = dist/1000, 
              y = gamma, 
-             color = factor(year),
-             group = factor(year))) +
+             color = factor(year)#,
+            # group = factor(year)
+             )) +
   geom_point(data = subset(combined_results_sub, type == "Empirical"), 
-             alpha = 0.5, size = 1) +
+             alpha = 0.5, size = 1.2) +
   geom_line(data = subset(combined_results_sub, type == "Fitted"), lwd = 1) +
   labs(#title = "Empirical and Fitted Variogram", 
-       x = "Distance [km]", y = "Semivariance"
+       x = "Distance [km]", 
+       y = "Semivariance",
+       color = "Year"
        ) +
-  scale_color_brewer(palette = "Spectral") +
+  scale_color_brewer(palette = "Set1", direction = -1) +
   theme_minimal(base_size = 10) +
-  theme(aspect.ratio = 1, 
-        legend.position = 'right',
-        legend.title =element_blank()  ,
-        panel.border = element_rect(color = "black", fill = "white")) +
-  facet_wrap(variable~., scales = 'free')
+   theme(aspect.ratio = 1, 
+         legend.position = 'right',
+         legend.title =element_blank() #,
+         #panel.border = element_rect(color = "black")
+         ) +
+  facet_wrap(variable~., scales = 'free') +
+    theme_bw()
 
-ggsave(filename = 'outFigs/variogram_spectral.png', plot = p_vario_color, width = 7, height = 7, dpi = 300, bg = 'white')
+ggsave(filename = 'outFigs/p_vario_color.png', plot = p_vario_color, 
+       width = 7, height = 7, dpi = 300, 
+       bg = 'white')
 
+
+
+fwrite(combined_results, 'outTable/variogram.csv')
 
 # make it black and red
 
@@ -319,8 +322,7 @@ ggsave(filename = 'outFigs/variograms_red_grey.png', plot = p_vario_red_grey, wi
 
 
 
-
-# try plotting:
+# RAnge plotting: -------------------------------------------------------------------
 windows(6,6)
 p_range <- combined_results_sub %>% 
   mutate(cap_fitted_range = case_when(fitted_range > 200000 ~ 200000,
@@ -345,6 +347,4 @@ p_range <- combined_results_sub %>%
   
 
 ggsave(filename = 'outFigs/variogram_range.png', plot = p_range, width = 6, height = 6, dpi = 300, bg = 'white')
-
-# test fitting: -------------------------------------
 
