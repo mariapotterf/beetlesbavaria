@@ -45,9 +45,9 @@ load("outData/spatial.Rdata")
 # - xy_sf_expand  # XY as sf data, one point for trap per every year, 1106 rows
 
 # Get SPEI and clim data: they are for whole year! check only veg season? now 3-10 (includes march)
-df_clim                <- fread('outTable/xy_clim_DWD.csv')
-df_spei_season                <- fread('outTable/xy_spei_veg_season_DWD.csv')
-df_spei_year         <- fread('outTable/xy_spei_all_DWD.csv')
+df_clim         <- fread('outTable/xy_clim_DWD.csv')
+df_spei_season  <- fread('outTable/xy_spei_veg_season_DWD.csv')
+df_spei_year    <- fread('outTable/xy_spei_all_DWD.csv')
 
 anyNA(df_spei_year)
 
