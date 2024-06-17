@@ -245,38 +245,48 @@ district_ID <- terra::extract(rast(grid_sel_ras),
                               df = TRUE, bind = TRUE )
 
 #### Link beetle counts vs damage volume per department -------------------------------------------------------
-ips_damage_district <- district_ID %>% 
+ips_damage_district <- 
+  district_ID %>% 
   as.data.frame() %>% 
-  rename(forstrev_1 = layer)
+  dplyr::rename(., forstrev_1 = layer)
 
 
 # join trap counts with volume damage data and beetle dynamics indicators;
 # average per trap pair to not have duplicate records
-ips_damage_merge <- ips_damage_district %>% 
+ips_damage_merge <- 
+  ips_damage_district %>% 
   left_join(df_damage, by = c('forstrev_1' = 'AELF_district_ID',
                               'year' = 'Year')) %>% 
   dplyr::select(-c(id, AELF_district_name,AELF_name, AELF_ID,
                  pest_species, tree_species, unit,
                  globalid )) %>% 
-  # lag tree damage: does beetle counts (or their lags) predict tree damage?:
-  group_by(falsto_name) %>% 
-  arrange(year, .by_group = TRUE) %>%
-  rename(trapID = falsto_name) %>%  
+  dplyr::rename(trapID = falsto_name) %>% 
    # add beetle dynamics variables 
   left_join(dat_dynamics) %>%
   group_by(trapID)  %>% 
-  mutate(sum_ips_lag1  = lag(sum_ips, n = 1, default = NA, order_by = year),
-         sum_ips_lag2  = lag(sum_ips, n = 2, default = NA, order_by = year),
-         agg_doy_lag1  = lag(agg_doy, n = 1, default = NA, order_by = year),
-         agg_doy_lag2  = lag(agg_doy, n = 2, default = NA, order_by = year),
-         peak_doy_lag1  = lag(peak_doy, n = 1, default = NA, order_by = year),
-         peak_doy_lag2  = lag(peak_doy, n = 2, default = NA, order_by = year),
-         peak_diff_lag1  = lag(peak_diff, n = 1, default = NA, order_by = year),
-         peak_diff_lag2  = lag(peak_diff, n = 2, default = NA, order_by = year))  %>% 
+  dplyr::arrange(year,.by_group = TRUE) %>% 
+   mutate(sum_ips_lag1  = dplyr::lag(sum_ips, n = 1, default = NA),  # 
+         sum_ips_lag2  = dplyr::lag(sum_ips, n = 2, default = NA),  # , order_by = year
+        agg_doy_lag1  = lag(agg_doy, n = 1, default = NA),
+        agg_doy_lag2  = lag(agg_doy, n = 2, default = NA),
+        peak_doy_lag1  = lag(peak_doy, n = 1, default = NA),
+        peak_doy_lag2  = lag(peak_doy, n = 2, default = NA),
+        peak_diff_lag1  = lag(peak_diff, n = 1, default = NA),
+        peak_diff_lag2  = lag(peak_diff, n = 2, default = NA)
+        )  %>%
+  
   ungroup(.) %>% 
   mutate(pairID = as.factor(pairID),
-         trapID = as.factor(trapID))
+         trapID = as.factor(trapID)) #%>% 
+    
   
+
+# Check if lags are correct!!!! YES!!!
+
+ips_damage_merge  %>% 
+   dplyr::filter(trapID == "Anzinger_Forst_1") %>% 
+     dplyr::select(trapID, year, sum_ips, sum_ips_lag1, sum_ips_lag2,
+                   agg_doy, agg_doy_lag2)
   
 
 
