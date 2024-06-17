@@ -920,7 +920,9 @@ p1.RS <-
 p.comp2 <- ggarrange(p0.damage, p1.damage, 
           p0.RS,
            p1.RS, align = 'hv')
-ggsave()
+
+ggsave(filename = 'outFigs/observation_vs_traps.png', 
+       plot = p.comp2, width = 4, height = 4, dpi = 300, bg = 'white')
 
 
 ##### quick plotting -----------------------------------------------
