@@ -357,6 +357,60 @@ df_all <- df_RS %>%
   #dplyr::filter(RS_wind_beetle <2000) %>% 
   dplyr::select(!c( AELF_ID, tree_species, unit, pest_species ))# %>%  # keep: AELF_district_name, AELF_name,
 
+
+
+# Get a summary table for year & per district --------------------------------------
+
+# Represent results using quantiles, as they are skewed?
+#qntils = c(0, 0.25, 0.5, 0.75, 1)
+df_all %>% 
+  ungroup() %>% 
+  summarize(sum_volume = sum(damaged_volume_total_m3),
+            sum_RS = sum(RS_wind_beetle, na.rm = T)*0.09)
+
+# data per years ----------------------------------------------------------------
+
+
+observation_mortality_year <- 
+  df_all %>% 
+  ungroup(.) %>% 
+  filter(year %in% 2015:2021) %>%
+    dplyr::select(ID, year, damaged_volume_total_m3, RS_wind_beetle) %>% 
+    dplyr::mutate(RS_wind_beetle = RS_wind_beetle*0.09) %>% # convert pixels to hectares
+    group_by(year) %>% 
+    dplyr::summarize(mean_dam   = mean(damaged_volume_total_m3  , na.rm = T),
+                     sd_dam     = sd(damaged_volume_total_m3, na.rm = T),
+                     mean_RS   = mean(RS_wind_beetle  , na.rm = T),
+                     sd_RS     = sd(RS_wind_beetle, na.rm = T)) %>% 
+  mutate(Field_volume       = stringr::str_glue("{round(mean_dam,1)}±{round(sd_dam,1)}"),
+         RS_area            = stringr::str_glue("{round(mean_RS,1)}±{round(sd_RS,1)}")) %>% 
+  dplyr::select(year, Field_volume, RS_area) 
+
+
+(observation_mortality_year)
+
+
+# Export as a nice table in word:
+sjPlot::tab_df(observation_mortality_year,
+               #               col.header = c(as.character(qntils), 'mean'),
+               show.rownames = F,
+               file="outTable/summary_out_observation_damage_year.doc",
+               digits = 0) 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 # get correlations
 df_cor <- df_all %>% 
   dplyr::filter(!ID %in% c(0, 50104, 60613,62705)) %>% # exlude if there is missing data
