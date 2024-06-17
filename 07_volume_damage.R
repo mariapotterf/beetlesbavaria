@@ -605,10 +605,10 @@ p_lags_observed_damage <-
     scale_color_manual(values = c("RS_wind_beetle" = rgb(0.2, 0.7, 0.1, 0.5), 
                                   "damage_vol" = rgb(0.7, 0.2, 0.1, 0.5)),
                        labels = c("RS_wind_beetle" = "Remote sensing\n[# pixels]",
-                                  "damage_vol" =  expression("Forest inventory [m"^3*"]"))) +
+                                  "damage_vol" =  expression("Field observation [m"^3*"]"))) +
     labs(y = expression("Adjusted R"^2*"[%]"),
          x = "",
-         color = 'Beetle tree mortality\nsource')+
+         color = 'Tree mortality\nsource')+
   theme_bw() +
   theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust=1),
         legend.position = 'right')
