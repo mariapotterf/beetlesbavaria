@@ -1794,6 +1794,20 @@ transform_predictions_DOY <- function(predictions, doy.start, doy.end) {
 }
 
 
+transform_single_prediction_DOY <- function(predicted_value, doy.start, doy.end) {
+  scale_factor <- doy.end - doy.start
+  transformed_value <- (predicted_value * scale_factor) + doy.start
+  return(transformed_value)
+}
+
+
+# Transform a single value
+transform_single_prediction_DOY(0.43, doy.start, doy.end)
+
+# Output the result
+transformed_value
+
+transform_predictions_DOY(0.2)
 # Assuming 'model' is your glm.nb model
 summary(fin.m.counts)
 p0 <- ggpredict(fin.m.counts, terms = "year [all]", allow.new.levels = TRUE)
