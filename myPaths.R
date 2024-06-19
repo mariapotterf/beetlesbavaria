@@ -17,7 +17,8 @@ outReach   = "outReach"
 spring.months         = 3:5
 veg.months            = 4:9  # study period
 study.period.extended = 2012:2021
-reference_period <- 1980:2010  # for anomalies calculation
+reference_period      = 1980:2010  # for anomalies calculation
+study_period          = 2015:2021  # for anomalies calculation
 
 
 
