@@ -290,6 +290,10 @@ ips_damage_merge  %>%
   
 
 
+# remove NA values
+ips_damage_clean <- na.omit(ips_damage_merge)
+
+
 
 # Extract RS data   -------------------------------------------------------------
 # merge disturbance rasters together; check n of cells 
@@ -369,8 +373,6 @@ df_all %>%
             sum_RS = sum(RS_wind_beetle, na.rm = T)*0.09)
 
 # data per years ----------------------------------------------------------------
-
-
 observation_mortality_year <- 
   df_all %>% 
   ungroup(.) %>% 
@@ -755,6 +757,7 @@ AIC(m1$lme, m1.1$lme, m2$lme, m3$lme)
 fin.m.damage <- m3$gam
 
 
+
 AIC(m1$lme, m2$lme, m3$lme)
 appraise(m3$gam)
 summary(m3$gam)
@@ -873,6 +876,8 @@ AIC(m0$lme, m1$lme,m1.2$lme, m2$lme, m3$lme, m4.RS$lme)
 
 # the best model!
 fin.m.RS <- m3$gam
+
+sjPlot::tab_model(fin.m.RS, file = "outTable/model_trap_RS.doc")
 
 
 appraise(m3$gam)
