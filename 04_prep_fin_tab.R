@@ -195,7 +195,9 @@ df_anom_tmp_prcp_veg_season <-
 df_tmp_anom <- 
   df_anom_tmp_prcp_veg_season %>% 
   group_by(falsto_name) %>%
-  mutate(tmp_z  = (tmp - mean(tmp[year %in% reference_period])) / sd(tmp[year %in% reference_period]),
+  mutate(mean_tmp  = mean(tmp[year %in% reference_period]),
+         sd_tmp = sd(tmp[year %in% reference_period]),
+         tmp_z  = (tmp - mean(tmp[year %in% reference_period])) / sd(tmp[year %in% reference_period]),
          prcp_z = (prcp - mean(prcp[year %in% reference_period])) / sd(prcp[year %in% reference_period])) %>%
   ungroup(.) 
 
@@ -217,6 +219,114 @@ df_spei_anom <-
 
 plot(df_spei_anom$year, df_spei_anom$spei_z)
 plot(df_spei_anom$year, df_spei_anom$spei)
+
+
+#### START
+
+# time series plot: ----------------------------------------
+df_anom_all <- df_tmp_anom %>% 
+  left_join(df_spei_anom,by = join_by(year, falsto_name)) %>% 
+  mutate(cat = case_when(year %in% study_period ~ 'study_period',
+                         .default = "ref")) 
+
+
+# get reference values for tmp and spei
+tmp_ref  = df_anom_all %>% 
+  ungroup() %>% 
+  filter(year %in% reference_period) %>% 
+  summarise(tmp = mean(tmp)) %>% 
+  pull()
+
+spei_ref  = df_anom_all %>% 
+  ungroup() %>% 
+  filter(year %in% reference_period) %>% 
+  summarise(spei = mean(spei)) %>% 
+  pull()
+
+
+# undersstand what does the z scored mean:
+# for TMP, for SPEI, for PRCP
+# calculated per each location: eg mean and sd are locatin specific! 
+# but i can get average values of Bavaria
+
+
+
+# get a table for reference period:
+df_anom_all %>% 
+  ungroup(.) %>% 
+  mutate(type = ifelse( year %in% reference_period, 'ref', 'current')) %>%
+  group_by(type) %>% 
+  summarise(
+    # mean_tmp = mean(tmp, na.rm = TRUE),
+    # sd_tmp = sd(tmp, na.rm = TRUE),
+    # min_tmp = min(tmp, na.rm = TRUE),
+    # max_tmp = max(tmp, na.rm = TRUE),
+    # mean_prcp = mean(prcp, na.rm = TRUE),
+    # sd_prcp = sd(prcp, na.rm = TRUE),
+    # min_prcp = min(prcp, na.rm = TRUE),
+    # max_prcp = max(prcp, na.rm = TRUE),
+    mean_spei = mean(spei, na.rm = TRUE),
+    sd_spei = sd(spei, na.rm = TRUE),
+    min_spei = min(spei, na.rm = TRUE),
+    max_spei = max(spei, na.rm = TRUE)
+    
+  )
+
+
+
+df_anom_all %>% 
+  ungroup() %>% 
+  filter(!year %in% reference_period) %>% 
+  summarise(mean_spei = mean(spei),
+            sd_spei = sd(spei),
+            mean_tmp = mean(tmp),
+            sd_tmp = sd(tmp),
+            mean_prcp = mean(prcp),
+            sd_prcp = sd(prcp))
+
+
+
+
+p.time.series.spei <- df_anom_all %>% 
+  ggplot(aes(x = year,
+             y = spei,
+             col = cat)) + 
+  scale_color_manual(values = c('black', 'red')) +
+  geom_hline(yintercept = spei_ref, lty = 'dashed', col = 'grey50' ) +
+  stat_summary(fun.data = "mean_sdl") +
+  theme_classic() +
+  theme(legend.position = 'none') +
+  labs(y =  "SPEI [dim.]", 
+       x = '') +
+  scale_x_continuous(n.breaks = 5)
+p.time.series.spei
+
+
+p.time.series.tmp <- df_anom_all %>% 
+  ggplot(aes(x = year,
+             y = tmp,
+             col = cat)) + 
+  stat_summary(fun.data = "mean_sdl") +
+  geom_hline(yintercept = tmp_ref, lty = 'dashed', col = 'grey50' ) +
+  scale_color_manual(values = c('black', 'red')) +
+  theme_classic() +
+  theme(legend.position = 'none') +
+  labs(y =  bquote('Temperature [' * degree * 'C]'), 
+       x = '') +
+  scale_x_continuous(n.breaks = 5)
+
+
+p.time <- ggarrange(p.time.series.tmp,
+                    p.time.series.spei, nrow = 2)
+
+windows(4, 4)
+p.time
+
+ggsave(filename = 'outFigs/time_series.png', 
+       plot = p.time, width = 4, height = 4, dpi = 300)
+
+
+
 
 
 # add anoalies to predictors:
