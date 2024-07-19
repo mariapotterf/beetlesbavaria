@@ -173,7 +173,7 @@ lags <- 0:3
 # dat_fin: calculate climate lags --------------
 dat_spei_lags <-  dat_fin %>% 
   dplyr::select(c(year, pairID, trapID, tmp, spei, 
-                  tmp_z, spei_z, 
+                  tmp_z, #spei_z, 
                   sum_ips, tr_agg_doy, tr_peak_doy,peak_diff,
                   agg_doy, peak_doy, x, y, Morans_I_log )) %>% 
   group_by(trapID) %>%
@@ -185,12 +185,12 @@ dat_spei_lags <-  dat_fin %>%
          tmp_lag1 = lag(tmp, n = 1, default = NA),
          tmp_lag2 = lag(tmp, n = 2, default = NA),
          tmp_lag3 = lag(tmp, n = 3, default = NA),
-    tmp_z_lag1 = lag(tmp_z, n = 1, default = NA),
+         tmp_z_lag1 = lag(tmp_z, n = 1, default = NA),
          tmp_z_lag2 = lag(tmp_z, n = 2, default = NA),
          tmp_z_lag3 = lag(tmp_z, n = 3, default = NA),
-        spei_z_lag1 = lag(spei_z, n = 1, default = NA),
-         spei_z_lag2 = lag(spei_z, n = 2, default = NA),
-         spei_z_lag3 = lag(spei_z, n = 3, default = NA),
+   #     spei_z_lag1 = lag(spei_z, n = 1, default = NA),
+  #       spei_z_lag2 = lag(spei_z, n = 2, default = NA),
+  #       spei_z_lag3 = lag(spei_z, n = 3, default = NA),
     spei_lag1 = lag(spei, n = 1, default = NA),
     spei_lag2 = lag(spei, n = 2, default = NA),
     spei_lag3 = lag(spei, n = 3, default = NA),
@@ -211,6 +211,7 @@ dat_spei_lags %>%
 # remove too low values: peiting and Eschenbach_idOPf: identify loutlier from log_sum_ips
 df_outliers <- dat_spei_lags %>% 
   group_by(year) %>% 
+  mutate(sum_ips_log = log(sum_ips)) %>% 
   mutate(is_outlier = ifelse(sum_ips_log > quantile(sum_ips_log, 0.75,na.rm=T) + 1.5 * IQR(sum_ips_log,na.rm=T) |
                                sum_ips_log < quantile(sum_ips_log, 0.25,na.rm=T) - 1.5 * IQR(sum_ips_log,na.rm=T), TRUE, FALSE)) # %>% 
 
@@ -234,7 +235,7 @@ dat_dynamics <- dat_fin %>%
   dplyr::select(c(year, trapID, pairID, spring_tmp, veg_tmp, veg_prcp,   
                   #spei3, 
                   spei, # spei for veg season
-                  tmp_z, prcp_z, spei_z, # z score fr veg season, sd from teh mean reference conditions
+                  tmp_z, prcp_z,# spei_z, # z score fr veg season, sd from teh mean reference conditions
                 sum_ips,  peak_doy, peak_diff, tr_agg_doy, tr_peak_doy, agg_doy, peak_doy,
                 x,y
                 ))
@@ -246,14 +247,14 @@ dat_fin_counts_m <-
   dplyr::select( -c(agg_doy, tr_agg_doy)) %>% 
   na.omit()
  
-nrow(dat_fin_counts_m)  # 948 rws, not sure why????
+nrow(dat_fin_counts_m)  # 1106
 
 # create new table with only agg values
 dat_fin_agg_m <- 
   dat_spei_lags %>% 
    ungroup() %>%
   na.omit()
-nrow(dat_fin_agg_m)
+nrow(dat_fin_agg_m)  # 1080
 
 # scale IPS_count data and AGG_doy tables --------
 # Specify the columns to skip
@@ -291,8 +292,10 @@ model_metrics_count <- data.frame(Predictor = character(),
 # List of dependent variables and predictors:
 # keep only spei3 and spei 12 - for the short term vs long term effect
 selected_predictors <- c(
+  "tmp", "tmp_lag1", "tmp_lag2","tmp_lag3" ,
   "tmp_z", "tmp_z_lag1", "tmp_z_lag2","tmp_z_lag3" ,
-  "spei_z", "spei_z_lag1", "spei_z_lag2","spei_z_lag3") 
+  "spei", "spei_lag1", "spei_lag2","spei_lag3" )
+  #"spei_z", "spei_z_lag1", "spei_z_lag2","spei_z_lag3") 
 
 
 
@@ -317,7 +320,7 @@ for (dep in dependent_vars_counts) {
 }
 
 # View the AIC values and deviance explained
-#print(model_metrics_count)
+print(model_metrics_count)
 
 # Select the best predictor for each dependent variable based on the lowest AIC
 best_predictors_counts <- model_metrics_count %>% 
@@ -397,9 +400,14 @@ best_predictors <- best_predictors %>%
 View(best_predictors)
 
 
+#fwrite(full_lag_models, 'outTable/fin_lag_predictors.csv')
+sjPlot::tab_df(full_lag_models,
+               #col.header = c(as.character(qntils), 'mean'),
+               show.rownames = FALSE,
+               file="outTable/find_lag_predictors.doc",
+               digits = 1) 
+
 # Calculate the correlation matrix for all predictors and their lags ---------------------------
-
-
 
 predictor_vars <- dat_fin_counts_m[, selected_predictors  ] # unique(best_predictors$Predictor)
 cor_matrix <- cor(predictor_vars, method = "spearman")
@@ -474,14 +482,14 @@ results_df2 <-
 ggplot(results_df2, aes(x = x , y = predicted , ymin = conf.low, ymax = conf.high)) +
   geom_ribbon(aes(ymin = conf.low, ymax = conf.high, fill = lag  ), alpha = 0.3) +
   geom_line(aes(color = lag  , linetype = lag  ), linewidth = 1)  +
-  facet_wrap(lag~type) +
+  facet_grid(lag~type) +
   theme_bw()
 
 
 
 # identify the 'hot and dry conditions'
 plot(dat_fin_counts_m_scaled$veg_tmp,dat_fin_counts_m_scaled$spei)
-plot(dat_fin_counts_m_scaled$tmp_z,dat_fin_counts_m_scaled$spei_z)
+plot(dat_fin_counts_m_scaled$tmp_z,dat_fin_counts_m_scaled$spei)
 
 pairs(sum_ips ~tmp_z_lag2 + spei_z_lag2,   data  = dat_fin_counts_m_scaled, panel=panel.smooth)
 
@@ -490,7 +498,7 @@ pairs(sum_ips ~tmp_z_lag2 + spei_z_lag2,   data  = dat_fin_counts_m_scaled, pane
 dat <- dat_fin_counts_m_scaled_no_outliers
 
 # Identify the points in the lower right cluster
-cluster_points <- dat[dat$tmp_z > 1.5 & dat$spei_z < 0, ]
+cluster_points <- dat[dat$tmp_z > 1.5 & dat$spei < 0, ]
 
 # Print or inspect the identified points
 summary(cluster_points)
@@ -587,6 +595,7 @@ df_corr %>%
 df_corr %>% 
   ggplot(aes(x = trap_1, y = trap_2)) + 
   geom_point() + 
+  geom_abline(intercept = 0, slope = 1, color = "red", lwd = 0.8, lty = 'dashed') +
   geom_smooth(method = 'gam', formula = y ~ s(x, bs = "cs", k = 4)) + 
   facet_wrap(.~year, scale = 'free')
 
@@ -612,10 +621,12 @@ avg_data <- dat_spei_lags %>%
             tr_peak_doy = mean(tr_peak_doy, na.rm = TRUE), 
             agg_doy     = mean(agg_doy, na.rm = TRUE),
             peak_doy    = mean(peak_doy, na.rm = TRUE),
-            spei_z_lag2 = mean(spei_z_lag2, na.rm = TRUE),
+            spei_lag2 = mean(spei_lag2, na.rm = TRUE),
             tmp_z_lag1  = mean(tmp_z_lag1, na.rm = TRUE),
-            spei_z_lag1 = mean(spei_z_lag1, na.rm = TRUE), # for agg_doy
+            tmp_lag1  = mean(tmp_lag1, na.rm = TRUE),
+            spei_lag1 = mean(spei_lag1, na.rm = TRUE), # for agg_doy
             tmp_z_lag2  = mean(tmp_z_lag2, na.rm = TRUE),  # for agg_doy
+            tmp_lag2  = mean(tmp_lag2, na.rm = TRUE),  # for agg_doy
             x           = mean(x, na.rm = TRUE),
             y           = mean(y, na.rm = TRUE),
             ) %>%
@@ -626,13 +637,24 @@ fwrite(avg_data, 'outTable/fin_tab_avg.csv')
 
 # test on averaged design ----------------------------------------------------------------
 # try less correlated predictors:
-m1 <- gamm(sum_ips ~  s(year, k =6) + s(tmp_z_lag1, k = 8) + s(spei_z_lag2, k = 4) +
-                        te(tmp_z_lag1, spei_z_lag2, k = 15) + 
+m1 <- gamm(sum_ips ~  s(year, k =6) + s(tmp_z_lag1, k = 8) + s(spei_lag2, k = 4) +
+                        te(tmp_z_lag1, spei_lag2, k = 15) + 
                         s(x, y, bs = "gp") + 
                         s(pairID, bs = "re"),
                       data = avg_data, 
                       family = nb,
                       correlation = corAR1(form = ~ year | pairID))
+
+# test: use only the tmp and not a z score 
+m1.test <- gamm(sum_ips ~  s(year, k =6) + s(tmp_lag1, k = 8) + s(spei_lag2, k = 4) +
+te(tmp_lag1, spei_lag2, k = 15) + 
+  s(x, y, bs = "gp") + 
+  s(pairID, bs = "re"),
+data = avg_data, 
+family = nb,
+correlation = corAR1(form = ~ year | pairID))
+
+
 # remove xy??
 m2 <- gamm(sum_ips ~  s(year, k =6) +  s(tmp_z_lag1, k = 8) + s(spei_z_lag2, k = 4) +
              te(tmp_z_lag1, spei_z_lag2, k = 20) + 
@@ -644,12 +666,24 @@ m2 <- gamm(sum_ips ~  s(year, k =6) +  s(tmp_z_lag1, k = 8) + s(spei_z_lag2, k =
 
 # add spatial autocorrelation explicitely, try simple
 # Define the model with spatial autocorrelation
-m3 <- gamm(sum_ips ~ s(year, k = 6) + s(tmp_z_lag1, k = 8) + s(spei_z_lag2, k = 4) +
-             te(tmp_z_lag1, spei_z_lag2, k = 15) + s(pairID, bs = "re"),
+m3 <- gamm(sum_ips ~ s(year, k = 6) + s(tmp_z_lag1, k = 8) + s(spei_lag2, k = 4) +
+             te(tmp_lag1, spei_lag2, k = 15) + s(pairID, bs = "re"),
            data = avg_data,
            family = nb,
            correlation = corAR1(form = ~ year | pairID) +
              corSpatial(form = ~ x + y, type = "exponential"))
+
+
+
+m3.test <- gamm(sum_ips ~ s(year, k = 6) + s(tmp_lag1, k = 8) + s(spei_z_lag2, k = 4) +
+             te(tmp_lag1, spei_z_lag2, k = 15) + s(pairID, bs = "re"),
+           data = avg_data,
+           family = nb,
+           correlation = corAR1(form = ~ year | pairID) +
+             corSpatial(form = ~ x + y, type = "exponential"))
+
+
+
 
 
 m<- m2$gam
@@ -944,10 +978,13 @@ avg_data_filt <- avg_data %>%
   dplyr::filter(!pairID %in% pair_outliers )
 
 
+nrow(avg_data_filt) # 518
+nrow(avg_data) # 549
+
 m.counts.tw <- gamm(sum_ips ~ s(year, k = 6) +
                          s(tmp_z_lag1, k = 5) +
-                         s(spei_z_lag2, k = 8) + 
-                         te(tmp_z_lag1, spei_z_lag2, k = 20) + 
+                         s(spei_lag2, k = 8) + 
+                         te(tmp_z_lag1, spei_lag2, k = 20) + 
                         # s(x, y, bs = 'gp', k = 70) + 
                          s(pairID, bs = 're'),
                        data = avg_data_filt, 
@@ -955,12 +992,37 @@ m.counts.tw <- gamm(sum_ips ~ s(year, k = 6) +
                        correlation = corAR1(form = ~ year | pairID))
 
 
+# test - what is teh effect of using tmp vs tmp_z?
+m.counts.tw.test <- gamm(sum_ips ~ s(year, k = 6) +
+                      s(tmp_lag1, k = 5) +
+                      s(spei_lag2, k = 8) + 
+                      te(tmp_lag1, spei_lag2, k = 20) + 
+                      # s(x, y, bs = 'gp', k = 70) + 
+                      s(pairID, bs = 're'),
+                    data = avg_data_filt, 
+                    family = tw,
+                    correlation = corAR1(form = ~ year | pairID))
+
+AIC(m.counts.tw, m.counts.tw.test)
+
+
+
+
+
 appraise(m.counts.tw$gam)
 summary(m.counts.tw$gam)
 k.check(m.counts.tw$gam)
-gam.check(m.counts.tw$gam)
+#gam.check(m.counts.tw$gam)
 plot(m.counts.tw$gam, page = 1)
 
+
+
+# for testing:
+appraise(m.counts.tw.test$gam)
+summary(m.counts.tw.test$gam)
+k.check(m.counts.tw.test$gam)
+#gam.check(m.counts.tw$gam)
+plot(m.counts.tw.test$gam, page = 1)
 
 
 
