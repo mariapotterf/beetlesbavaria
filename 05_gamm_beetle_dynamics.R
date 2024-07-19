@@ -1003,7 +1003,33 @@ m.counts.tw.test <- gamm(sum_ips ~ s(year, k = 6) +
                     family = tw,
                     correlation = corAR1(form = ~ year | pairID))
 
-AIC(m.counts.tw, m.counts.tw.test)
+
+# test year as factor 
+avg_data_filt$f_year <- as.factor(avg_data_filt$year)
+
+m.counts.tw.test.f <- gamm(sum_ips ~ f_year +
+                           s(tmp_lag1, k = 5) +
+                           s(spei_lag2, k = 8) + 
+                           te(tmp_lag1, spei_lag2, k = 20) + 
+                           # s(x, y, bs = 'gp', k = 70) + 
+                           s(pairID, bs = 're'),
+                         data = avg_data_filt, 
+                         family = tw,
+                         correlation = corAR1(form = ~ year | pairID))
+
+# add year as random
+m.counts.tw.test.f.rndm <- gamm(sum_ips ~ s(f_year,bs = 're')  +
+                             s(tmp_z_lag1, k = 5) +
+                             s(spei_lag2, k = 8) + 
+                             te(tmp_lag1, spei_lag2, k = 20) + 
+                             # s(x, y, bs = 'gp', k = 70) + 
+                             s(pairID, bs = 're'),
+                           data = avg_data_filt, 
+                           family = tw,
+                           correlation = corAR1(form = ~ year | pairID))
+
+
+AIC(m.counts.tw, m.counts.tw.test,m.counts.tw.test.f,m.counts.tw.test.f.rndm)
 
 
 
@@ -1023,6 +1049,23 @@ summary(m.counts.tw.test$gam)
 k.check(m.counts.tw.test$gam)
 #gam.check(m.counts.tw$gam)
 plot(m.counts.tw.test$gam, page = 1)
+
+
+# for testing:
+appraise(m.counts.tw.test.f$gam)
+summary(m.counts.tw.test.f$gam)
+k.check(m.counts.tw.test.f$gam)
+#gam.check(m.counts.tw$gam)
+plot(m.counts.tw.test.f$gam, page = 1)
+
+
+# with random effects of years
+appraise(m.counts.tw.test.f.rndm$gam)
+summary(m.counts.tw.test.f.rndm$gam)
+k.check(m.counts.tw.test.f.rndm$gam)
+#gam.check(m.counts.tw$gam)
+plot(m.counts.tw.test.f.rndm$gam, page = 1)
+anova(m.counts.tw.test.f.rndm$gam)
 
 
 
