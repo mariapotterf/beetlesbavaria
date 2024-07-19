@@ -90,8 +90,8 @@ xy_sf <-
 
 sort(unique(xy_sf$falsto_name))
 
-#xy_sf %>%  
-#  st_write(paste(out_path, "outSpatial/all_traps_3035.gpkg", sep = '/'), append=FALSE)
+xy_sf %>%  
+  st_write(paste(out_path, "outSpatial/all_traps_3035.gpkg", sep = '/'), append=FALSE)
 
 
 # Beetle data processing -------------------------------------------------------------- 
