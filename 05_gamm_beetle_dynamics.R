@@ -53,6 +53,7 @@ library(emmeans) #post hoc for categorical predictors
 
 
 library(mgcv)  # for gams
+library(gratia)
 
 # test for autocorrelation
 library(lmtest)
@@ -881,49 +882,160 @@ plot(m.peak.diff.tw$gam, page = 1)
 
 
 ###### SUM IPS TW  ------------------------------------
+avg_data <- avg_data %>% 
+  mutate(f_year = as.factor(year)) 
+
+
 avg_data_filt <- avg_data %>% 
+  mutate(f_year = as.factor(year)) %>% 
   dplyr::filter(!pairID %in% pair_outliers )
 
-# test year as factor 
-avg_data_filt$f_year <- as.factor(avg_data_filt$year)
 
 
 
 nrow(avg_data_filt) # 518
 nrow(avg_data) # 549
 
-m.counts.tw <- gamm(sum_ips ~ s(year, k = 6) +
+# increase the number of iterations to converge the model
+control <- list(niterPQL = 50)
+# the best!
+m.counts.tw <- gamm(sum_ips ~ #s(year, k = 6) +
                          s(tmp_z_lag1, k = 5) +
                          s(spei_lag2, k = 8) + 
-                         te(tmp_z_lag1, spei_lag2, k = 20) + 
-                        # s(x, y, bs = 'gp', k = 70) + 
-                         s(pairID, bs = 're'),
+                         te(tmp_z_lag1, spei_lag2, k = 7) + 
+                         #s(x, y, bs = 'gp', k = 70) + 
+                         s(pairID, bs = 're') +
+                      s(f_year, bs = 're'),
                        data = avg_data_filt, 
                        family = tw,
-                       correlation = corAR1(form = ~ year | pairID))
+                       correlation = corAR1(form = ~ year | pairID),
+                    control = control)
 
 
 
-m.counts.tw.test.f <- gamm(sum_ips ~ f_year +
-                           s(tmp_lag1, k = 5) +
-                           s(spei_lag2, k = 8) + 
-                           te(tmp_lag1, spei_lag2, k = 20) + 
-                           # s(x, y, bs = 'gp', k = 70) + 
-                           s(pairID, bs = 're'),
-                         data = avg_data_filt, 
-                         family = tw,
-                         correlation = corAR1(form = ~ year | pairID))
+m.counts.tw2 <- gamm(sum_ips ~ #s(year, k = 6) +
+                      s(tmp_z_lag1, k = 8) +
+                      s(spei_lag2, k = 10) + 
+                      te(tmp_z_lag1, spei_lag2, k = 20) + 
+                      #s(x, y, bs = 'gp', k = 70) + 
+                      s(pairID, bs = 're') +
+                      s(f_year, bs = 're'),
+                    data = avg_data_filt, 
+                    family = tw,
+                    correlation = corAR1(form = ~ year | pairID),
+                    control = control)
+
+
+summary(m.counts.tw$gam)
+AIC(m.counts.tw, m.counts.tw.year)
+
+m.counts.tw.year <- gamm(sum_ips ~ s(year, k = 6) +
+                      s(tmp_z_lag1, k = 5) +
+                      s(spei_lag2, k = 8) + 
+                      te(tmp_z_lag1, spei_lag2, k = 20) + 
+                     # s(x, y, bs = 'gp', k = 70) + 
+                      s(pairID, bs = 're'),
+                    data = avg_data_filt, 
+                    family = tw,
+                    correlation = corAR1(form = ~ year | pairID),
+                    control = control)
+
+
+
+# m.counts.tw.test.f <- gamm(sum_ips ~ f_year +
+#                            s(tmp_lag1, k = 5) +
+#                            s(spei_lag2, k = 8) + 
+#                            te(tmp_lag1, spei_lag2, k = 20) + 
+#                            # s(x, y, bs = 'gp', k = 70) + 
+#                            s(pairID, bs = 're'),
+#                          data = avg_data_filt, 
+#                          family = tw,
+#                          correlation = corAR1(form = ~ year | pairID))
 
 # add year as random
-m.counts.tw.test.f.rndm <- gamm(sum_ips ~ s(f_year,bs = 're')  +
-                             s(tmp_z_lag1, k = 5) +
-                             s(spei_lag2, k = 8) + 
-                             te(tmp_z_lag1, spei_lag2, k = 10) + 
-                             # s(x, y, bs = 'gp', k = 70) + 
-                             s(pairID, bs = 're'),
-                           data = avg_data_filt, 
-                           family = tw,
-                           correlation = corAR1(form = ~ year | pairID))
+# m.counts.tw.test.f.rndm <- gamm(sum_ips ~ s(f_year,bs = 're')  +
+#                              s(tmp_z_lag1, k = 5) +
+#                              s(spei_lag2, k = 8) + 
+#                              te(tmp_z_lag1, spei_lag2, k = 10) + 
+#                              # s(x, y, bs = 'gp', k = 70) + 
+#                              s(pairID, bs = 're'),
+#                            data = avg_data_filt, 
+#                            family = tw,
+#                            correlation = corAR1(form = ~ year | pairID))
+
+
+
+# Test for bam if it is faster? START ---------------------------------------
+
+# Assume avg_data_filt is your dataframe
+# Convert pairID to a factor if it is not already
+avg_data_filt$pairID <- as.factor(avg_data_filt$pairID)
+
+# Create an AR1 structure for each pairID
+# Corrected code to create AR.start
+avg_data_filt$start <- as.logical(ave(seq_along(avg_data_filt$year), avg_data_filt$pairID, 
+                                      FUN = function(x) if (length(x) > 1) c(1, rep(0, length(x) - 1)) else 1))
+
+#DAT$AR.START <-DAT$YEAR==2000
+
+
+# guess the rho - starting value
+# Fit a GAM model without autocorrelation
+simple_model <- gam(sum_ips ~ #s(year, k = 6) +
+                      s(tmp_z_lag1, k = 5) +
+                      s(spei_lag2, k = 8) + 
+                      te(tmp_z_lag1, spei_lag2, k = 20) +
+                      s(x,y, bs = 'gp') + 
+                      s(pairID, bs = 're'),
+                    data = avg_data_filt, 
+                    family = tw())
+
+# Extract residuals from the simpler model
+residuals_simple_model <- residuals(simple_model)
+
+# Calculate the autocorrelation function of the residuals
+acf_values <- acf(residuals_simple_model, plot = FALSE)
+
+# Get the first lag value as an estimate for rho
+rho_estimate <- acf_values$acf[2]
+print(rho_estimate)
+
+
+# Fit the model using bam with the estimated rho value
+m.counts.tw.bam <- bam(sum_ips ~ #s(year, k = 6) +
+                     s(tmp_z_lag1, k = 5) +
+                     s(spei_lag2, k = 8) + 
+                       s(x,y, bs = 'gp') + 
+                     te(tmp_z_lag1, spei_lag2, k = 20) + 
+                     s(pairID, bs = 're'),
+                   data = avg_data_filt, 
+                   family = tw(),
+                   rho = 0.19,
+                   AR.start = avg_data_filt$start,
+                   method="fREML", 
+                   discrete=TRUE)
+
+m.counts.tw.bam.year <- bam(sum_ips ~ s(year, k = 6) +
+                         s(tmp_z_lag1, k = 5) +
+                         s(spei_lag2, k = 8) + 
+                         s(x,y, bs = 'gp') + 
+                         te(tmp_z_lag1, spei_lag2, k = 20) + 
+                         s(pairID, bs = 're'),
+                       data = avg_data_filt, 
+                       family = tw(),
+                       rho = 0.19,
+                       AR.start = avg_data_filt$start,
+                       method="fREML", 
+                       discrete=TRUE)
+
+AIC(m.counts.tw.bam.year,m.counts.tw.bam)
+
+appraise(m.counts.tw.bam.year)
+summary(m.counts.tw.bam.year)
+plot(m.counts.tw.bam.year, page = 1, shade = T)
+
+
+# END BAM -----------------------------
 
 
 # add year as random
@@ -1239,13 +1351,13 @@ ggplot(avg_data_moran_sub, aes(x = sum_ips, #peak_diff,
 
 
 ##### quick plotting -----------------------------------------------
-fin.m <- m.counts.tw.test.f.rndm#  fin.m.agg#$gam
+fin.m <- m.counts.tw # m.counts.tw.bam.year#m.counts.tw.test.f.rndm#  fin.m.agg#$gam
 
 # plot in easy way how tdoes the k value affect interaction
 #p1 <- ggpredict(fin.m, terms = "year [all]", allow.new.levels = TRUE)
 p2 <- ggpredict(fin.m, terms = "tmp_z_lag1 [all]", allow.new.levels = TRUE)
 p3 <- ggpredict(fin.m, terms = "spei_lag2 [all]", allow.new.levels = TRUE)
-p4 <- ggpredict(fin.m, terms = c("tmp_lag1", "spei_lag2 [-1, 0, 1]"), allow.new.levels = TRUE)
+p4 <- ggpredict(fin.m, terms = c("tmp_z_lag1", "spei_lag2 [-1, 0, 1]"), allow.new.levels = TRUE)
 
 #p_df <- as.data.frame(p3)
 # test simple plot:
