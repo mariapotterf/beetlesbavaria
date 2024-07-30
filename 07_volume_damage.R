@@ -90,6 +90,8 @@ library(gratia)
 
 library(forcats)  # reorder by factor
 
+library(stringr) 
+
 
 
 # Data --------------------------------------------------------------------------
@@ -1025,17 +1027,157 @@ cor_shp <- sf_simpled %>%
 all_shp <- sf_simpled %>% 
   left_join(df_all, by = c("forstrev_1" = "ID"))
 
+df_damage_sum <- df_all %>% 
+  group_by(ID) %>% 
+  summarise(sum_dmg  =sum(damaged_volume_total_m3, na.rm = T),
+            sum_RS  =sum(RS_wind_beetle, na.rm = T)) %>% 
+  dplyr::filter(ID!=0) %>% 
+  ungroup(.)
+
 # add data to the full geometry to run teh intersection with the trap data
 #all_shp_complex <- sf_districts_trans %>% 
 #  left_join(df_all, by = c("forstrev_1" = "ID"))
 
-cor_shp_counts_dmg <- sf_simpled %>% 
-  right_join(df_cor_counts_damage_long, by = c("forstrev_1"))
+dmg_shp <- 
+  sf_simpled %>% 
+    dplyr::select(c(forstrev_1)) %>% 
+  full_join(df_damage_sum, by = c("forstrev_1" = "ID")) %>% 
+  dplyr::select(c(forstrev_1, sum_dmg,sum_RS))
+  
+  
+
+# cap values at 2e05
+
+hist(dmg_shp$sum_dmg)
+hist(dmg_shp$sum_RS)
+
+ 
+
+ # Calculate the XX percentile of the sum_dmg column
+ perc95_dmg <- quantile(dmg_shp$sum_dmg, 0.95)
+ perc95_RS <- quantile(dmg_shp$sum_RS, 0.95)
+ 
+
+
+# cap values at 95% interval
+dmg_shp <- dmg_shp %>% 
+  mutate(dmg_cap = case_when(sum_dmg > perc95_dmg~perc95_dmg, TRUE ~ sum_dmg),
+         RS_cap = case_when(sum_RS > perc95_RS ~ perc95_RS, TRUE ~ sum_RS))
+
+ #sum coundt of beetles by locations 
+
+df_sum_ips_years <- sum_ips %>% 
+   mutate(pairID = str_sub(falsto_name, 1, -3)) %>% 
+  group_by(pairID) %>% 
+  summarise(sum = sum(sum_ips, na.rm = T)/2)  # divide by two to have average sum per pair
+
+ # merge with simpler trap pairs (sites)
+ df_sum_ips_years_sf <- xy_sf_fin %>% 
+   mutate(pairID = str_sub(falsto_name, 1, -3)) %>% 
+   group_by(pairID) %>% 
+   slice(1) %>%  # Keep only the on trap per pair
+   ungroup(.) %>% 
+   full_join(df_sum_ips_years,by = join_by(pairID)) %>% 
+   dplyr::select(pairID, sum) #%>% 
+   
+ 
+ # Calculate the XX percentile of the sum_dmg column
+ perc95_sum_ips <- quantile(df_sum_ips_years_sf$sum, 0.95)
+ 
+ df_sum_ips_years_sf <- df_sum_ips_years_sf %>% 
+   mutate(sum_cap = case_when(sum > perc95_sum_ips~perc95_sum_ips, TRUE ~ sum))
+ 
+ 
+ hist(df_sum_ips_years_sf$sum)
+ 
+# MAPS -----------------------------------------------------------------------------------
+ bav_shp <- st_read('rawData/outline_bavaria.gpkg')
+ bav_3035 <- st_transform(bav_shp, crs(dmg_shp))
+ 
+ #4298150 
+ 
+ 
+# ad damage data to district geometry
+# MAP: plot correlation with beetle counts & tree damage ----------------------------------
+# Extract colors from RColorBrewer's YlOrRd palette
+colors <- rev(brewer.pal(9,  "RdYlBu" )) # "YlOrRd"  "RdYlBu"
+
+
+map.damage <- 
+  ggplot(dmg_shp) +
+   geom_sf(data = dmg_shp,
+          aes(fill = dmg_cap/1000)) +
+    geom_sf(data = bav_3035,
+            color = 'black', fill = NA, lwd = 0.8)  +
+    geom_sf(data = df_sum_ips_years_sf,
+            aes(color = sum_cap/1000), color = 'grey20', size = 2.5) +
+    geom_sf(data = df_sum_ips_years_sf,
+            aes(color = sum_cap/1000), size = 2) +
+  scale_color_gradientn(
+    name = "Beetle catch [#*1000]",
+    colors = colors,
+    guide = guide_colorbar(title.position = "top", title.hjust = 0.5)
+  )  +
+    scale_fill_gradientn(
+    name = bquote(Tree~mortality~('1000'~m^3)), #expression(Tree~mortality~('1000'm^3)) , #"Tree mortality [m3]",
+    colors = colors,
+    guide = guide_colorbar(title.position = "top", title.hjust = 0.5)
+  )  +
+  labs(title = "[a]") +
+  theme_void() +
+  theme(
+    legend.position = "bottom",
+    legend.title = element_text(angle = 0, size = 8),  # Smaller title
+    legend.text = element_text(size =8),              # Smaller text
+    legend.key.width = unit(0.5, "cm"),                  # Adjust width
+    legend.key.height = unit(0.2, "cm"),               # Adjust height
+    plot.title = element_text(hjust = 0, size = 8 )             # Center title
+  ) #+
+  #annotation_scale(location = "bl", width_hint = 0.5) +  # Add scale bar at bottom left
+  #annotation_north_arrow(location = "tl", which_north = "true", style = north_arrow_fancy_orienteering)  # Add north arrow at top left
+map.damage
 
 
 
+map.RS <- 
+  ggplot(dmg_shp) +
+   geom_sf(data = dmg_shp,
+          aes(fill = RS_cap*0.09)) +
+  geom_sf(data = bav_3035,
+          color = 'black', fill = NA, lwd = 0.8)  +
+  geom_sf(data = df_sum_ips_years_sf,
+          aes(color = sum_cap/1000), color = 'grey20', size = 2.5) +
+  geom_sf(data = df_sum_ips_years_sf,
+          aes(color = sum_cap/1000), size = 2) +
+  scale_color_gradientn(
+    name = "Beetle catch [#*1000]",
+    colors = colors,
+    guide = guide_colorbar(title.position = "top", title.hjust = 0.5)
+  )  +
+  scale_fill_gradientn(
+    name = "Tree mortality [ha]",
+    colors = colors,
+    guide = guide_colorbar(title.position = "top", title.hjust = 0.5)
+  )  +
+  labs(title = "[b]") +
+  theme_void() +
+  theme(
+    legend.position = "bottom",
+    legend.title = element_text(angle = 0, size = 8),  # Smaller title
+    legend.text = element_text(size = 8),              # Smaller text
+    legend.key.width = unit(0.5, "cm"),                  # Adjust width
+    legend.key.height = unit(0.2, "cm") ,               # Adjust height
+    plot.title = element_text(hjust = 0, size = 8)             # Center title
+  )
 
-# PLOTS 
+windows(7,5)
+damage_maps <- ggarrange(map.damage, map.RS, align = 'hv')
+damage_maps
+
+ggsave(filename = 'outFigs/damage_maps.png', 
+       plot = damage_maps, width = 7, 
+       height = 5, dpi = 300, bg = 'white')
+
 
 
 # MAP: plot correlation with beetle counts & tree damage ----------------------------------
@@ -1055,7 +1197,6 @@ ggplot(cor_shp) +
   facet_wrap(.~name)#
 
 
-# ad damage data to district geometry
 
 
 
