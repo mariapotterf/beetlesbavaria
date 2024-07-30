@@ -130,18 +130,12 @@ dat_fin <-   dat_fin %>%
   left_join(df_RS_out, 
             by = join_by(trapID, year, sum_ips)) 
   
-
-
-
-
-# calculate population growth
+# add previous year lag
 dat_fin <- dat_fin %>% 
   group_by(trapID) %>%
   arrange(year, .by_group = TRUE) %>%
   mutate(peak_diff = as.integer(round(peak_diff))) %>% 
- # mutate(sum_ips_lag1          = lag(sum_ips, n = 1, default = NA),
-#         population_growth     = (sum_ips - sum_ips_lag1) / sum_ips_lag1 * 100,
-#         population_growth2    = dplyr::lag(population_growth, n = 1, order_by = year)) %>%  # lag population growth by one more year
+  mutate(sum_ips_lag1          = lag(sum_ips, n = 1, default = NA)) %>%  # lag population growth by one more year
  ungroup(.) 
 
 # Merge beetle dynamics inicators with XYs
@@ -174,7 +168,9 @@ lags <- 0:3
 dat_spei_lags <-  dat_fin %>% 
   dplyr::select(c(year, pairID, trapID, tmp, spei, 
                   tmp_z, #spei_z, 
-                  sum_ips, tr_agg_doy, tr_peak_doy,peak_diff,
+                  sum_ips, 
+                  #sum_ips_lag1, 
+                  tr_agg_doy, tr_peak_doy,peak_diff,
                   agg_doy, peak_doy, x, y, Morans_I_log )) %>% 
   group_by(trapID) %>%
   mutate(trapID = as.factor(trapID),
@@ -203,7 +199,7 @@ nrow(dat_spei_lags)
 
 dat_spei_lags %>% 
   dplyr::filter(trapID == "Anzinger_Forst_1") %>% 
-  dplyr::select(trapID, year, tmp_z, tmp_z_lag1,tmp_z_lag2)
+  dplyr::select(trapID, year, tmp_z, tmp_z_lag1,tmp_z_lag2 ) # sum_ips, sum_ips_lag1
 
 # check lags if correct. YES!
 
@@ -292,7 +288,7 @@ model_metrics_count <- data.frame(Predictor = character(),
 # List of dependent variables and predictors:
 # keep only spei3 and spei 12 - for the short term vs long term effect
 selected_predictors <- c(
-  "tmp", "tmp_lag1", "tmp_lag2","tmp_lag3" ,
+  #"tmp", "tmp_lag1", "tmp_lag2","tmp_lag3" ,
   "tmp_z", "tmp_z_lag1", "tmp_z_lag2","tmp_z_lag3" ,
   "spei", "spei_lag1", "spei_lag2","spei_lag3" )
   #"spei_z", "spei_z_lag1", "spei_z_lag2","spei_z_lag3") 
@@ -463,7 +459,7 @@ results_df2 <-
   mutate(predictor = str_replace_all(predictor, "veg_tmp", "vegtmp"),
          predictor = str_replace_all(predictor, "spring_tmp", "springtmp"),
          predictor = str_replace_all(predictor, "tmp_z", "tmpz"),
-         predictor = str_replace_all(predictor, "spei_z", "speiz")) %>% 
+         predictor = str_replace_all(predictor, "spei", "spei")) %>% 
     mutate(predictor_full = case_when(
       str_detect(predictor, "_lag") ~ predictor,
       TRUE ~ paste0(predictor, "_lag0")
@@ -623,10 +619,10 @@ avg_data <- dat_spei_lags %>%
             peak_doy    = mean(peak_doy, na.rm = TRUE),
             spei_lag2 = mean(spei_lag2, na.rm = TRUE),
             tmp_z_lag1  = mean(tmp_z_lag1, na.rm = TRUE),
-            tmp_lag1  = mean(tmp_lag1, na.rm = TRUE),
+           # tmp_lag1  = mean(tmp_lag1, na.rm = TRUE),
             spei_lag1 = mean(spei_lag1, na.rm = TRUE), # for agg_doy
             tmp_z_lag2  = mean(tmp_z_lag2, na.rm = TRUE),  # for agg_doy
-            tmp_lag2  = mean(tmp_lag2, na.rm = TRUE),  # for agg_doy
+          #  tmp_lag2  = mean(tmp_lag2, na.rm = TRUE),  # for agg_doy
             x           = mean(x, na.rm = TRUE),
             y           = mean(y, na.rm = TRUE),
             ) %>%
@@ -634,95 +630,6 @@ avg_data <- dat_spei_lags %>%
   na.omit()
 
 fwrite(avg_data, 'outTable/fin_tab_avg.csv')
-
-# test on averaged design ----------------------------------------------------------------
-# try less correlated predictors:
-m1 <- gamm(sum_ips ~  s(year, k =6) + s(tmp_z_lag1, k = 8) + s(spei_lag2, k = 4) +
-                        te(tmp_z_lag1, spei_lag2, k = 15) + 
-                        s(x, y, bs = "gp") + 
-                        s(pairID, bs = "re"),
-                      data = avg_data, 
-                      family = nb,
-                      correlation = corAR1(form = ~ year | pairID))
-
-# test: use only the tmp and not a z score 
-m1.test <- gamm(sum_ips ~  s(year, k =6) + s(tmp_lag1, k = 8) + s(spei_lag2, k = 4) +
-te(tmp_lag1, spei_lag2, k = 15) + 
-  s(x, y, bs = "gp") + 
-  s(pairID, bs = "re"),
-data = avg_data, 
-family = nb,
-correlation = corAR1(form = ~ year | pairID))
-
-
-# remove xy??
-m2 <- gamm(sum_ips ~  s(year, k =6) +  s(tmp_z_lag1, k = 8) + s(spei_z_lag2, k = 4) +
-             te(tmp_z_lag1, spei_z_lag2, k = 20) + 
-            # s(x, y, bs = "gp") + 
-             s(pairID, bs = "re"),
-           data = avg_data, 
-           family = nb,
-           correlation = corAR1(form = ~ year | pairID))
-
-# add spatial autocorrelation explicitely, try simple
-# Define the model with spatial autocorrelation
-m3 <- gamm(sum_ips ~ s(year, k = 6) + s(tmp_z_lag1, k = 8) + s(spei_lag2, k = 4) +
-             te(tmp_lag1, spei_lag2, k = 15) + s(pairID, bs = "re"),
-           data = avg_data,
-           family = nb,
-           correlation = corAR1(form = ~ year | pairID) +
-             corSpatial(form = ~ x + y, type = "exponential"))
-
-
-
-m3.test <- gamm(sum_ips ~ s(year, k = 6) + s(tmp_lag1, k = 8) + s(spei_z_lag2, k = 4) +
-             te(tmp_lag1, spei_z_lag2, k = 15) + s(pairID, bs = "re"),
-           data = avg_data,
-           family = nb,
-           correlation = corAR1(form = ~ year | pairID) +
-             corSpatial(form = ~ x + y, type = "exponential"))
-
-
-
-
-
-m<- m2$gam
-fin.m.count <- m2
-
-AIC(m1$lme, m2$lme)
-AIC(m1$gam, m2$gam)
-
-summary(m)
-plot.gam(m)
-plot.lme( m1$lme )
-
-acf(residuals(m2$gam))
-pacf(residuals(m1$gam))
-
-
-# chec for residuals:
-
-library(gstat)
-
-# Extract residuals from m2
-residuals_m2 <- residuals(m2$lme, type = "normalized")
-
-# Create a spatial data frame
-spatial_data <- data.frame(x = avg_data$x, y = avg_data$y, residuals = residuals_m2)
-
-# Plot residuals to check for spatial patterns
-plot(spatial_data$x, spatial_data$y, col = residuals_m2, pch = 16, 
-     xlab = "X Coordinate", ylab = "Y Coordinate", 
-     main = "Spatial Plot of Residuals (Model m2)")
-colorRampPalette(c("blue", "white", "red"))(100)
-
-# Variogram of residuals
-vgm_res <- variogram(residuals ~ 1, data = spatial_data, locations = ~ x + y)
-plot(vgm_res, main = "Variogram of Residuals (Model m2)")
-# residual seems not to be spatialy autocorrelated!
-
-# Automate predictor selection: SUM_IPS ----------------------
-
 
 
 # AGG DOY : test for betar family-----------------------------------
@@ -977,6 +884,10 @@ plot(m.peak.diff.tw$gam, page = 1)
 avg_data_filt <- avg_data %>% 
   dplyr::filter(!pairID %in% pair_outliers )
 
+# test year as factor 
+avg_data_filt$f_year <- as.factor(avg_data_filt$year)
+
+
 
 nrow(avg_data_filt) # 518
 nrow(avg_data) # 549
@@ -992,20 +903,6 @@ m.counts.tw <- gamm(sum_ips ~ s(year, k = 6) +
                        correlation = corAR1(form = ~ year | pairID))
 
 
-# test - what is teh effect of using tmp vs tmp_z?
-m.counts.tw.test <- gamm(sum_ips ~ s(year, k = 6) +
-                      s(tmp_lag1, k = 5) +
-                      s(spei_lag2, k = 8) + 
-                      te(tmp_lag1, spei_lag2, k = 20) + 
-                      # s(x, y, bs = 'gp', k = 70) + 
-                      s(pairID, bs = 're'),
-                    data = avg_data_filt, 
-                    family = tw,
-                    correlation = corAR1(form = ~ year | pairID))
-
-
-# test year as factor 
-avg_data_filt$f_year <- as.factor(avg_data_filt$year)
 
 m.counts.tw.test.f <- gamm(sum_ips ~ f_year +
                            s(tmp_lag1, k = 5) +
@@ -1021,7 +918,7 @@ m.counts.tw.test.f <- gamm(sum_ips ~ f_year +
 m.counts.tw.test.f.rndm <- gamm(sum_ips ~ s(f_year,bs = 're')  +
                              s(tmp_z_lag1, k = 5) +
                              s(spei_lag2, k = 8) + 
-                             te(tmp_lag1, spei_lag2, k = 20) + 
+                             te(tmp_z_lag1, spei_lag2, k = 10) + 
                              # s(x, y, bs = 'gp', k = 70) + 
                              s(pairID, bs = 're'),
                            data = avg_data_filt, 
@@ -1029,7 +926,32 @@ m.counts.tw.test.f.rndm <- gamm(sum_ips ~ s(f_year,bs = 're')  +
                            correlation = corAR1(form = ~ year | pairID))
 
 
-AIC(m.counts.tw, m.counts.tw.test,m.counts.tw.test.f,m.counts.tw.test.f.rndm)
+# add year as random
+m.counts.tw.test.f.rndm2 <- gamm(sum_ips ~ s(f_year,bs = 're')  +
+                                  s(tmp_lag1, k = 5) +
+                                  s(spei_lag2, k = 8) + 
+                                  te(tmp_lag1, spei_lag2, k = 10) + 
+                                  # s(x, y, bs = 'gp', k = 70) + 
+                                  s(pairID, bs = 're'),
+                                data = avg_data_filt, 
+                                family = tw,
+                                correlation = corAR1(form = ~ year | pairID))
+
+# does not converge!! if adding both year as continuous and as factor
+m.counts.tw.test.f.rndm3 <- gamm(sum_ips ~ s(f_year,bs = 're')  +
+                                   s(year, k = 6) +
+                                   s(tmp_lag1, k = 5) +
+                                   s(spei_lag2, k = 8) + 
+                                   te(tmp_lag1, spei_lag2, k = 10) + 
+                                   # s(x, y, bs = 'gp', k = 70) + 
+                                   s(pairID, bs = 're'),
+                                 data = avg_data_filt, 
+                                 family = tw,
+                                 correlation = corAR1(form = ~ year | pairID))
+
+
+
+AIC(m.counts.tw, m.counts.tw.test,m.counts.tw.test.f,m.counts.tw.test.f.rndm, m.counts.tw.test.f.rndm2)
 
 
 
@@ -1065,7 +987,9 @@ summary(m.counts.tw.test.f.rndm$gam)
 k.check(m.counts.tw.test.f.rndm$gam)
 #gam.check(m.counts.tw$gam)
 plot(m.counts.tw.test.f.rndm$gam, page = 1)
-anova(m.counts.tw.test.f.rndm$gam)
+#anova(m.counts.tw.test.f.rndm$gam)
+
+
 
 
 
@@ -1315,13 +1239,13 @@ ggplot(avg_data_moran_sub, aes(x = sum_ips, #peak_diff,
 
 
 ##### quick plotting -----------------------------------------------
-fin.m <- fin.m.agg#$gam
+fin.m <- m.counts.tw.test.f.rndm#  fin.m.agg#$gam
 
 # plot in easy way how tdoes the k value affect interaction
-p1 <- ggpredict(fin.m, terms = "year [all]", allow.new.levels = TRUE)
-p2 <- ggpredict(fin.m, terms = "tmp_z_lag2 [all]", allow.new.levels = TRUE)
-p3 <- ggpredict(fin.m, terms = "spei_z_lag1 [all]", allow.new.levels = TRUE)
-p4 <- ggpredict(fin.m, terms = c("tmp_z_lag2", "spei_z_lag1 [-1, 0, 1]"), allow.new.levels = TRUE)
+#p1 <- ggpredict(fin.m, terms = "year [all]", allow.new.levels = TRUE)
+p2 <- ggpredict(fin.m, terms = "tmp_z_lag1 [all]", allow.new.levels = TRUE)
+p3 <- ggpredict(fin.m, terms = "spei_lag2 [all]", allow.new.levels = TRUE)
+p4 <- ggpredict(fin.m, terms = c("tmp_lag1", "spei_lag2 [-1, 0, 1]"), allow.new.levels = TRUE)
 
 #p_df <- as.data.frame(p3)
 # test simple plot:
@@ -1345,7 +1269,8 @@ plot4<-ggplot(p4, aes(x = x, y = predicted)) +
   geom_line(aes(color = group, linetype = group), linewidth = 1) +
   theme_classic2()
 
-ggarrange(plot1,plot2,plot3,plot4, ncol = 2, nrow = 2)
+ggarrange(#plot1,
+          plot2,plot3,plot4, ncol = 2, nrow = 2)
 
 
 
