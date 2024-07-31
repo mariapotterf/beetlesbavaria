@@ -212,6 +212,14 @@ df_outliers <- dat_spei_lags %>%
   mutate(is_outlier = ifelse(sum_ips_log > quantile(sum_ips_log, 0.75,na.rm=T) + 1.5 * IQR(sum_ips_log,na.rm=T) |
                                sum_ips_log < quantile(sum_ips_log, 0.25,na.rm=T) - 1.5 * IQR(sum_ips_log,na.rm=T), TRUE, FALSE)) # %>% 
 
+# count how many outliers i have?
+df_outliers %>% 
+  dplyr::filter(is_outlier == TRUE) %>% 
+  ungroup() %>% 
+  summarise(n = n()) #%>%
+
+# 73 are outliers, from 1106, which is 6.6%
+
 # check which ones are outliers and how often?
 
 pair_outliers <- df_outliers %>%
@@ -628,7 +636,9 @@ avg_data <- dat_spei_lags %>%
             y           = mean(y, na.rm = TRUE),
             ) %>%
   ungroup(.) %>% 
-  na.omit()
+  na.omit() %>% 
+  mutate(f_year = as.factor(year)) %>% 
+  dplyr::filter(!pairID %in% c('Eschenbach_idOPf', 'Peiting') ) # remove two traps with always having too low trap counts
 
 fwrite(avg_data, 'outTable/fin_tab_avg.csv')
 
@@ -882,8 +892,6 @@ plot(m.peak.diff.tw$gam, page = 1)
 
 
 ###### SUM IPS TW  ------------------------------------
-avg_data <- avg_data %>% 
-  mutate(f_year = as.factor(year)) 
 
 
 avg_data_filt <- avg_data %>% 
@@ -898,7 +906,7 @@ nrow(avg_data) # 549
 
 # create extra table for sum_ips_lag
 
-avg_data_filt_lagged <- avg_data_filt %>% 
+avg_data_filt_lagged <- avg_data_filt %>% #  avg_data %>% # 
   group_by(pairID) %>%
   arrange(year, .by_group = TRUE) %>%
   # mutate(peak_diff = as.integer(round(peak_diff))) %>% 
@@ -1317,6 +1325,7 @@ residuals <- resid(m.counts.previous$lme, type = "normalized")
 
 # Plot ACF of the residuals
 acf(residuals, main="ACF of Model Residuals")
+pacf(residuals, main="ACF of Model Residuals")
 
 
 # plot in easy way how tdoes the k value affect interaction
