@@ -902,7 +902,7 @@ avg_data_filt <- avg_data %>%
 
 
 nrow(avg_data_filt) # 518
-nrow(avg_data) # 549
+nrow(avg_data) # 539
 
 # create extra table for sum_ips_lag
 
@@ -910,13 +910,17 @@ avg_data_filt_lagged <- avg_data_filt %>% #  avg_data %>% #
   group_by(pairID) %>%
   arrange(year, .by_group = TRUE) %>%
   # mutate(peak_diff = as.integer(round(peak_diff))) %>% 
-  mutate(sum_ips_lag1          = lag(sum_ips, n = 1, default = NA)) %>%  # lag population growth by one more year
+  mutate(sum_ips_lag1          = lag(sum_ips, n = 1, default = NA),  # laf previous year values to adress autocorrelation
+         peak_diff_lag1        = lag(peak_diff , n = 1, default = NA),
+         tr_agg_doy_lag1       = lag(tr_agg_doy , n = 1, default = NA),
+         tr_peak_doy_lag1      = lag(tr_peak_doy , n = 1, default = NA)) %>%  
  na.omit()
 
 
 avg_data_filt_lagged %>% 
   dplyr::filter(pairID == 'Anzinger_Forst') %>% 
-  dplyr::select(year, sum_ips, sum_ips_lag1)
+  dplyr::select(year, sum_ips, sum_ips_lag1, 
+                tr_peak_doy, tr_peak_doy_lag1 )
 
 
 # test effect of previuos year cunts
@@ -932,10 +936,25 @@ m.counts.previous <- gamm(sum_ips ~
                     family = tw,
                     control = control)
 
-summary(m.counts.previous$gam)
-appraise(m.counts.previous$gam)
-k.check(m.counts.previous$gam)
-plot(m.counts.previous$gam, page = 1, shade = TRUE)
+# other way: spei lag1, tmp lag2
+m.counts.previous.alter <- gamm(sum_ips ~ 
+                            s(tmp_z_lag2, k = 5) +
+                            s(spei_lag1, k = 8) + 
+                            te(tmp_z_lag2, spei_lag1, k = 7) + 
+                            s(sum_ips_lag1, k = 5) + # Added term for previous beetle counts
+                            s(pairID, bs = 're') +
+                            s(f_year, bs = 're'),
+                          data = avg_data_filt_lagged, 
+                          family = tw,
+                          control = control)
+
+AIC(m.counts.previous.alter, m.counts.previous)
+
+# no, better to go with longer lag (lag2) for spei, and tmp lg)1 for sum ips, diff
+summary(m.counts.previous.alter$gam)
+appraise(m.counts.previous.alter$gam)
+k.check(m.counts.previous.alter$gam)
+plot(m.counts.previous.alter$gam, page = 1, shade = TRUE)
 
 
 # increase the number of iterations to converge the model
