@@ -1558,60 +1558,6 @@ plot(st_geometry(dat_dynamics_sf_sign), col = 'red', add = TRUE)
 
 
 
-###### How much variance is explained by individual terms? -----------
-# Full model
-m.gam.spei_tmp_re_slope45_temp_int2 <- gam(sum_ips ~ s(spei3_lag2, k = 4) + 
-                                             s(veg_tmp, k = 5) +
-                                             ti(spei3_lag2, veg_tmp, k = 4) +
-                                             s(pairID, bs= 're') +
-                                             s(spei3_lag2, pairID, bs = "re") +
-                                             s(veg_tmp, pairID, bs = "re"), #+ ,
-                                           family = nb(),method ='REML', # (use ML methos if wish to compare model with glmmTMB by AIC)  "REML", 
-                                           data = dat_fin_counts_m_scaled)
-
-
-
-#fin.m.counts <- m.gam.spei_tmp_re_slope45_temp_int2
-# Fit the reduced model without veg_tmp
-m_no_veg_tmp <- gam(sum_ips ~ s(spei3_lag2, k = 4) + 
-                      ti(spei3_lag2, veg_tmp, k = 4) +
-                      s(pairID, bs= 're') +
-                      s(spei3_lag2, pairID, bs = "re"),
-                    family = nb(), method = 'REML', data = dat_fin_counts_m_scaled)
-
-# Fit the reduced model without spei3_lag2
-m_no_spei3_lag2 <- gam(sum_ips ~ s(veg_tmp, k = 5) + 
-                         s(pairID, bs= 're') +
-                         ti(spei3_lag2, veg_tmp, k = 4) +
-                         s(veg_tmp, pairID, bs = "re"),
-                       family = nb(), method = 'REML', data = dat_fin_counts_m_scaled)
-
-# Fit the reduced model without interaction term
-m_no_interaction <- gam(sum_ips ~ s(spei3_lag2, k = 4) + s(veg_tmp, k = 5) +
-                          s(spei3_lag2, pairID, bs = "re") +
-                          s(veg_tmp, pairID, bs = "re") +
-                          s(pairID, bs= 're'),
-                        family = nb(), method = 'REML', data = dat_fin_counts_m_scaled)
-
-# Calculate deviance explained for the full model
-dev_full <- summary(fin.m.counts)$dev.expl
-
-# Calculate deviance explained for the reduced models
-dev_no_veg_tmp <- summary(m_no_veg_tmp)$dev.expl
-dev_no_spei3_lag2 <- summary(m_no_spei3_lag2)$dev.expl
-dev_no_interaction <- summary(m_no_interaction)$dev.expl
-
-# Calculate deviance explained by each predictor
-deviance_explained_veg_tmp <- dev_full - dev_no_veg_tmp
-deviance_explained_spei3_lag2 <- dev_full - dev_no_spei3_lag2
-deviance_explained_interaction <- dev_full - dev_no_interaction
-
-# Print results
-cat("Deviance explained by veg_tmp: ", deviance_explained_veg_tmp, "\n")
-cat("Deviance explained by spei3_lag2: ", deviance_explained_spei3_lag2, "\n")
-cat("Deviance explained by interaction (spei3_lag2 * veg_tmp): ", deviance_explained_interaction, "\n")
-
-
 
 
 
