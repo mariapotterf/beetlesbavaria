@@ -893,18 +893,17 @@ plot(m.peak.diff.tw$gam, page = 1)
 
 ###### SUM IPS TW  ------------------------------------
 
+###### TEST MODELS previous year ------------------------------------------------
 
 avg_data_filt <- avg_data %>% 
   mutate(f_year = as.factor(year)) %>% 
   dplyr::filter(!pairID %in% pair_outliers )
 
 
-
-
 nrow(avg_data_filt) # 518
 nrow(avg_data) # 539
 
-# create extra table for sum_ips_lag
+# create extra table for sum_ips_lag1
 
 avg_data_filt_lagged <- avg_data_filt %>% #  avg_data %>% # 
   group_by(pairID) %>%
@@ -927,169 +926,6 @@ avg_data_filt_lagged %>%
                 tr_peak_doy, tr_peak_doy_lag1 )
 
 
-# test effect of previuos year cunts ----------------------------------------------
-# the best!
-m.counts.previous <- gamm(sum_ips ~ 
-                      s(tmp_z_lag1, k = 5) +
-                      s(spei_lag2, k = 8) + 
-                      te(tmp_z_lag1, spei_lag2, k = 7) + 
-                      s(sum_ips_lag1, k = 5) + # Added term for previous beetle counts
-                      s(pairID, bs = 're') +
-                      s(f_year, bs = 're'),
-                    data = avg_data_filt_lagged, 
-                    family = tw,
-                    control = control)
-
-# for peak_diff
-m.peak.diff.previous <- gamm(peak_diff ~ 
-                            s(tmp_z_lag1, k = 5) +
-                            s(spei_lag2, k = 8) + 
-                            te(tmp_z_lag1, spei_lag2, k = 7) + 
-                            s(peak_diff_lag1 , k = 5) + # Added term for previous beetle counts
-                            s(pairID, bs = 're') +
-                            s(f_year, bs = 're'),
-                          data = avg_data_filt_lagged, 
-                          family = tw,
-                          control = control)
-
-
-# agg dy previous - test which model alternative is more stable - the specific one
-
-m.agg.previous <- gamm(tr_agg_doy ~ 
-                           s(tmp_z_lag2, k = 3,bs = "cs") +
-                           s(spei_lag1, k = 3) + 
-                           te(tmp_z_lag2, spei_lag1, k = 7,bs = "cs") + 
-                           s(tr_agg_doy_lag1 , k = 5) + # Added term for previous year numbers to account ofr autocorrelation
-                           s(pairID, bs = 're') +
-                           s(f_year, bs = 're'),
-                         data = avg_data_filt_lagged, 
-                         family = Gamma(link = "log"),
-                         control = control)
-
-  
-#
-m.agg.gamma <- gamm(tr_agg_doy ~ #s(year, k = 6) + 
-s(tmp_z_lag2, k = 3, bs = "cs") + # 
-  s(spei_lag1, k = 3,bs = "cs") + 
-  te(tmp_z_lag2, spei_lag1, k = 4, bs = "cs") + #
-  #s(x, y, bs = 'gp', k = 30) + 
-  s(pairID, bs = 're') +
-  s(f_year, bs = 're'),
-data =  avg_data_agg , 
-family = Gamma(link = "log"),
-correlation = corAR1(form = ~ year | pairID))
-
-  
-
-# test for peak day ----------------------
-# previous vs autocorrelation specified
-# agg dy previous - test which model alternative is more stable - the specific one
-
-
-#
-m.peak.gamma <- gamm(tr_peak_doy ~ #s(year, k = 6) + 
-                      s(tmp_z_lag2, k = 10) + # 
-                      s(spei_lag1, k = 10,bs = "tp") + 
-                      te(tmp_z_lag2, spei_lag1, k = 20,bs = "cs") + #
-                      #s(x, y, bs = 'gp', k = 10) + 
-                      s(pairID, bs = 're')# +
-                     # s(f_year, bs = 're')
-                     ,
-                    data =  avg_data_filt , 
-                    family = Gamma(link = "log"),
-                    correlation = corAR1(form = ~ year | pairID),
-                    control = control)
-
-
-m.peak.gamma.simple <- gamm(tr_peak_doy ~ #s(year, k = 6) + 
-                       s(tmp_z_lag2, k = 2) + # 
-                       s(spei_lag1, k = 3,bs = "tp") + 
-                       te(tmp_z_lag2, spei_lag1, k = 6,bs = "tp") + #
-                       #s(x, y, bs = 'gp', k = 10) + 
-                       s(pairID, bs = 're')# +
-                     # s(f_year, bs = 're')
-                     ,
-                     data =  avg_data_filt , 
-                     family = Gamma(link = "log"),
-                     correlation = corAR1(form = ~ year | pairID),
-                     control = control)
-
-summary(m.peak.gamma.simple$gam)
-appraise(m.peak.gamma.simple$gam)
-k.check(m.peak.gamma.simple$gam)
-plot(m.peak.gamma.simple$gam, page = 1, shade = TRUE)
-
-AIC(m.peak.gamma.simple, m.peak.gamma)
-summary(m.peak.gamma$gam)
-appraise(m.peak.gamma$gam)
-k.check(m.peak.gamma$gam)
-plot(m.peak.gamma$gam, page = 1, shade = TRUE)
-
-
-
-
-cor(avg_data_filt_lagged$tr_peak_doy, avg_data_filt_lagged$tr_peak_doy_lag1 )
-
-boxplot(avg_data_filt_lagged$tr_peak_doy_lag1)
-hist(avg_data_filt_lagged$tr_peak_doy_lag1)
-
-boxplot(avg_data_filt$tr_peak_doy_lag1)
-hist(avg_data_filt$tr_peak_doy_lag1)
-
-
-
-# Calculate Q1, Q3, and IQR
-Q1 <- quantile(avg_data_filt_lagged$tr_peak_doy_lag1, 0.25)
-Q3 <- quantile(avg_data_filt_lagged$tr_peak_doy_lag1, 0.75)
-IQR <- Q3 - Q1
-
-# Define outlier thresholds
-lower_bound <- Q1 - 1.5 * IQR
-upper_bound <- Q3 + 1.5 * IQR
-
-# Filter out the outliers
-avg_data_filt_lagged_no_peak_doy_outliers <- avg_data_filt_lagged[avg_data_filt_lagged$tr_peak_doy_lag1 >= lower_bound & avg_data_filt_lagged$tr_peak_doy_lag1 <= upper_bound, ]
-
-# Check the boxplot again to confirm removal
-boxplot(avg_data_filt_lagged_no_peak_doy_outliers$tr_peak_doy_lag1)
-
-# Remove empty levels
-avg_data_filt_lagged_no_peak_doy_outliers$f_year <- droplevels(avg_data_filt_lagged_no_peak_doy_outliers$f_year)
-
-# Check the levels to confirm removal
-levels(avg_data_filt_lagged_no_peak_doy_outliers$f_year)
-
-
-cor_matrix <- cor(avg_data_filt_lagged[, c("tr_peak_doy_lag1", "tmp_z_lag2", "spei_lag1", "x", "y")])
-print(cor_matrix)
-
-
-m.peak.previous <- gamm(tr_peak_doy ~ 
-                         s(tmp_z_lag2, k = 10,bs = "tp") +
-                         s(spei_lag1, k = 8) + 
-                         te(tmp_z_lag2, spei_lag1, k = 30,bs = "tp") + 
-                         #s(tr_peak_doy_lag1 , k = 5) + # Added term for previous year numbers to account ofr autocorrelation
-                        # s(pairID, bs = 're') +
-                         # s(x,y, bs = "gp") +
-                         s(f_year, bs = 're'),
-                       data = avg_data_filt_lagged_no_peak_doy_outliers, 
-                       family = Gamma(link = "log"),
-                       control = list(maxIter = 100, msMaxEval = 500, msMaxIter = 50, opt = "optim"))
-
-
-
-
-# no, better to go with longer lag (lag2) for spei, and tmp lg)1 for sum ips, diff
-summary(m.peak.previous$gam)
-appraise(m.peak.previous$gam)
-k.check(m.peak.previous$gam)
-plot(m.peak.previous$gam, page = 1, shade = TRUE)
-
-
-# increase the number of iterations to converge the model
-control <- list(niterPQL = 50)
-
-  
 
 # the best!
 m.counts.tw <- gamm(sum_ips ~ #s(year, k = 6) +
@@ -1228,10 +1064,111 @@ vif_result <- vif(lm(peak_diff ~ ., data = vif_data))
 
 appraise(fin.m.agg)
 
+### TEST models with different temp autocorrelation and propoer SPEI --------------------------------------------------------------
 
-summary(fin.m)
+# increase the number of iterations to converge the model
+control <- list(niterPQL = 50)
 
 
+#### test effect of previuos year cunts ----------------------------------------------
+# the best!
+m.counts.previous <- gamm(sum_ips ~ 
+                            s(tmp_z_lag1, k = 5) +
+                            s(spei_lag2, k = 8) + 
+                            te(tmp_z_lag1, spei_lag2, k = 7) + 
+                            s(sum_ips_lag1, k = 5) + # Added term for previous beetle counts
+                            s(pairID, bs = 're') +
+                            s(f_year, bs = 're'),
+                          data = avg_data_filt_lagged, 
+                          family = tw,
+                          control = control)
+
+
+# for peak_diff
+m.peak.diff.previous <- gamm(peak_diff ~ 
+                               s(tmp_z_lag1, k = 5) +
+                               s(spei_lag2, k = 8) + 
+                               te(tmp_z_lag1, spei_lag2, k = 7) + 
+                               s(peak_diff_lag1 , k = 5) + # Added term for previous beetle counts
+                               s(pairID, bs = 're') +
+                               s(f_year, bs = 're'),
+                             data = avg_data_filt_lagged, 
+                             family = tw,
+                             control = control)
+
+
+# agg dy previous - test which model alternative is more stable - the specific one
+# m.agg.previous <- gamm(tr_agg_doy ~ 
+#                          s(tmp_z_lag2, k = 3,bs = "cs") +
+#                          s(spei_lag1, k = 3) + 
+#                          te(tmp_z_lag2, spei_lag1, k = 7,bs = "cs") + 
+#                          s(tr_agg_doy_lag1 , k = 5) + # Added term for previous year numbers to account ofr autocorrelation
+#                          s(pairID, bs = 're') +
+#                          s(f_year, bs = 're'),
+#                        data = avg_data_filt_lagged, 
+#                        family = Gamma(link = "log"),
+#                        control = control)
+# 
+
+# better! 
+m.agg.gamma <- gamm(tr_agg_doy ~ #s(year, k = 6) + 
+                      s(tmp_z_lag2, k = 3, bs = "cs") + # 
+                      s(spei_lag1, k = 3,bs = "cs") + 
+                      te(tmp_z_lag2, spei_lag1, k = 4, bs = "cs") + #
+                      #s(x, y, bs = 'gp', k = 30) + 
+                      s(pairID, bs = 're') +
+                      s(f_year, bs = 're'),
+                    data =  avg_data_agg , 
+                    family = Gamma(link = "log"),
+                    correlation = corAR1(form = ~ year | pairID))
+
+
+
+# test for peak day ----------------------
+# previous vs autocorrelation specified
+# agg dy previous - test which model alternative is more stable - the specific one
+
+# Calculate Q1, Q3, and IQR
+Q1 <- quantile(avg_data_filt$tr_peak_doy, 0.25)
+Q3 <- quantile(avg_data_filt$tr_peak_doy, 0.75)
+IQR <- Q3 - Q1
+
+# Define outlier thresholds
+lower_bound <- Q1 - 1.5 * IQR
+upper_bound <- Q3 + 1.5 * IQR
+
+# Filter out the outliers
+avg_data_filt_peak_doy <- avg_data_filt[avg_data_filt$tr_peak_doy >= lower_bound & avg_data_filt$tr_peak_doy <= upper_bound, ]
+
+nrow(avg_data_filt_peak_doy) # 512
+nrow(avg_data_filt)
+
+
+# keep simple one for plottig purposes
+m.peak.gamma.simple <- gamm(tr_peak_doy ~ 
+                              s(tmp_z_lag2, k = 3)  + # 
+                              s(spei_lag1, k = 3) + 
+                              te(tmp_z_lag2, spei_lag1, k = 5, bs = 'tp') + #
+                              #s(x, y, bs = 'gp', k = 10) + 
+                              s(pairID, bs = 're')# +
+                            # s(f_year, bs = 're')
+                            ,
+                            data =  avg_data_filt_peak_doy,#avg_data_filt , 
+                            family = Gamma(link = "log"),
+                            correlation = corAR1(form = ~ year | pairID),
+                            control = control)
+
+summary(m.peak.gamma.simple$gam)
+appraise(m.peak.gamma.simple$gam)
+k.check(m.peak.gamma.simple$gam)
+plot(m.peak.gamma.simple$gam, page = 1, shade = TRUE)
+
+
+###### get final models ----------------
+fin.m.counts.previous.tw    <- m.counts.previous$gam
+fin.m.peak.diff.previous.tw <- m.peak.diff.previous$gam
+fin.m.agg.doy.gamma         <- m.agg.gamma$gam
+fin.m.peak.doy.gamma        <- m.peak.gamma.simple$gam
 
 
 
@@ -1464,7 +1401,7 @@ ggplot(avg_data_moran_sub, aes(x = sum_ips, #peak_diff,
 
 
 ##### quick plotting -----------------------------------------------
-fin.m <- m.peak.gamma$gam # m2.agg.gamma$gam #m.counts.tw$gam # m.counts.tw.bam.year#m.counts.tw.test.f.rndm#  fin.m.agg#$gam
+fin.m <- m.peak.gamma.simple$gam # m2.agg.gamma$gam #m.counts.tw$gam # m.counts.tw.bam.year#m.counts.tw.test.f.rndm#  fin.m.agg#$gam
 
 # check for tempoeal autocorrelation
 
@@ -1513,21 +1450,25 @@ ggarrange(#plot1,
 
 # update& save the best models: --------------------------------------------------------
 
-# explore results for individual dependent variables: select the onse with the lowest AIC/with the all random effects
-fin.m.counts     <- m.counts.tw$gam #result$sum_ips$models$random_effect$gam  # lowest AIC
-fin.m.agg        <- m2.agg.gamma$gam #m1.gamma$gam#result$tr_agg_doy$models$random_effect$gam  # lowest AIC
-fin.m.peak       <- m.peak.gamma$gam #m.peak.diff.tw$gam #result$tr_peak_doy$models$random_effect$gam  # lowest AIC
-fin.m.peak.diff  <- m.peak.diff.tw$gam #result_peak_diff$peak_diff$models$random_effect$gam  # lowest AIC
+# # explore results for individual dependent variables: select the onse with the lowest AIC/with the all random effects
+# fin.m.counts     <- m.counts.tw$gam #result$sum_ips$models$random_effect$gam  # lowest AIC
+# fin.m.agg        <- m2.agg.gamma$gam #m1.gamma$gam#result$tr_agg_doy$models$random_effect$gam  # lowest AIC
+# fin.m.peak       <- m.peak.gamma$gam #m.peak.diff.tw$gam #result$tr_peak_doy$models$random_effect$gam  # lowest AIC
+# fin.m.peak.diff  <- m.peak.diff.tw$gam #result_peak_diff$peak_diff$models$random_effect$gam  # lowest AIC
 
 
-save(fin.m.counts, 
-     fin.m.agg, 
-     fin.m.peak,
-     fin.m.peak.diff,
-     m.counts.tw,
-     m1.gamma,
-     m.peak.gamma,
-     m.peak.diff.tw,
+save(fin.m.counts.previous.tw,
+     fin.m.peak.diff.previous.tw,
+     fin.m.agg.doy.gamma,
+     fin.m.peak.doy.gamma,
+     # fin.m.counts, 
+     #fin.m.agg, 
+     #fin.m.peak,
+     #fin.m.peak.diff,
+     #m.counts.tw,
+     #m1.gamma,
+     #m.peak.gamma,
+     #m.peak.diff.tw,
      avg_data,
      file = "outData/fin_models.RData")
 
@@ -1537,176 +1478,6 @@ save(fin.m.counts,
 
 
 
-
-
-# identify significant traps: ---------------------------------------------
-# Extract significant traps from the model summary
-summary_m.int <- summary(m.int)
-# Extract coefficients
-coefficients <- summary_m.int$p.coeff
-
-# Extract p-values
-p_values <- summary_m.int$p.pv
-
-
-significant_traps <- 
-  data.frame(coefficients = coefficients,
-                                p_values  = p_values) %>% 
-  
-   rownames_to_column("pairID") %>%
-    as.data.frame() %>% 
-   # head()
-   dplyr::filter(p_values < 0.05) %>% 
-   mutate(pairID = gsub("pairID", '', pairID )) 
-
-
-(significant_traps)
-
-
-# split data into significant and non significant locations
-df_sign <- dat_fin_counts_m_scaled_no_outliers %>%
-  mutate(significance = ifelse(pairID %in% significant_traps$pairID, "sig", "ref")) %>% 
-  dplyr::filter(significance == 'sig')
-
-
-df_no_sign <- dat_fin_counts_m_scaled_no_outliers %>%
-  mutate(significance = ifelse(pairID %in% significant_traps$pairID, "sig", "ref")) %>% 
-  dplyr::filter(significance == 'ref')
-
-
-# use different location as its own factor:
-dat_fin_counts_m_scaled_no_outliers <- dat_fin_counts_m_scaled_no_outliers %>%
-  mutate(significance = as.factor(ifelse(pairID %in% significant_traps$pairID, "sig", "ref"))) 
-
-
-# get list of outliers and remove the traps --------------------------------------
-
-dat_fin_counts_m %>% 
-  ggplot(aes(x = year,
-             group = year,
-             y = sum_ips_log)) +
-  geom_boxplot() +
-  geom_text(data = df_outliers %>% dplyr::filter(is_outlier),
-            aes(label = trapID),
-            position = position_jitter(width = 0.2, height = 0),
-            hjust = -0.1, vjust = -0.5, size = 3, color = "red")
-
-
-boxplot(dat_fin_counts_m$sum_ips_log)
-
-# Combine data for visualization
-climate_data <- dat_fin_counts_m %>%
-  mutate(significance = ifelse(pairID %in% significant_traps$pairID, "sig", "ref"))
-
-# Plot temperature comparison
-p_temp <- ggplot(climate_data, aes(x = significance, y = tmp_z, fill = significance)) +
-  geom_boxplot() +
-  stat_compare_means(aes(group = significance), label = "p.signif") +
-  labs(title = "Comparison of Temperature (tmp_z) between Significant and Non-Significant Traps",
-       x = "Trap Significance", y = "Temperature (tmp_z)") +
-  theme_minimal() + 
-  facet_grid(.~year, scales = 'free')
-
-# Plot spei comparison
-p_spei <- ggplot(climate_data, aes(x = significance, y = spei_z, fill = significance)) +
-  geom_boxplot() +
-  stat_compare_means(aes(group = significance), label = "p.signif") +
-  labs(title = "Comparison of SPEI (spei_z) between Significant and Non-Significant Traps",
-       x = "Trap Significance", y = "SPEI (spei_z)") +
-  theme_minimal() + 
-  facet_grid(.~year, scales = 'free')
-
-
-p_ips_counts <- ggplot(climate_data, aes(x = significance, y = sum_ips, 
-                                         fill = significance)) +
-  geom_boxplot() +
-  stat_compare_means(aes(group = significance), label = "p.signif") +
-  labs(title = "Comparison of beet counts between Significant and Non-Significant Traps",
-       x = "Trap Significance", y = "Beetle pop level") +
-  theme_minimal() + 
-  facet_grid(.~year, scales = 'free')
-
-p_ips_counts_log <- ggplot(climate_data, aes(x = significance, y = log(sum_ips), 
-                                         fill = significance)) +
-  geom_boxplot() +
-  labs(title = "Comparison of beetle counts (log) between Significant and Non-Significant Traps",
-       x = "Trap Significance", y = "Beetle pop level") +
-  theme_minimal() + 
-  facet_grid(.~year, scales = 'free')
-
-
-windows()
-ggarrange(p_temp, p_spei,p_ips_counts, nrow = 3) # p_ips_counts_log,
-
-
-
-# PCA merge spei and tmp into one variable? ---------------------------------------------
-# see the clusters;
-dat_fin_counts_m_scaled_no_outliers %>% 
-  ggplot(aes(x = tmp_z,
-             y = spei_z,
-             color = year_fact)) +
-  geom_point() + 
-  #geom_smooth(
-  #            aes(data =  dat_fin_counts_m_scaled_no_outliers, 
-  #                x = tmp_z,
-   #               y = spei_z)) +
-  theme_classic() + 
-  theme(aspect.ratio = 1)
-
-
-  
-m.lm <- lm(spei_z ~ tmp_z, dat_fin_counts_m_scaled_no_outliers)
-plot(m.lm, page = 1)
-
-pc <- prcomp(dat_fin_counts_m_scaled_no_outliers[,c('tmp_z', 'spei_z')],
-             center = TRUE,
-             scale. = TRUE)
-attributes(pc)
-summary(pc)
-
-
-# ad axis into data: keep only PC1
-dat_fin_counts_m_scaled_no_outliers$PC1 <-  pc$x[,1]
-
-
-dat_fin_counts_m_scaled_no_outliers %>% 
-  ggplot(aes(x = 1:nrow(dat_fin_counts_m_scaled_no_outliers), y = PC1, color = factor(year_fact))) +
-  geom_point() +
-  labs(x = "Index", y = "PC1", color = "Year") +
-  ggtitle("Combined Index of tmp_z and spei_z")
-
-
-
-# check what my values mean:
-dat_fin_counts_m_scaled_no_outliers %>% 
-  dplyr::select(PC1, tmp_z, spei_z) %>% 
-  View()
-
-# interpret the axis:
-pairs(sum_ips ~ PC1+spei_z+tmp_z,data = dat_fin_counts_m_scaled_no_outliers)
-
-hist(dat_fin_counts_m_scaled_no_outliers$PC1)
-
-dat_fin_counts_m_scaled_no_outliers %>% 
-  ggplot(aes(y = sum_ips,
-         x = PC1,
-         color = year_fact)) + 
-  geom_point() + 
-  geom_smooth() + 
-  facet_wrap(.~year, scales = 'free')
-
-
-
-# allow different slope per year
-m <- gam(sum_ips ~ s(PC1, k = 20) +  s(trapID, bs = 're'), 
-         family = nb(), 
-         dat_fin_counts_m_scaled_no_outliers)
-
-summary(m)
-plot(m, page = 1)
-gam.check(m)
-check_concurvity(m)
 
 
 # read spatial ata to check where are the significnat locations
