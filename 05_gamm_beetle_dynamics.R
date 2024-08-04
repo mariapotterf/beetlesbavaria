@@ -917,13 +917,17 @@ avg_data_filt_lagged <- avg_data_filt %>% #  avg_data %>% #
  na.omit()
 
 
+# Remove empty levels
+avg_data_filt_lagged$f_year <- droplevels(avg_data_filt_lagged$f_year)
+
+
 avg_data_filt_lagged %>% 
   dplyr::filter(pairID == 'Anzinger_Forst') %>% 
   dplyr::select(year, sum_ips, sum_ips_lag1, 
                 tr_peak_doy, tr_peak_doy_lag1 )
 
 
-# test effect of previuos year cunts
+# test effect of previuos year cunts ----------------------------------------------
 # the best!
 m.counts.previous <- gamm(sum_ips ~ 
                       s(tmp_z_lag1, k = 5) +
@@ -936,25 +940,150 @@ m.counts.previous <- gamm(sum_ips ~
                     family = tw,
                     control = control)
 
-# other way: spei lag1, tmp lag2
-m.counts.previous.alter <- gamm(sum_ips ~ 
-                            s(tmp_z_lag2, k = 5) +
-                            s(spei_lag1, k = 8) + 
-                            te(tmp_z_lag2, spei_lag1, k = 7) + 
-                            s(sum_ips_lag1, k = 5) + # Added term for previous beetle counts
+# for peak_diff
+m.peak.diff.previous <- gamm(peak_diff ~ 
+                            s(tmp_z_lag1, k = 5) +
+                            s(spei_lag2, k = 8) + 
+                            te(tmp_z_lag1, spei_lag2, k = 7) + 
+                            s(peak_diff_lag1 , k = 5) + # Added term for previous beetle counts
                             s(pairID, bs = 're') +
                             s(f_year, bs = 're'),
                           data = avg_data_filt_lagged, 
                           family = tw,
                           control = control)
 
-AIC(m.counts.previous.alter, m.counts.previous)
+
+# agg dy previous - test which model alternative is more stable - the specific one
+
+m.agg.previous <- gamm(tr_agg_doy ~ 
+                           s(tmp_z_lag2, k = 3,bs = "cs") +
+                           s(spei_lag1, k = 3) + 
+                           te(tmp_z_lag2, spei_lag1, k = 7,bs = "cs") + 
+                           s(tr_agg_doy_lag1 , k = 5) + # Added term for previous year numbers to account ofr autocorrelation
+                           s(pairID, bs = 're') +
+                           s(f_year, bs = 're'),
+                         data = avg_data_filt_lagged, 
+                         family = Gamma(link = "log"),
+                         control = control)
+
+  
+#
+m.agg.gamma <- gamm(tr_agg_doy ~ #s(year, k = 6) + 
+s(tmp_z_lag2, k = 3, bs = "cs") + # 
+  s(spei_lag1, k = 3,bs = "cs") + 
+  te(tmp_z_lag2, spei_lag1, k = 4, bs = "cs") + #
+  #s(x, y, bs = 'gp', k = 30) + 
+  s(pairID, bs = 're') +
+  s(f_year, bs = 're'),
+data =  avg_data_agg , 
+family = Gamma(link = "log"),
+correlation = corAR1(form = ~ year | pairID))
+
+  
+
+# test for peak day ----------------------
+# previous vs autocorrelation specified
+# agg dy previous - test which model alternative is more stable - the specific one
+
+
+#
+m.peak.gamma <- gamm(tr_peak_doy ~ #s(year, k = 6) + 
+                      s(tmp_z_lag2, k = 10) + # 
+                      s(spei_lag1, k = 10,bs = "tp") + 
+                      te(tmp_z_lag2, spei_lag1, k = 20,bs = "cs") + #
+                      #s(x, y, bs = 'gp', k = 10) + 
+                      s(pairID, bs = 're')# +
+                     # s(f_year, bs = 're')
+                     ,
+                    data =  avg_data_filt , 
+                    family = Gamma(link = "log"),
+                    correlation = corAR1(form = ~ year | pairID),
+                    control = control)
+
+
+m.peak.gamma.simple <- gamm(tr_peak_doy ~ #s(year, k = 6) + 
+                       s(tmp_z_lag2, k = 2) + # 
+                       s(spei_lag1, k = 3,bs = "tp") + 
+                       te(tmp_z_lag2, spei_lag1, k = 6,bs = "tp") + #
+                       #s(x, y, bs = 'gp', k = 10) + 
+                       s(pairID, bs = 're')# +
+                     # s(f_year, bs = 're')
+                     ,
+                     data =  avg_data_filt , 
+                     family = Gamma(link = "log"),
+                     correlation = corAR1(form = ~ year | pairID),
+                     control = control)
+
+summary(m.peak.gamma.simple$gam)
+appraise(m.peak.gamma.simple$gam)
+k.check(m.peak.gamma.simple$gam)
+plot(m.peak.gamma.simple$gam, page = 1, shade = TRUE)
+
+AIC(m.peak.gamma.simple, m.peak.gamma)
+summary(m.peak.gamma$gam)
+appraise(m.peak.gamma$gam)
+k.check(m.peak.gamma$gam)
+plot(m.peak.gamma$gam, page = 1, shade = TRUE)
+
+
+
+
+cor(avg_data_filt_lagged$tr_peak_doy, avg_data_filt_lagged$tr_peak_doy_lag1 )
+
+boxplot(avg_data_filt_lagged$tr_peak_doy_lag1)
+hist(avg_data_filt_lagged$tr_peak_doy_lag1)
+
+boxplot(avg_data_filt$tr_peak_doy_lag1)
+hist(avg_data_filt$tr_peak_doy_lag1)
+
+
+
+# Calculate Q1, Q3, and IQR
+Q1 <- quantile(avg_data_filt_lagged$tr_peak_doy_lag1, 0.25)
+Q3 <- quantile(avg_data_filt_lagged$tr_peak_doy_lag1, 0.75)
+IQR <- Q3 - Q1
+
+# Define outlier thresholds
+lower_bound <- Q1 - 1.5 * IQR
+upper_bound <- Q3 + 1.5 * IQR
+
+# Filter out the outliers
+avg_data_filt_lagged_no_peak_doy_outliers <- avg_data_filt_lagged[avg_data_filt_lagged$tr_peak_doy_lag1 >= lower_bound & avg_data_filt_lagged$tr_peak_doy_lag1 <= upper_bound, ]
+
+# Check the boxplot again to confirm removal
+boxplot(avg_data_filt_lagged_no_peak_doy_outliers$tr_peak_doy_lag1)
+
+# Remove empty levels
+avg_data_filt_lagged_no_peak_doy_outliers$f_year <- droplevels(avg_data_filt_lagged_no_peak_doy_outliers$f_year)
+
+# Check the levels to confirm removal
+levels(avg_data_filt_lagged_no_peak_doy_outliers$f_year)
+
+
+cor_matrix <- cor(avg_data_filt_lagged[, c("tr_peak_doy_lag1", "tmp_z_lag2", "spei_lag1", "x", "y")])
+print(cor_matrix)
+
+
+m.peak.previous <- gamm(tr_peak_doy ~ 
+                         s(tmp_z_lag2, k = 10,bs = "tp") +
+                         s(spei_lag1, k = 8) + 
+                         te(tmp_z_lag2, spei_lag1, k = 30,bs = "tp") + 
+                         #s(tr_peak_doy_lag1 , k = 5) + # Added term for previous year numbers to account ofr autocorrelation
+                        # s(pairID, bs = 're') +
+                         # s(x,y, bs = "gp") +
+                         s(f_year, bs = 're'),
+                       data = avg_data_filt_lagged_no_peak_doy_outliers, 
+                       family = Gamma(link = "log"),
+                       control = list(maxIter = 100, msMaxEval = 500, msMaxIter = 50, opt = "optim"))
+
+
+
 
 # no, better to go with longer lag (lag2) for spei, and tmp lg)1 for sum ips, diff
-summary(m.counts.previous.alter$gam)
-appraise(m.counts.previous.alter$gam)
-k.check(m.counts.previous.alter$gam)
-plot(m.counts.previous.alter$gam, page = 1, shade = TRUE)
+summary(m.peak.previous$gam)
+appraise(m.peak.previous$gam)
+k.check(m.peak.previous$gam)
+plot(m.peak.previous$gam, page = 1, shade = TRUE)
 
 
 # increase the number of iterations to converge the model
@@ -1335,12 +1464,12 @@ ggplot(avg_data_moran_sub, aes(x = sum_ips, #peak_diff,
 
 
 ##### quick plotting -----------------------------------------------
-fin.m <- m.counts.previous$gam #m.counts.tw$gam # m.counts.tw.bam.year#m.counts.tw.test.f.rndm#  fin.m.agg#$gam
+fin.m <- m.peak.gamma$gam # m2.agg.gamma$gam #m.counts.tw$gam # m.counts.tw.bam.year#m.counts.tw.test.f.rndm#  fin.m.agg#$gam
 
 # check for tempoeal autocorrelation
 
 # Extract residuals from the model
-residuals <- resid(m.counts.previous$lme, type = "normalized")
+residuals <- resid(m.peak.gamma.simple$lme, type = "normalized")
 
 # Plot ACF of the residuals
 acf(residuals, main="ACF of Model Residuals")
@@ -1349,10 +1478,10 @@ pacf(residuals, main="ACF of Model Residuals")
 
 # plot in easy way how tdoes the k value affect interaction
 #p1 <- ggpredict(fin.m, terms = "year [all]", allow.new.levels = TRUE)
-p1 <- ggpredict(fin.m, terms = "sum_ips_lag1 [all]", allow.new.levels = TRUE)
-p2 <- ggpredict(fin.m, terms = "tmp_z_lag1 [all]", allow.new.levels = TRUE)
-p3 <- ggpredict(fin.m, terms = "spei_lag2 [all]", allow.new.levels = TRUE)
-p4 <- ggpredict(fin.m, terms = c("tmp_z_lag1", "spei_lag2 [-1, 0, 1]"), allow.new.levels = TRUE)
+#p1 <- ggpredict(fin.m, terms = "peak_diff_lag1 [all]", allow.new.levels = TRUE)
+p2 <- ggpredict(fin.m, terms = "tmp_z_lag2 [all]", allow.new.levels = TRUE)
+p3 <- ggpredict(fin.m, terms = "spei_lag1 [all]", allow.new.levels = TRUE)
+p4 <- ggpredict(fin.m, terms = c("tmp_z_lag2", "spei_lag1 [-1, 0, 1]"), allow.new.levels = TRUE)
 
 #p_df <- as.data.frame(p3)
 # test simple plot:
@@ -1376,7 +1505,7 @@ plot4<-ggplot(p4, aes(x = x, y = predicted)) +
   geom_line(aes(color = group, linetype = group), linewidth = 1) +
   theme_classic2()
 
-ggarrange(plot1,
+ggarrange(#plot1,
           plot2,plot3,plot4, ncol = 2, nrow = 2)
 
 
