@@ -1675,19 +1675,22 @@ my_theme_square <- function() {
 
 
 # Create effect plot function with an additional argument to control y-axis labels
-create_effect_year <- function(data, avg_data, line_color = "grey40", 
-                               x_col = "year", 
+create_effect_previous_year <- function(data, avg_data, line_color = "grey40", 
+                               x_col = "sum_ips_lag1", 
                                y_col = "sum_ips", 
                                x_title = "X-axis", 
-                               y_title = "Y-axis", my_title = '',
+                               y_title = "Y-axis", 
+                               my_title = '',
                                x_annotate = 0, lab_annotate = "lab ann") {
   x_col <- ensym(x_col)
   y_col <- ensym(y_col)
   
   p <- ggplot() + 
-    geom_line(data = avg_data, aes(x = !!x_col, y = !!y_col, group = pairID), col = "gray70", alpha = 0.4) +
-    geom_line(data = data, aes(x = x, y = predicted), color = line_color) +
+    geom_point(data = avg_data, aes(x = !!x_col, y = !!y_col, group = pairID), col = "gray60", alpha = 0.4) +
+    
     geom_ribbon(data = data, aes(x = x, ymin = conf.low, ymax = conf.high), alpha = 0.25, fill = line_color) +
+    geom_line(data = data, aes(x = x, y = predicted), color = line_color) +
+    
     labs(x = x_title,
          title = my_title,
          y = y_title) +
@@ -1699,10 +1702,12 @@ create_effect_year <- function(data, avg_data, line_color = "grey40",
 
 
 # Create effect plot function with additional arguments to select columns from avg_data
-create_effect_plot <- function(data, avg_data, 
+create_effect_plot <- function(data, 
+                               avg_data, 
                                x_col = "tmp_z_lag1", 
                                y_col = "sum_ips", 
-                               line_color = "blue", x_title = "X-axis", 
+                               line_color = "blue", 
+                               x_title = "X-axis", 
                                y_title = "Y-axis", my_title = '',
                                x_annotate = 0, lab_annotate = "lab ann") {
   
@@ -1725,13 +1730,27 @@ create_effect_plot <- function(data, avg_data,
 
 
 # plot interactions
-plot_effect_interactions <- function(data, temp_label = 'Temp', y_title = 'y_title',x_annotate = 0, lab_annotate = "lab ann") {
+plot_effect_interactions <- function(data, 
+                                     avg_data, 
+                                     x_col = "tmp_z_lag1", 
+                                     y_col = "sum_ips", 
+                                     temp_label = 'Temp',
+                                     y_title = 'y_title',
+                                     x_annotate = 0, 
+                                     lab_annotate = "lab ann") {
   #library(ggplot2)
+  x_col <- ensym(x_col)
+  y_col <- ensym(y_col)
   
- p<- 
-   ggplot(data, aes(x = x, y = predicted, ymin = conf.low, ymax = conf.high)) +
-    geom_ribbon(aes(ymin = conf.low, ymax = conf.high, fill = group), alpha = 0.3) +
-    geom_line(aes(color = group, linetype = group), linewidth = 1) +
+ p<- ggplot() +
+     geom_point(data = avg_data, aes(x = !!x_col, y = !!y_col), col = "gray60", alpha = 0.4) +
+    geom_ribbon(data=data, aes(x = x,
+                               ymin = conf.low, 
+                               ymax = conf.high, 
+                               fill = group), alpha = 0.25) +
+   geom_line(data = data, 
+             aes(x = x, y = predicted,
+                 color = group, linetype = group), linewidth = 1) +
     labs(x = temp_label,
          y = y_title,
          fill = "SPEI\nlevels",
@@ -1749,18 +1768,19 @@ plot_effect_interactions <- function(data, temp_label = 'Temp', y_title = 'y_tit
   return(p)
 }
 
-plot_effect_interactions(p3)
+plot_effect_interactions(p3, avg_data = avg_data_filt_lagged_plotting)
 
 ##### PLOT: IPS SUM counts -----------------------------------------------------------
 
 temp_label <- "Temp. [z-score]" #expression(paste("Temperature [", degree, "C]", sep=""))
-spei_label <- 'SPEI [z-score]'
+spei_label <- 'SPEI [dim.]'
 
 
 
 # Define the transformation function
 adjust_predictions_counts <- function(df, divisor) {
   df <- as.data.frame(df)
+  #df$x <- df$x  / divisor
   df$predicted <- df$predicted  / divisor
   df$conf.low <- df$conf.low / divisor
   df$conf.high <- df$conf.high / divisor
@@ -1787,172 +1807,193 @@ transform_single_prediction_DOY <- function(predicted_value, doy.start, doy.end)
 # Transform a single value
 transform_single_prediction_DOY(0.43, doy.start, doy.end)
 
-# Output the result
-transformed_value
 
-transform_predictions_DOY(0.2)
 # Assuming 'model' is your glm.nb model
-summary(fin.m.counts)
-p0 <- ggpredict(fin.m.counts, terms = "year [all]", allow.new.levels = TRUE)
-p1 <- ggpredict(fin.m.counts, terms = "tmp_z_lag1 [all]", allow.new.levels = TRUE)
-p2 <- ggpredict(fin.m.counts, terms = "spei_z_lag2 [all]", allow.new.levels = TRUE)
-p3 <- ggpredict(fin.m.counts, terms = c("tmp_z_lag1", "spei_z_lag2 [-1, 0, 1]"), allow.new.levels = TRUE)
+summary(fin.m.counts.previous.tw)
+p0 <- ggpredict(fin.m.counts.previous.tw, terms = "sum_ips_lag1 [all]", allow.new.levels = TRUE)
+p1 <- ggpredict(fin.m.counts.previous.tw, terms = "tmp_z_lag1 [all]", allow.new.levels = TRUE)
+p2 <- ggpredict(fin.m.counts.previous.tw, terms = "spei_lag2 [all]", allow.new.levels = TRUE)
+p3 <- ggpredict(fin.m.counts.previous.tw, terms = c("tmp_z_lag1", "spei_lag2 [-1, 0, 1]"), allow.new.levels = TRUE)
 
-divisor_population <- 100
+divisor_population <- 1000
 p0 <- adjust_predictions_counts(p0, divisor_population)
+p0$x <- p0$x/1000
 p1 <- adjust_predictions_counts(p1, divisor_population)
 p2 <- adjust_predictions_counts(p2, divisor_population)
 p3 <- adjust_predictions_counts(p3, divisor_population)
 
 # get update table for the line an pint plotting
-avg_data_sum_ips <- avg_data %>% 
-  mutate(sum_ips = sum_ips/100,
+avg_data_sum_ips <- avg_data %>%
+  mutate(sum_ips = sum_ips/1000,
          peak_diff = peak_diff/10)
 
-p0.count <- create_effect_year(data = p0, 
-                              avg_data = avg_data_sum_ips,
-                              x_col = "year",
+# point table for potting 
+avg_data_filt_lagged_plotting <- avg_data_filt_lagged %>% 
+  mutate(sum_ips        = sum_ips/1000,
+         sum_ips_lag1   = sum_ips_lag1/1000,
+         peak_diff      = peak_diff/10,
+         peak_diff_lag1 = peak_diff_lag1/10
+         )
+
+
+p0.count <- create_effect_previous_year(data = p0, 
+                              avg_data = avg_data_filt_lagged_plotting,
+                              x_col = "sum_ips_lag1",
                               y_col = "sum_ips",
                               line_color = "darkgreen", 
-                              x_title = "Year", 
-                              y_title = paste(lab_popul_level, '*100'),# "Population level\n[# beetle*100]",
-                              my_title = paste("[a]", 'Population level', '\n[#*100]'), 
-                              x_annotate = 2018, lab_annotate = "***")
+                              x_title = "Pop. level [*1000, lag1]", 
+                              y_title = paste(lab_popul_level, '*1000'),# "Population level\n[# beetle*100]",
+                              #my_title = paste("[a]", 'Population level', '\n[#*100]'), 
+                              x_annotate = 50, lab_annotate = "***")
 
-#(p0.count)
+(p0.count)
 p1.count <- 
-  create_effect_plot(data = p1, avg_data = avg_data_sum_ips, 
-                     x_col = "tmp_z_lag1", y_col = "sum_ips", 
+  create_effect_plot(data = p1, 
+                     avg_data = avg_data_sum_ips, 
+                     x_col = "tmp_z_lag1", 
+                     y_col = "sum_ips", 
                      line_color = "red", 
                      x_title = temp_label , 
-                     y_title = paste(lab_popul_level, '*100'), 
+                     y_title = paste(lab_popul_level, '*1000'), 
+                     my_title = paste("[a]", 'Population level', '\n[#*1000]'), 
                      #my_title = "Effect of Year on Sum IPS", 
                      x_annotate = 2, 
-                     lab_annotate = "n.s.")
+                     lab_annotate = "**")
 
-#(p1.count)
+(p1.count)
 p2.count <- create_effect_plot(data = p2, avg_data = avg_data_sum_ips, 
-                               x_col = "spei_z_lag2", y_col = "sum_ips", 
+                               x_col = "spei_lag2", y_col = "sum_ips", 
                                line_color = "blue", 
                                x_title = spei_label , 
-                               y_title = paste(lab_popul_level, '*100'), 
+                               y_title = paste(lab_popul_level, '*1000'), 
                                #my_title = "Effect of Year on Sum IPS", 
-                               x_annotate = -1, 
-                               lab_annotate = "**")
-#(p2.count)
-p3.count <- plot_effect_interactions(p3, 
+                               x_annotate = -0.5, 
+                               lab_annotate = "***")
+(p2.count)
+p3.count <- plot_effect_interactions(data = p3, 
+                                     avg_data = avg_data_sum_ips, 
+                                     x_col = "tmp_z_lag1", 
+                                     y_col = "sum_ips", 
                                      temp_label = temp_label, 
-                                     y_title = paste(lab_popul_level, '*100'),
+                                     y_title = paste(lab_popul_level, '*1000'),
                                      x_annotate = 2,
-                                     lab_annotate = "***") 
+                                     lab_annotate = "**") 
 
-#(p3.count)
-#ggarrange(p0.count,p1.count,p2.count, p3.count)
+(p3.count)
+ggarrange(p0.count,p1.count,p2.count, p3.count)
 
 
 
 
 ##### PLOT DOY aggregation ---------------------------------------------------------
-summary(fin.m.agg)
-p0 <- ggpredict(fin.m.agg, terms = "year [all]", allow.new.levels = TRUE)
-p1 <- ggpredict(fin.m.agg, terms = "tmp_z_lag2 [all]", allow.new.levels = TRUE)
-p2 <- ggpredict(fin.m.agg, terms = "spei_z_lag1 [all]", allow.new.levels = TRUE)
-p3 <- ggpredict(fin.m.agg, terms = c("tmp_z_lag2", "spei_z_lag1 [-1, 0, 1]"), allow.new.levels = TRUE)
+summary(fin.m.agg.doy.gamma)
+#p0 <- ggpredict(fin.m.agg.doy.gamma, terms = "year [all]", allow.new.levels = TRUE)
+p1 <- ggpredict(fin.m.agg.doy.gamma, terms = "tmp_z_lag2 [all]", allow.new.levels = TRUE)
+p2 <- ggpredict(fin.m.agg.doy.gamma, terms = "spei_lag1 [all]", allow.new.levels = TRUE)
+p3 <- ggpredict(fin.m.agg.doy.gamma, terms = c("tmp_z_lag2", "spei_lag1 [-1, 0, 1]"), allow.new.levels = TRUE)
 
 # Apply transformation to each prediction data frame
-p0 <- transform_predictions_DOY(p0, doy.start, doy.end)
+#p0 <- transform_predictions_DOY(p0, doy.start, doy.end)
 p1 <- transform_predictions_DOY(p1, doy.start, doy.end)
 p2 <- transform_predictions_DOY(p2, doy.start, doy.end)
 p3 <- transform_predictions_DOY(p3, doy.start, doy.end)
 
 
 # 
-p0.agg <- create_effect_year(data = p0, 
-                               avg_data = avg_data_sum_ips,
-                               x_col = "year",
-                               y_col = "agg_doy",
-                               line_color = "darkgreen", 
-                               x_title = "Year", 
-                               y_title = lab_colonization_time,
-                               my_title = paste("[b]", 'Aggregation timing', '\n[DOY]'),  
-                               x_annotate = 2018, lab_annotate = "***")
-
-(p0.agg)
+# p0.agg <- create_effect_year(data = p0, 
+#                                avg_data = avg_data_sum_ips,
+#                                x_col = "year",
+#                                y_col = "agg_doy",
+#                                line_color = "darkgreen", 
+#                                x_title = "Year", 
+#                                y_title = lab_colonization_time,
+#                                my_title = paste("[b]", 'Aggregation timing', '\n[DOY]'),  
+#                                x_annotate = 2018, lab_annotate = "***")
+# 
+# (p0.agg)
 p1.agg <- 
   create_effect_plot(data = p1, avg_data = avg_data_sum_ips, 
                      x_col = "tmp_z_lag1", y_col = "agg_doy", 
                      line_color = "red", 
                      x_title = temp_label , 
                      y_title = lab_colonization_time, 
+                     my_title = paste("[c]", 'Aggregation timing', '\n[DOY]'), 
                      #my_title = "Effect of Year on Sum IPS", 
                      x_annotate = 2, 
-                     lab_annotate = "***")
+                     lab_annotate = "*")
 
 (p1.agg)
 p2.agg <- create_effect_plot(data = p2, avg_data = avg_data_sum_ips, 
-                               x_col = "spei_z_lag2", y_col = "agg_doy", 
+                               x_col = "spei_lag2", y_col = "agg_doy", 
                                line_color = "blue", 
                                x_title = spei_label , 
                                y_title = lab_colonization_time, 
-                               x_annotate = -1, 
-                               lab_annotate = "n.s.")
+                               x_annotate = -0.5, 
+                               lab_annotate = "**")
 (p2.agg)
-p3.agg <- plot_effect_interactions(p3, 
+p3.agg <- plot_effect_interactions(p3,
+                                   avg_data = avg_data_sum_ips, 
+                                   x_col = "tmp_z_lag1", 
+                                   y_col = "agg_doy", 
                                      temp_label = temp_label, 
                                      y_title = lab_colonization_time,
                                      x_annotate = 2,
-                                     lab_annotate = "***") 
+                                     lab_annotate = "*") 
 
 (p3.agg)
 
 
 #### PLOT: Peak DOY  ------------------------------------------------------------
-summary(fin.m.peak)
+summary(fin.m.peak.doy.gamma)
 
-p0 <- ggpredict(fin.m.peak, terms = "year [all]", allow.new.levels = TRUE)
-p1 <- ggpredict(fin.m.peak, terms = "tmp_z_lag1 [all]", allow.new.levels = TRUE)
-p2 <- ggpredict(fin.m.peak, terms = "spei_z_lag2 [all]", allow.new.levels = TRUE)
-p3 <- ggpredict(fin.m.peak, terms = c("tmp_z_lag1" ,"spei_z_lag2 [-1, 0, 1]"), allow.new.levels = TRUE)
+#p0 <- ggpredict(fin.m.peak, terms = "year [all]", allow.new.levels = TRUE)
+p1 <- ggpredict(fin.m.peak.doy.gamma, terms = "tmp_z_lag2 [all]", allow.new.levels = TRUE)
+p2 <- ggpredict(fin.m.peak.doy.gamma, terms = "spei_lag1 [all]", allow.new.levels = TRUE)
+p3 <- ggpredict(fin.m.peak.doy.gamma, terms = c("tmp_z_lag2" ,"spei_lag1 [-1, 0, 1]"), allow.new.levels = TRUE)
 
 
 # transform values back to DOY (from 0-1)
-p0 <- transform_predictions_DOY(p0, doy.start, doy.end)
+#p0 <- transform_predictions_DOY(p0, doy.start, doy.end)
 p1 <- transform_predictions_DOY(p1, doy.start, doy.end)
 p2 <- transform_predictions_DOY(p2, doy.start, doy.end)
 p3 <- transform_predictions_DOY(p3, doy.start, doy.end)
 
 # 
-p0.peak <- create_effect_year(data = p0, 
-                             avg_data = avg_data_sum_ips,
-                             x_col = "year",
-                             y_col = "peak_doy",
-                             line_color = "darkgreen", 
-                             x_title = "Year", 
-                             y_title = lab_peak_time,
-                             my_title = paste("[c]", 'Peak swarming\ntiming', '[DOY]'),  
-                             x_annotate = 2018, lab_annotate = "***")
-
-(p0.peak)
+# p0.peak <- create_effect_year(data = p0, 
+#                              avg_data = avg_data_sum_ips,
+#                              x_col = "year",
+#                              y_col = "peak_doy",
+#                              line_color = "darkgreen", 
+#                              x_title = "Year", 
+#                              y_title = lab_peak_time,
+#                              my_title = paste("[c]", 'Peak swarming\ntiming', '[DOY]'),  
+#                              x_annotate = 2018, lab_annotate = "***")
+# 
+# (p0.peak)
 p1.peak <- 
   create_effect_plot(data = p1, avg_data = avg_data_sum_ips, 
-                     x_col = "tmp_z_lag1", y_col = "peak_doy", 
+                     x_col = "tmp_z_lag2", y_col = "peak_doy", 
                      line_color = "red", 
                      x_title = temp_label , 
                      y_title = lab_peak_time, 
+                     my_title = paste("[d]", 'Peak swarming\ntiming', '[DOY]'),  
                      #my_title = "Effect of Year on Sum IPS", 
                      x_annotate = 2, 
-                     lab_annotate = "n.s.")
+                     lab_annotate = "*")
 
 (p1.peak)
 p2.peak <- create_effect_plot(data = p2, avg_data = avg_data_sum_ips, 
-                             x_col = "spei_z_lag2", y_col = "peak_doy", 
+                             x_col = "spei_lag1", y_col = "peak_doy", 
                              line_color = "blue", 
                              x_title = spei_label , 
                              y_title = lab_peak_time, 
-                             x_annotate = -1, 
-                             lab_annotate = "***")
+                             x_annotate = -0.5, 
+                             lab_annotate = "0.2")
 (p2.peak)
 p3.peak <- plot_effect_interactions(p3, 
+                                    avg_data = avg_data_sum_ips, 
+                                    x_col = "tmp_z_lag1", 
+                                    y_col = "peak_doy", 
                                    temp_label = temp_label, 
                                    y_title = lab_peak_time,
                                    x_annotate = 2,
@@ -1963,16 +2004,17 @@ p3.peak <- plot_effect_interactions(p3,
 
 
 ##### PLOT: Peak diff  ----------------------------------------------------
-fin.m.peak.diff #<- fin.m.peak.diff$gam
-summary(fin.m.peak.diff)
-p0 <- ggpredict(fin.m.peak.diff, terms = "year [all]", allow.new.levels = TRUE)
-p1 <- ggpredict(fin.m.peak.diff, terms = "tmp_z_lag1 [all]", allow.new.levels = TRUE)
-p2 <- ggpredict(fin.m.peak.diff, terms = "spei_z_lag2 [all]", allow.new.levels = TRUE)
-p3 <- ggpredict(fin.m.peak.diff, terms = c("tmp_z_lag1", "spei_z_lag2 [-1, 0, 1]"), allow.new.levels = T)
+fin.m.peak.diff.previous.tw #<- fin.m.peak.diff$gam
+summary(fin.m.peak.diff.previous.tw)
+p0 <- ggpredict(fin.m.peak.diff.previous.tw, terms = "peak_diff_lag1 [all]", allow.new.levels = TRUE)
+p1 <- ggpredict(fin.m.peak.diff.previous.tw, terms = "tmp_z_lag1 [all]", allow.new.levels = TRUE)
+p2 <- ggpredict(fin.m.peak.diff.previous.tw, terms = "spei_lag2 [all]", allow.new.levels = TRUE)
+p3 <- ggpredict(fin.m.peak.diff.previous.tw, terms = c("tmp_z_lag1", "spei_lag2 [-1, 0, 1]"), allow.new.levels = T)
 
 
 divisor_diff <- 10
 p0 <- adjust_predictions_counts(p0, divisor_diff)
+p0$x <- p0$x/10
 p1 <- adjust_predictions_counts(p1, divisor_diff)
 p2 <- adjust_predictions_counts(p2, divisor_diff)
 p3 <- adjust_predictions_counts(p3, divisor_diff)
@@ -1981,47 +2023,96 @@ p3 <- adjust_predictions_counts(p3, divisor_diff)
 
 
 
-p0.peak.diff <- create_effect_year(data = p0, 
-                               avg_data = dplyr::filter(avg_data_sum_ips, peak_diff <200),
-                               x_col = "year",
+p0.peak.diff <- create_effect_previous_year(data = p0, 
+                               avg_data = avg_data_filt_lagged_plotting, #dplyr::filter(avg_data_sum_ips, peak_diff <200),
+                               x_col = "peak_diff_lag1",
                                y_col = "peak_diff",
                                line_color = "darkgreen", 
-                               x_title = "Year", 
+                               x_title = "Peak swarming intensity [*10, lag1]", 
                                y_title = lab_peak_growth,
-                               my_title = paste("[d]", 'Peak swarming\nintensity', '[#*10]'),  
-                               x_annotate = 2018, lab_annotate = "***")
+                               #my_title = paste("[d]", 'Peak swarming\nintensity', '[#*10]'),  
+                               x_annotate = 90, lab_annotate = "***")
 
-#(p0.peak.diff)
+(p0.peak.diff)
 p1.peak.diff <- 
   create_effect_plot(data = p1, 
-                     avg_data =  dplyr::filter(avg_data_sum_ips, peak_diff <200), 
+                     avg_data =  avg_data_filt_lagged_plotting, #dplyr::filter(avg_data_sum_ips, peak_diff <200), 
                      x_col = "tmp_z_lag1", y_col = "peak_diff", 
                      line_color = "red", 
                      x_title = temp_label , 
                      y_title = lab_peak_growth, 
+                     my_title = paste("[b]", 'Peak swarming\nintensity', '[#*10]'),
                      #my_title = "Effect of Year on Sum IPS", 
                      x_annotate = 2, 
-                     lab_annotate = ".")
+                     lab_annotate = "0.14")
 
-#(p1.peak.diff)
+(p1.peak.diff)
 p2.peak.diff <- create_effect_plot(data = p2,
-                                   avg_data =  dplyr::filter(avg_data_sum_ips, peak_diff <200), 
-                               x_col = "spei_z_lag2", y_col = "peak_diff", 
+                                   avg_data =  avg_data_filt_lagged_plotting,#dplyr::filter(avg_data_sum_ips, peak_diff <200), 
+                               x_col = "spei_lag2", y_col = "peak_diff", 
                                line_color = "blue", 
                                x_title = spei_label , 
                                y_title = lab_peak_growth, 
                                #my_title = "Effect of Year on Sum IPS", 
-                               x_annotate = -1, 
-                               lab_annotate = "n.s.")
-#(p2.peak.diff)
+                               x_annotate = -0.5, 
+                               lab_annotate = "0.14")
+(p2.peak.diff)
 p3.peak.diff <- plot_effect_interactions(p3, 
+                                         avg_data = avg_data_filt_lagged_plotting, # avg_data_sum_ips, 
+                                         x_col = "tmp_z_lag1", 
+                                         y_col = "peak_diff", 
                                      temp_label = temp_label, 
                                      y_title = lab_peak_growth,
                                      x_annotate = 2,
-                                     lab_annotate = "***") 
+                                     lab_annotate = "*") 
 
-#(p3.peak.diff)
+(p3.peak.diff)
 ggarrange(p0.peak.diff,p1.peak.diff,p2.peak.diff,p3.peak.diff)
+
+
+# put in the same figure: tmp, spei, interaction, previous years on teh bottom
+
+# TEST 
+
+p.full.year <- ggarrange(p0.count, #p0.agg, p0.peak, 
+                         p0.peak.diff, 
+                         ncol=4, nrow = 1 , #align = 'hv', 
+                         font.label = list(size = 8, color = "black", face = "plain", family = NULL) )
+
+(p.full.year)
+
+p.temp <-  ggarrange(p1.count,  p1.peak.diff, p1.agg, p1.peak,
+                     ncol=4, nrow = 1 , align = 'hv', 
+                     font.label = list(size = 8, color = "black", face = "plain", family = NULL))
+
+
+p.spei <-  ggarrange(p2.count,  p2.peak.diff, p2.agg, p2.peak,
+                     ncol=4, nrow = 1 , align = 'hv', 
+                     font.label = list(size = 8, color = "black", face = "plain", family = NULL))
+
+
+p.int <- ggarrange(p3.count,  p3.peak.diff, p3.agg, p3.peak,
+                   ncol=4, nrow = 1 , align = 'hv',common.legend = TRUE, legend = 'bottom',
+                   font.label = list(size = 8, color = "black", face = "plain", family = NULL))
+windows(7,8)
+full_preds <- ggarrange(p.temp, p.spei,  
+                        p.full.year,
+                        p.int,
+                        ncol = 1, nrow= 4, 
+                        align = 'hv', heights = c(1.1, 1, 1, 1.1),
+                        widths = c(1, 1, 1, 1))
+
+(full_preds)
+ggsave(filename = 'outFigs/Fig_full_eff2.png', plot = full_preds, 
+       width = 7.5, height = 8, dpi = 300, bg = 'white')
+
+
+
+
+# TEST END
+
+
+
 
 
 
@@ -2212,7 +2303,7 @@ p2.moran <- create_effect_plot(p2,
                                x_col = "spei_z_lag2", 
                                y_col = "Morans_I_log", 
                                line_color = "blue", 
-                               x_title = "SPEI [z-score]", 
+                               x_title = "SPEI [dim.]", 
                                y_title = "Local Moran's I",  
                                #y_lim = c(0,1)
                                x_annotate = -1.5,
