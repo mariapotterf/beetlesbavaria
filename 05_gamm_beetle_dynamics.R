@@ -1722,6 +1722,10 @@ my_theme_square <- function() {
 }
 
 
+
+
+
+
 # Create effect plot function with an additional argument to control y-axis labels
 create_effect_previous_year <- function(data, avg_data, line_color = "grey40", 
                                x_col = "sum_ips_lag1", 
@@ -1818,13 +1822,67 @@ plot_effect_interactions <- function(data,
 
 plot_effect_interactions(p3, avg_data = avg_data_filt_lagged_plotting)
 
+
+##### Spagetting plot: development over time -----------------------------------------
+
+
+
+
+plot_data_with_average <- function(data, y_var, y_label, my_title) {
+  # Convert the y_var argument to a symbol to use in aes()
+  y_var_sym <- rlang::sym(y_var)
+  
+  data %>%
+    ungroup() %>%
+    filter(year %in% 2015:2021) %>%
+    ggplot(aes(x = year, y = !!y_var_sym, group = pairID)) +
+    labs(x = 'Year', 
+         y = y_label, 
+         title = my_title) +
+    geom_line(alpha = 0.1) +  
+    stat_summary(
+      aes(x = year, y = !!y_var_sym, group = 1), 
+      fun = mean,  # Calculate the mean for each year
+      geom = "line", 
+      color = "#E69F00",  # Ensure the average line is also red
+      linewidth = 1  # Make the average line slightly thicker than individual lines
+    ) + my_theme_square()
+   
+}
+
+# Example usage:
+p_spagett_ips       <- plot_data_with_average(avg_data_filt_lagged_plotting, "sum_ips", lab_popul_level,   
+                                              my_title = paste("[a]", 'Population level', '\n[#*1000]'))
+p_spagett_agg_doy   <- plot_data_with_average(avg_data_filt_lagged_plotting, "agg_doy", lab_colonization_time, 
+                                              my_title = paste("[b]", 'Aggregation timing', '\n[DOY]'))
+p_spagett_peak_doy  <- plot_data_with_average(avg_data_filt_lagged_plotting, "peak_doy", lab_peak_time, 
+                                              my_title = paste("[c]", 'Peak swarming timing', '\n[DOY]'))
+p_spagett_peak_diff <- plot_data_with_average(avg_data_filt_lagged_plotting, "peak_diff", lab_peak_growth, 
+                                              my_title = paste("[d]", 'Peak swarming intensity', '\n[#*10]'))
+
+
+
+
+#windows(7,6)
+p_spagetti <- ggarrange(p_spagett_ips, 
+                        p_spagett_agg_doy, 
+                        p_spagett_peak_doy, 
+                        p_spagett_peak_diff, ncol = 4,nrow = 1, align = 'hv')
+p_spagetti
+#ggsave(filename = 'outFigs/Fig1.png', plot = p_spagetti, width = 7, height = 6, dpi = 300, bg = 'white')
+
+
+
+
+
+
 ##### PLOT: IPS SUM counts -----------------------------------------------------------
 
 temp_label <- "Temp. [z-score]" #expression(paste("Temperature [", degree, "C]", sep=""))
 spei_label <- 'SPEI [dim.]'
 
 
-
+#my_lab <-  expression(paste("Temp. [", "lag1 ", "z-score]"))
 # Define the transformation function
 adjust_predictions_counts <- function(df, divisor) {
   df <- as.data.frame(df)
@@ -1897,32 +1955,33 @@ p0.count <- create_effect_previous_year(data = p0,
 (p0.count)
 p1.count <- 
   create_effect_plot(data = p1, 
-                     avg_data = avg_data_sum_ips, 
+                     avg_data = avg_data_filt_lagged_plotting, 
                      x_col = "tmp_z_lag1", 
                      y_col = "sum_ips", 
                      line_color = "red", 
-                     x_title = temp_label , 
+                     x_title = expression(paste("Temp. lag1 [", "z-score]")),
+                    # x_title = temp_label , 
                      y_title = paste(lab_popul_level, '*1000'), 
-                     my_title = paste("[a]", 'Population level', '\n[#*1000]'), 
+                    # my_title = paste("[a]", 'Population level', '\n[#*1000]'), 
                      #my_title = "Effect of Year on Sum IPS", 
                      x_annotate = 2, 
                      lab_annotate = "**")
 
 (p1.count)
-p2.count <- create_effect_plot(data = p2, avg_data = avg_data_sum_ips, 
+p2.count <- create_effect_plot(data = p2, avg_data = avg_data_filt_lagged_plotting, 
                                x_col = "spei_lag2", y_col = "sum_ips", 
                                line_color = "blue", 
-                               x_title = spei_label , 
+                               x_title = expression(paste("SPEI. lag2 [", "dim.]")),#spei_label , 
                                y_title = paste(lab_popul_level, '*1000'), 
                                #my_title = "Effect of Year on Sum IPS", 
                                x_annotate = -0.5, 
                                lab_annotate = "***")
 (p2.count)
 p3.count <- plot_effect_interactions(data = p3, 
-                                     avg_data = avg_data_sum_ips, 
+                                     avg_data = avg_data_filt_lagged_plotting, 
                                      x_col = "tmp_z_lag1", 
                                      y_col = "sum_ips", 
-                                     temp_label = temp_label, 
+                                     temp_label = expression(paste("Temp. lag1 [", "z-score]")), 
                                      y_title = paste(lab_popul_level, '*1000'),
                                      x_annotate = 2,
                                      lab_annotate = "**") 
@@ -1972,9 +2031,9 @@ p1.agg <-
   create_effect_plot(data = p1,  avg_data = filter(avg_data_filt_lagged_plotting, agg_doy < 200),  
                      x_col = "tmp_z_lag1", y_col = "agg_doy", 
                      line_color = "red", 
-                     x_title = temp_label , 
+                     x_title = expression(paste("Temp. lag1 [", "z-score]")) , 
                      y_title = lab_colonization_time, 
-                     my_title = paste("[b]", 'Aggregation timing', '\n[DOY]'), 
+                     #my_title = paste("[b]", 'Aggregation timing', '\n[DOY]'), 
                      # my_title = paste("[b]", 'Aggregation timing', '\n[DOY]'),
                      #my_title = "Effect of Year on Sum IPS", 
                      x_annotate = 2, 
@@ -1984,7 +2043,7 @@ p1.agg <-
 p2.agg <- create_effect_plot(data = p2, avg_data = filter(avg_data_filt_lagged_plotting, agg_doy < 200),    
                                x_col = "spei_lag2", y_col = "agg_doy", 
                                line_color = "blue", 
-                               x_title = spei_label , 
+                               x_title = expression(paste("SPEI. lag2 [", "dim.]")) , 
                                y_title = lab_colonization_time, 
                                x_annotate = -0.5, 
                                lab_annotate = "0.49")
@@ -1993,7 +2052,7 @@ p3.agg <- plot_effect_interactions(p3,
                                    avg_data = filter(avg_data_filt_lagged_plotting, agg_doy < 200),
                                    x_col = "tmp_z_lag1", 
                                    y_col = "agg_doy", 
-                                     temp_label = temp_label, 
+                                     temp_label = expression(paste("Temp. lag1 [", "z-score]")), 
                                      y_title = lab_colonization_time,
                                      x_annotate = 2,
                                      lab_annotate = "***") 
@@ -2035,19 +2094,16 @@ p1.peak <-
                      avg_data = filter(avg_data_filt_lagged_plotting, tr_peak_doy_lag1_plot  < 220),
                      x_col = "tmp_z_lag2", y_col = "peak_doy", 
                      line_color = "red", 
-                     x_title = temp_label , 
+                     x_title = expression(paste("Temp. lag2 [", "z-score]")) , 
                      y_title = lab_peak_time, 
-                    # my_title = paste("[d]", 'Peak swarming\ntiming', '[DOY]'),  
-                     my_title = paste("[c]", 'Peak swarming timing', '\n[DOY]'),
-                     #my_title = "Effect of Year on Sum IPS", 
-                     x_annotate = 2, 
+                       x_annotate = 2, 
                      lab_annotate = "0.71")
 
 (p1.peak)
 p2.peak <- create_effect_plot(data = p2,  avg_data = filter(avg_data_filt_lagged_plotting, tr_peak_doy_lag1_plot  < 220), 
                              x_col = "spei_lag1", y_col = "peak_doy", 
                              line_color = "blue", 
-                             x_title = spei_label , 
+                             x_title = expression(paste("SPEI. lag1 [", "dim.]")) , 
                              y_title = lab_peak_time, 
                              x_annotate = -0.5, 
                              lab_annotate = "**")
@@ -2056,7 +2112,7 @@ p3.peak <- plot_effect_interactions(p3,
                                     avg_data = filter(avg_data_filt_lagged_plotting, tr_peak_doy_lag1_plot  < 220),
                                     x_col = "tmp_z_lag1", 
                                     y_col = "peak_doy", 
-                                   temp_label = temp_label, 
+                                   temp_label = expression(paste("Temp. lag1 [", "z-score]")), 
                                    y_title = lab_peak_time,
                                    x_annotate = 2,
                                    lab_annotate = "0.09") 
@@ -2101,9 +2157,9 @@ p1.peak.diff <-
   create_effect_plot(data = p1, 
                      avg_data = filter(avg_data_filt_lagged_plotting, tmp_z_lag1  < 4), x_col = "tmp_z_lag1", y_col = "peak_diff", 
                      line_color = "red", 
-                     x_title = temp_label , 
+                     x_title = expression(paste("Temp. lag2 [", "z-score]")) , 
                      y_title = lab_peak_growth, 
-                     my_title = paste("[d]", 'Peak swarming\nintensity', '[#*10]'),
+                    # my_title = paste("[d]", 'Peak swarming\nintensity', '[#*10]'),
                      #my_title = "Effect of Year on Sum IPS", 
                      x_annotate = 2, 
                      lab_annotate = "0.14")
@@ -2114,7 +2170,7 @@ p2.peak.diff <- create_effect_plot(data = p2,
                                   avg_data = filter(avg_data_filt_lagged_plotting, tmp_z_lag1  < 4),
                                   x_col = "spei_lag2", y_col = "peak_diff", 
                                line_color = "blue", 
-                               x_title = spei_label , 
+                               x_title = expression(paste("SPEI. lag2 [", "dim.]")) , 
                                y_title = lab_peak_growth, 
                                #my_title = "Effect of Year on Sum IPS", 
                                x_annotate = -0.5, 
@@ -2125,7 +2181,7 @@ p3.peak.diff <- plot_effect_interactions(p3,
                                          #avg_data = avg_data_filt_lagged_plotting, # avg_data_sum_ips, 
                                          x_col = "tmp_z_lag1", 
                                          y_col = "peak_diff", 
-                                     temp_label = temp_label, 
+                                     temp_label = expression(paste("Temp. lag1 [", "z-score]")), 
                                      y_title = lab_peak_growth,
                                      x_annotate = 2,
                                      lab_annotate = "*") 
@@ -2138,12 +2194,12 @@ ggarrange(p0.peak.diff,p1.peak.diff,p2.peak.diff,p3.peak.diff)
 
 # TEST 
 
-p.full.year <- ggarrange(p0.count, p0.agg, p0.peak, 
+p.previous <- ggarrange(p0.count, p0.agg, p0.peak, 
                          p0.peak.diff, 
                          ncol=4, nrow = 1 , #align = 'hv', 
                          font.label = list(size = 8, color = "black", face = "plain", family = NULL) )
 
-(p.full.year)
+(p.previous)
 
 p.temp <-  ggarrange(p1.count, p1.agg, p1.peak, p1.peak.diff, 
                      ncol=4, nrow = 1 , align = 'hv', 
@@ -2158,17 +2214,19 @@ p.spei <-  ggarrange(p2.count, p2.agg, p2.peak, p2.peak.diff,
 p.int <- ggarrange(p3.count,  p3.agg, p3.peak, p3.peak.diff,
                    ncol=4, nrow = 1 , align = 'hv',common.legend = TRUE, legend = 'bottom',
                    font.label = list(size = 8, color = "black", face = "plain", family = NULL))
-windows(7,8)
-full_preds <- ggarrange(p.temp, p.spei,  
-                        p.full.year,
+windows(7,10)
+full_preds <- ggarrange(p_spagetti,
+                        p.temp, 
+                        p.spei,  
+                        p.previous,
                         p.int,
-                        ncol = 1, nrow= 4, 
-                        align = 'hv', heights = c(1.1, 1, 1, 1.1),
-                        widths = c(1, 1, 1, 1))
-
+                        ncol = 1, nrow= 5, 
+                        align = 'hv', heights = c(1.1, 1, 1, 1, 1.1),
+                        widths = c(1, 1, 1, 1, 1))
+#"#009E73" 
 (full_preds)
-ggsave(filename = 'outFigs/Fig_full_eff2.png', plot = full_preds, 
-       width = 7.5, height = 8, dpi = 300, bg = 'white')
+ggsave(filename = 'outFigs/Fig_full_eff3.png', plot = full_preds, 
+       width = 7.5, height = 10.5, dpi = 300, bg = 'white')
 
 
 
@@ -2179,165 +2237,6 @@ ggsave(filename = 'outFigs/Fig_full_eff2.png', plot = full_preds,
 
 
 
-
-
-# put in teh same figure? --------------------------------------------------------
-# remove labels, keep only labels on top
-
-
-#lab_popul_level <- 
-#lab_colonization_time
-#lab_peak_time
-#lab_peak_growth
-
-p.full.year <- ggarrange(p0.count, p0.agg, p0.peak, p0.peak.diff, 
-                         ncol=4, nrow = 1 , #align = 'hv', 
-                         font.label = list(size = 8, color = "black", face = "plain", family = NULL) )
-
-(p.full.year)
-
-p.temp <-  ggarrange(p1.count, p1.agg, p1.peak, p1.peak.diff, 
-                     ncol=4, nrow = 1 , align = 'hv', 
-                     font.label = list(size = 8, color = "black", face = "plain", family = NULL))
-
-
-p.spei <-  ggarrange(p2.count, p2.agg, p2.peak, p2.peak.diff, 
-                     ncol=4, nrow = 1 , align = 'hv', 
-                     font.label = list(size = 8, color = "black", face = "plain", family = NULL))
-
-
-p.int <- ggarrange(p3.count, p3.agg, p3.peak, p3.peak.diff, 
-                   ncol=4, nrow = 1 , align = 'hv',common.legend = TRUE, legend = 'bottom',
-                   font.label = list(size = 8, color = "black", face = "plain", family = NULL))
-windows(7,8)
-full_preds <- ggarrange(p.full.year,p.temp, p.spei, p.int, 
-                        ncol = 1, nrow= 4, 
-                        align = 'hv', heights = c(1, 1, 1, 1.1),
-                        widths = c(1, 1, 1, 1))
-
-(full_preds)
-ggsave(filename = 'outFigs/Fig_full_eff.png', plot = full_preds, 
-       width = 7.5, height = 8, dpi = 300, bg = 'white')
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-### all Effect plots: ips vs climate --------------------------------------------------------
-
-
-
-# put together individual plots for climate
-p.count     <- ggarrange(p1.count, p2.count, ncol = 1)
-p.agg       <- ggarrange(p1.agg, p2.agg, ncol = 1)
-p.peak      <- ggarrange(p1.peak, p2.peak, ncol = 1)
-p.peak.diff <- ggarrange(p1.peak.diff, p2.peak.diff, ncol = 1)
-
-
-
-
-
-
-
-
-
-
-
-
-
-# PLOT: Temporal development ----------------------------------
-p.full.year <- ggarrange(p0.count, p0.agg, p0.peak, p0.peak.diff, 
-                        ncol=4, nrow = 1 , align = 'hv', 
-                        font.label = list(size = 8, color = "black", face = "plain", family = NULL),
-                        labels = c( paste("[a] ", lab_popul_level),
-                                    paste("[b] ", lab_colonization_time ),
-                                    paste("[c] ", lab_peak_time ),
-                                    paste("[d] ", lab_peak_growth )))
-
-
-windows(7,5)
-(p.full.year)
-
-
-p.out.clim <- ggarrange(p.count, p.agg, p.peak, p.peak.diff, 
-          ncol=4, nrow = 1 , align = 'hv', 
-          font.label = list(size = 8, color = "black", face = "plain", family = NULL),
-          labels = c( paste("[a] ", lab_popul_level),
-                      paste("[b] ", lab_colonization_time ),
-                      paste("[c] ", lab_peak_time ),
-                      paste("[d] ", lab_peak_growth )))
-                      
-
-windows(7,4)
-(p.out.clim)
-
-ggsave(filename = 'outFigs/Fig3.png', plot = p.out.clim, 
-       width = 7, height = 4, dpi = 300, bg = 'white')
-
-
-p.clim.int <- ggarrange(p3.count, p3.agg, p3.peak, p3.peak.diff, 
-          ncol=4, nrow = 1 , align = 'hv',common.legend = TRUE, legend = 'right',
-          font.label = list(size = 8, color = "black", face = "plain", family = NULL),
-          labels = c( paste("[a] ", lab_popul_level),
-                      paste("[b] ", lab_colonization_time ),
-                      paste("[c] ", lab_peak_time ),
-                      paste("[d] ", lab_peak_growth )))
-windows(7,2)
-p.clim.int
-ggsave(filename = 'outFigs/Fig4.png', plot = p.clim.int, 
-       width = 7, height = 4, dpi = 300, bg = 'white')
-
-
-
-
-
-
-
-
-
-#### Effect plots RS ----------------------------------------------------------
-# does not wokr!!!
-# Assuming 'model' is your glm.nb model
-summary(fin.m.RS)
-p1 <- ggpredict(fin.m.RS, terms = "veg_tmp_lag1 [all]", allow.new.levels = TRUE)
-p2 <- ggpredict(fin.m.RS, terms = "spei3_lag1    [all]", allow.new.levels = TRUE)
-p3 <- ggpredict(fin.m.RS, terms = c("veg_tmp_lag1", "spei3_lag1 [-1, 0,1]"), allow.new.levels = TRUE)
-#p4 <- ggpredict(fin.m.RS, terms = "population_growth2 [all]", allow.new.levels = TRUE)
-
-
-p1.RS <- create_effect_plot(p1, line_color = "red", 
-                            x_title = "Temperature [dim.]", 
-                            y_title = "Tree mortality\n[# pixels]", y_lim = c(0,20), 
-                            show_y_axis = TRUE)
-p2.RS <- create_effect_plot(p2, line_color = "blue", 
-                            x_title = "SPEI [dim.]", 
-                            y_title = "Tree mortality\n[# pixels]", y_lim = c(0,20), 
-                            show_y_axis = TRUE)
-
-p3.RS <- plot_effect_interactions(p3, temp_label = temp_label, 
-                                         y_title = "Tree mortality\n[# pixels]")
-
-
-p1.RS
-
-### effect plots Sum IPS ----------------------------------------------------
-p.effect.RS <- ggarrange(p1.RS,p2.RS,p3.RS,
-                         #p4.RS, 
-                         ncol = 2, nrow = 2, align = 'hv')
-
-windows(7,7)
-p.effect.RS
 
 # PLOT Moran's I -------------------------------
 summary(fin.m.moran)
