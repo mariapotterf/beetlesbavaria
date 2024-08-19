@@ -65,7 +65,7 @@ load("outData/spatial.Rdata")
 # - ips.year.sum       # sum beetles/year per trap
 
 # Vars
-n_neighbors = 5      # number of nearest neighbors
+n_neighbors = 4      # number of nearest neighbors
 
 # Spatial data: 
 # should have 158 regions (trap pairs)
@@ -96,9 +96,6 @@ hist(ips_sum$sum_beetle)
 hist(ips_sum$log_sum_beetle)
 nrow(ips_sum)
 
-
-
-  
 
 
 # Run LISA for each year separately
@@ -181,20 +178,98 @@ lisa_merged_df %>%
   #facet_grid(~year)
 
   
+# = TEST AVG DATA ----------------------------------------------------------
 
+#i = 2015
+library(sp)
+library(spdep)
+
+# run LISA on average data: not pairs, but averahes across groups
+
+library(readr)
+fin_tab_avg <- read_csv("outTable/fin_tab_avg.csv")
+View(fin_tab_avg)
+
+fin_tab_avg <- fin_tab_avg %>% 
+  mutate(log_sum_ips = log(sum_ips))
+
+
+
+
+get_lisa_avg <- function(i, ...) {
+  
+  #i = 2015
+  #  # Slice specific year
+  ips_sum_sub <-fin_tab_avg %>%
+    filter(year == i)
+  #
+  #  # Local variation analysis (LISA) per year:
+  #  # Create a spatial points data frame
+  coordinates(ips_sum_sub) <- ~ x + y
+  #
+  #  # Create queen contiguity neighbors object
+  nb <- knn2nb(knearneigh(coordinates(ips_sum_sub),
+                          k = n_neighbors),  # nearest neighbor
+               sym = TRUE)
+  
+  #  # Calculate LISA
+  lisa_res_log<-localmoran(ips_sum_sub$log_sum_ips, nb2listw(nb,style="W"))
+  lisa_res    <-localmoran(ips_sum_sub$sum_ips, nb2listw(nb,style="W"))
+  #
+  # add LISA to points:
+  ips_sum_sub$Morans_I <-lisa_res[,1] # get the first column: Ii - local moran  stats
+  ips_sum_sub$clust <-attributes(lisa_res)$quadr$mean  # get classified data
+  
+  ips_sum_sub$Morans_I_log <-lisa_res_log[,1] # get the first column: Ii - local moran  stats
+  ips_sum_sub$clust_log    <-attributes(lisa_res_log)$quadr$mean  # get classified data
+  
+  #
+  # convert to sf for plotting
+  ips_sum_sub_sf <- st_as_sf(ips_sum_sub)
+  
+  return(ips_sum_sub_sf)
+}
+
+# Run LISA on all years separately
+lisa_out_avg <- lapply(years, get_lisa_avg )
+
+# Merge all in one sf
+lisa_merged_sf_avg <- dplyr::bind_rows(lisa_out_avg)
+
+st_crs(lisa_merged_sf_avg) <- my_crs
+
+lisa_merged_df_avg <- as.data.frame(lisa_merged_sf_avg)
+
+
+# compare the MOra's I from log and non log ips sums
+lisa_merged_df_avg %>% 
+  ggplot(aes(x = Morans_I,
+             y = Morans_I_log ,
+             color = factor(year)
+  )) + 
+  geom_point() +
+  # geom_smooth() +
+  facet_wrap(~year) +
+  labs(y = "Moran's I [log(beetle sum)]",
+       x = "Moran's I [beetle sum]")# +
+  #theme_bw()
+
+boxplot(lisa_merged_df_avg$Morans_I)
+boxplot(lisa_merged_df_avg$Morans_I_log)
+
+
+# END TEST ---------------------------------------------
 
 
 # Save outputs ------------------------------------------------------------
 save(lisa_merged_df,
-     #p_lisa_sub, 
-     #   p_lisa_all,
-     #   p_lisa_freq,
-     #   glob_merged,
-     #   semi_out,
-     #  p_glob_moran_bar,
      file = "outData/lisa.Rdata")
 
-  
+ 
+save(
+     lisa_merged_df_avg,
+     file = "outData/lisa_avg.Rdata")
+
   
   
 x = 1:10000
@@ -202,10 +277,11 @@ y = log(x)
 plot(x = x, y = y)
 
 # START sensitivity to number of neighbors ------------------------------------------
-
-get_lisa_neighbours <- function(year, n_neighbors, ips_sum) {
+get_lisa_neighbours <- function(year, n_neighbors, df) {
+  
   # Slice specific year
-  ips_sum_sub <- ips_sum %>% filter(year == year)
+  ips_sum_sub <- df %>% filter(year == !!year)
+  # 
   
   # Create a spatial points data frame
   coordinates(ips_sum_sub) <- ~ x + y
@@ -214,7 +290,7 @@ get_lisa_neighbours <- function(year, n_neighbors, ips_sum) {
   nb <- knn2nb(knearneigh(coordinates(ips_sum_sub), k = n_neighbors), sym = TRUE)
   
   # Calculate LISA
-  lisa_res <- localmoran(ips_sum_sub$sum_beetle, nb2listw(nb, style="W"))
+  lisa_res <- localmoran(ips_sum_sub$sum_ips, nb2listw(nb, style="W"))
   
   # Add LISA to points
   ips_sum_sub$Morans_I <- lisa_res[,1] # Local Moran's I statistic
@@ -228,7 +304,7 @@ get_lisa_neighbours <- function(year, n_neighbors, ips_sum) {
 }
 
 # Vector of neighbors to test
-neighbor_counts <- c(1, 3, 5, 7, 9, 11, 15, 21)
+neighbor_counts <- c(1:5, 7, 9, 11, 15, 21)
 
 # Years to loop over
 years <- 2015:2021
@@ -236,7 +312,8 @@ years <- 2015:2021
 # Perform sensitivity analysis over years and number of neighbors
 sensitivity_results <- lapply(years, function(yr) {
   lapply(neighbor_counts, function(n_nb) {
-    get_lisa_neighbours(yr, n_nb, ips_sum)
+    get_lisa_neighbours(yr, n_nb, df = fin_tab_avg #ips_sum
+                          )
   })
 })
 
@@ -252,12 +329,12 @@ p.supp.neighb <-
 sensitivity_merged_df %>% 
   ggplot(aes(x = n_neighbors                ,  # Ensure beetle_threshold is treated as a categorical variable
              y = Morans_I ,   #,
-             color = ifelse(n_neighbors == 5, 'thresh 5', 'Other')
+             color = ifelse(n_neighbors == 4, 'thresh 4', 'Other')
              )) + 
   stat_summary(fun.data = mean_sd) +
   stat_summary(fun = mean, geom = "point", size = 3) +
 
-  scale_color_manual(values = c('thresh 5' = 'red', 'Other' = 'black')) +
+  scale_color_manual(values = c('thresh 4' = 'red', 'Other' = 'black')) +
   #geom_vline(xintercept = 1000, col = 'red', lty = 'dashed') +
   theme_classic() + 
   xlab('Nearest neighbours number threshold') + 
@@ -267,7 +344,7 @@ sensitivity_merged_df %>%
         axis.title = element_text(size = 14), # Set axis titles text size
         axis.text = element_text(size = 14), # Set axis text (ticks) size
         plot.title = element_text(size = 14)) +
-  guides(color = FALSE) # This removes the legend for color
+  guides(color = "none") # This removes the legend for color
 
 
 p.supp.neighb
