@@ -643,57 +643,6 @@ avg_data <- dat_spei_lags %>%
 fwrite(avg_data, 'outTable/fin_tab_avg.csv')
 
 
-# AGG DOY : test for betar family-----------------------------------
-# test if it is better to keep pairs as random effect or just the xy coordinates? 
-m.re <- gamm(tr_agg_doy ~ s(year, k = 6) + s(tmp_z_lag1, k = 3) + s(spei_z_lag2, k = 3) +
-             te(tmp_z_lag1, spei_z_lag2, k = 15) + 
-             #s(x, y, bs = "gp") + 
-             s(pairID, bs = "re"),
-           data = avg_data,
-           family = betar,
-           correlation = corAR1(form = ~ year | pairID))
-
-m.xy <- gamm(tr_agg_doy ~ s(year, k = 6) +  s(tmp_z_lag1, k = 3) + s(spei_z_lag2, k = 3) +
-             te(tmp_z_lag1, spei_z_lag2, k = 15) + 
-             s(x, y, bs = "gp") ,
-           data = avg_data,
-           family = betar,
-           correlation = corAR1(form = ~ year | pairID))
-
-# both
-m.both.spat <- gamm(tr_agg_doy ~ s(year, k = 6) +  s(tmp_z_lag1, k = 8) + s(spei_z_lag2, k = 3) +
-               te(tmp_z_lag1, spei_z_lag2, k = 15) + 
-               s(x, y, bs = "gp") +
-                 s(pairID, bs = "re"),
-             data = avg_data,
-             family = betar,
-             correlation = corAR1(form = ~ year | pairID))
-
-
-
-m1 <- m.re$gam
-m2 <- m.xy$gam
-m3 <- m.both.spat$gam
-
-r2(m3)
-
-
-avg_data %>% 
-  ggplot(aes(x = spei_z_lag2,
-             y = tr_agg_doy)) +
-  geom_smooth()
-
-
-
-
-
-AIC(m.re$lme, m.xy$lme )
-# compare the two: add xy or add pairs as random effects? what is better?
-
-m<-m1$gam
-summary(m)
-plot(m, page = 1)
-
 # automate models over all dependent variables and over increasing model complexity  -----------------------------------------
 # START 
 
@@ -1509,15 +1458,7 @@ save(fin.m.counts.previous.tw,
      fin.m.peak.diff.previous.tw,
      fin.m.agg.doy.gamma,
      fin.m.peak.doy.gamma,
-     # fin.m.counts, 
-     #fin.m.agg, 
-     #fin.m.peak,
-     #fin.m.peak.diff,
-     #m.counts.tw,
-     #m1.gamma,
-     #m.peak.gamma,
-     #m.peak.diff.tw,
-     avg_data,
+         avg_data,
      file = "outData/fin_models.RData")
 
 
@@ -2389,10 +2330,10 @@ summary(fin.m.peak.diff)
 
 
 # export all models
-sjPlot::tab_model(fin.m.counts,    file = "outTable/model_counts.doc")
-sjPlot::tab_model(fin.m.agg,       file = "outTable/model_agg.doc")
-sjPlot::tab_model(fin.m.peak,      file = "outTable/model_peak.doc")
-sjPlot::tab_model(fin.m.peak.diff, file = "outTable/model_peak_diff.doc")
+sjPlot::tab_model(fin.m.counts.previous.tw,    file = "outTable/model_counts.doc")
+sjPlot::tab_model(fin.m.agg.doy.gamma,       file = "outTable/model_agg.doc")
+sjPlot::tab_model(fin.m.peak.doy.gamma,      file = "outTable/model_peak.doc")
+sjPlot::tab_model(fin.m.peak.diff.previous.tw, file = "outTable/model_peak_diff.doc")
 sjPlot::tab_model(fin.m.moran,     file = "outTable/model_moran.doc")
 #sjPlot::tab_model(fin.m.RS,        file = "outTable/model_RS_3.doc")
 
