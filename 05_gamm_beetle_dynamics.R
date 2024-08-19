@@ -643,7 +643,7 @@ avg_data <- dat_spei_lags %>%
 fwrite(avg_data, 'outTable/fin_tab_avg.csv')
 
 
-# automate models over all dependent variables and over increasing model complexity  -----------------------------------------
+### automate models over all dependent variables and over increasing model complexity  -----------------------------------------
 # START 
 
 # Define a function to build and compare models with descriptive names for multiple dependent variables
@@ -741,6 +741,7 @@ result <- compare_models(avg_data, dependent_vars)
 result_peak_diff <- compare_models(avg_data, dependent_vars =  c("peak_diff"))
 
 
+### Specify temp autocorrelation ------------------------------------------------
 
 ###### AGG DOY ------------------------------------
 
@@ -842,7 +843,7 @@ plot(m.peak.diff.tw$gam, page = 1)
 
 ###### SUM IPS TW  ------------------------------------
 
-###### TEST MODELS previous year ------------------------------------------------
+###  Use previous year ------------------------------------------------
 
 avg_data_filt <- avg_data %>% 
   mutate(f_year = as.factor(year)) %>% 
@@ -875,7 +876,7 @@ avg_data_filt_lagged %>%
                 tr_peak_doy, tr_peak_doy_lag1 )
 
 
-
+### TW PREV COUNTS --------------------------------------------------------------
 # the best!
 m.counts.tw <- gamm(sum_ips ~ #s(year, k = 6) +
                          s(tmp_z_lag1, k = 5) +
@@ -1033,6 +1034,7 @@ m.counts.previous <- gamm(sum_ips ~
                           control = control)
 
 
+### TW PREV PEAK_DIFF --------------------------------------------------------------
 # for peak_diff
 m.peak.diff.previous <- gamm(peak_diff ~ 
                                s(tmp_z_lag1, k = 5) +
@@ -1130,7 +1132,7 @@ nrow(avg_data_filt)
 # 
 
 
-# previous -----------------
+# previous PEAK_DOY -----------------
 avg_data_peak_no_out <- avg_data_filt_lagged %>% 
   dplyr::filter(tr_peak_doy < 0.72) %>% 
   dplyr::filter(tr_peak_doy_lag1 < 0.72)
@@ -1161,7 +1163,7 @@ AIC(m.peak.previous.year, m.peak.previous)
 
 
 
-###### get final models ----------------
+###### PREVIOUS get final models ----------------
 fin.m.counts.previous.tw    <- m.counts.previous$gam
 fin.m.peak.diff.previous.tw <- m.peak.diff.previous$gam
 fin.m.agg.doy.gamma         <- m.agg.previous$gam
