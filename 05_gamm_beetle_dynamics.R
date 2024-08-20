@@ -1270,7 +1270,7 @@ for (dep in dependent_moran) {
   for (pred in selected_predictors) {
     print(pred)
     # Fit the model
-    formula <- as.formula(paste(dep, "~ s(", pred, ", k = 5)"))
+    formula <- as.formula(paste(dep, "~ s(", pred, ", k = 10)"))
     print(formula)
     #print(formula)
    # model <- gamm(formula,  
@@ -1312,10 +1312,10 @@ sjPlot::tab_df(model_metrics_moran,
 #fin.m.moran
 
 m.morans.previous <- gam(Morans_I_log ~ 
-                            s(tmp_z, k = 5) +
+                            s(tmp_z, k = 8) +
                             s(spei_lag1, k = 6) + 
                             te(tmp_z, spei_lag1, k = 5) + 
-                           s(sum_ips, k = 11) + # Added term for  beetle counts
+                           s(sum_ips, k =5, bs = 'tp') + # Added term for  beetle counts
                           # s(sum_ips_lag1, k = 5) + # Added term for previous beetle counts
                             s(Morans_I_log_lag1, k = 5),# + # Added term for previous MOrans I 
                            # s(pairID, bs = 're') +
@@ -1334,14 +1334,12 @@ fin.m.moran <- m.morans.previous
 
 sjPlot::tab_model(fin.m.moran,
               #col.header = c(as.character(qntils), 'mean'),
-              show.rownames = FALSE,
-              file="outTable/model_moran.doc",
-              digits = 1) 
+             # show.rownames = FALSE,
+              file="outTable/model_moran.doc") 
 
 
 
-### END ---------------------------
-
+# check boxplots ----------------------------------------------------------------
 boxplot(avg_data_moran$sum_ips)
 boxplot(avg_data_moran_sub$Morans_I_log)
 
@@ -1362,105 +1360,13 @@ print(correlation_matrix)
 
 corrplot::corrplot(correlation_matrix)
 
-m.moran.tw1 <- gamm(Morans_I_log  ~ #s(year, k = 5) +
-                      #s(tmp_z_lag1, k = 5) +
-                      #s(spei_z_lag2, k = 4) + 
-                     s(sum_ips, k =5) +
-                      #te(tmp_z_lag1, spei_z_lag2, k = 20) + 
-                      # s(x, y, bs = 'gp', k = 70) + 
-                      s(pairID, bs = 're'),
-                    data = avg_data_moran_sub, 
-                    family = tw,
-                    correlation = corAR1(form = ~ year | pairID))
-
-
-
-m.moran.tw2 <- gamm(Morans_I_log  ~ #s(year, k = 5) +
-                      #s(tmp_z_lag1, k = 5) +
-                      #s(spei_z_lag2, k = 4) + 
-                      s(sum_ips, by = f_year, k =5) +
-                      #te(tmp_z_lag1, spei_z_lag2, k = 20) + 
-                      # s(x, y, bs = 'gp', k = 70) + 
-                      s(pairID, bs = 're'),
-                    data = avg_data_moran_sub, 
-                    family = tw,
-                    correlation = corAR1(form = ~ year | pairID))
-
-m.moran.tw3 <- gamm(Morans_I_log  ~ s(year, k = 5) +
-                      #s(tmp_z_lag1, k = 5) +
-                      #s(spei_z_lag2, k = 4) + 
-                      s(sum_ips, k =5) +
-                      #te(tmp_z_lag1, spei_z_lag2, k = 20) + 
-                      # s(x, y, bs = 'gp', k = 70) + 
-                      s(pairID, bs = 're'),
-                    data = avg_data_moran_sub, 
-                    family = tw,
-                    correlation = corAR1(form = ~ year | pairID))
-
-# add climate 
-
-m.moran.tw4 <- gamm(Morans_I_log  ~ s(year, k = 5) +
-                      #s(tmp_z_lag1, k = 5) +
-                      s(spei_z_lag2, k = 4) + 
-                      s(sum_ips, k =10) +
-                      #te(tmp_z_lag1, spei_z_lag2, k = 20) + 
-                       s(x, y, bs = 'gp', k = 50) + 
-                      s(pairID, bs = 're'),
-                    data = avg_data_moran_sub, 
-                    family = tw,
-                    correlation = corAR1(form = ~ year | pairID))
-
-
-m.moran.tw5 <- gamm(Morans_I_log  ~ s(year, k = 5) +
-                      s(tmp_z_lag1, k = 5) +
-                      s(spei_z_lag2, k = 4) + 
-                      s(sum_ips, k =10) +
-                      #te(tmp_z_lag1, spei_z_lag2, k = 20) + 
-                      s(x, y, bs = 'gp', k = 50) + 
-                      s(pairID, bs = 're'),
-                    data = avg_data_moran_sub, 
-                    family = tw,
-                    correlation = corAR1(form = ~ year | pairID))
-
-m.moran.tw6 <- gamm(Morans_I_log  ~ s(year, k = 5) +
-                      s(tmp_z_lag1, k = 5) +
-                      s(spei_z_lag2, k = 4) + 
-                      s(sum_ips, k =10) +
-                      te(tmp_z_lag1, spei_z_lag2, k = 20) + 
-                      s(x, y, bs = 'tp', k = 50) + 
-                      s(pairID, bs = 're'),
-                    data = avg_data_moran_sub, 
-                    family = tw,
-                    correlation = corAR1(form = ~ year | pairID))
-
-AIC(m.moran.tw2$lme, m.moran.tw1$lme, m.moran.tw3$lme,m.moran.tw4$lme,
-    m.moran.tw5$lme,m.moran.tw6$lme)
-
-summary(avg_data$Morans_I_log)
-appraise(m.moran.tw6$gam)
-summary(m.moran.tw6$gam)
-k.check(m.moran.tw6$gam)
-gam.check(m.moran.tw6$gam)
-plot(m.moran.tw6$gam, page = 1)
-
-
-# final model MOran's I
-#fin.m.moran <- m.moran.tw6$gam
-
-
-ggplot(avg_data_moran_sub, aes(x = sum_ips, #peak_diff,
-                           y =  Morans_I_log)) +
-  geom_point() +
-  geom_smooth()
-
-
 
 
 
 
 
 ##### quick plotting -----------------------------------------------
-fin.m <- m.agg.previous$gam # m2.agg.gamma$gam #m.counts.tw$gam # m.counts.tw.bam.year#m.counts.tw.test.f.rndm#  fin.m.agg#$gam
+fin.m <- fin.m.moran #m.agg.previous$gam # m2.agg.gamma$gam #m.counts.tw$gam # m.counts.tw.bam.year#m.counts.tw.test.f.rndm#  fin.m.agg#$gam
 
 # check for tempoeal autocorrelation
 
@@ -2195,8 +2101,6 @@ ggarrange(p0.peak.diff,p1.peak.diff,p2.peak.diff,p3.peak.diff)
 
 # put in the same figure: tmp, spei, interaction, previous years on teh bottom
 
-# TEST 
-
 p.previous <- ggarrange(p0.count, p0.agg, p0.peak, 
                          p0.peak.diff, 
                          ncol=4, nrow = 1 , #align = 'hv', 
@@ -2234,9 +2138,6 @@ ggsave(filename = 'outFigs/Fig_full_eff3.png', plot = full_preds,
 
 
 
-# TEST END
-
-
 
 
 
@@ -2261,9 +2162,10 @@ p1.moran <- create_effect_plot(p1,
                                x_title = "Temp. lag0 [z-score]", 
                                y_title = "Local Moran's I", 
                                x_annotate = 2,
-                               lab_annotate = "0.3"
+                               lab_annotate = "**"
                                #y_lim = c(0,1)
-                               )
+                               ) +
+  theme(axis.title.y = element_text("Local Moran's I", angle = 90))
 
 p1.moran
 p2.moran <- create_effect_plot(p2,
@@ -2276,7 +2178,8 @@ p2.moran <- create_effect_plot(p2,
                                #y_lim = c(0,1)
                                x_annotate = -0.5,
                                lab_annotate = "*"
-                                                         )
+                                                         ) +
+  theme(axis.title.y = element_text("Local Moran's I", angle = 90))
 
 p2.moran
 
@@ -2287,21 +2190,21 @@ p3.moran <- create_effect_plot(p3,
                                x_col = "sum_ips_scaled", 
                                y_col = "Morans_I_log", 
                                line_color = "grey50", 
-                               x_title = "Population level [(#*1000)]", 
+                               x_title = "Pop. level [#*1000]", 
                                y_title = "Local Moran's I", # y_lim = c(0,1),
                                x_annotate = 50,
-                               lab_annotate = "***")
+                               lab_annotate = "***") +
+  theme(axis.title.y = element_text("Local Moran's I", angle = 90))
 p3.moran
 p5.prev.Morans <- create_effect_previous_year(data = p5, 
                                             avg_data = filter(lisa_merged_df_avg, Morans_I_log  > -1 & Morans_I_log  < 2),
-                                            #avg_data = avg_data_filt_lagged_plotting, #dplyr::filter(avg_data_sum_ips, peak_diff <200),
                                             x_col = "Morans_I_log_lag1",
                                             y_col = "Morans_I_log",
                                             line_color = "darkgreen", 
-                                            x_title = "Local Moran's I [lag1, dim.]", 
-                                            y_title = lab_peak_growth,
-                                            #my_title = paste("[d]", 'Peak swarming\nintensity', '[#*10]'),  
-                                            x_annotate = 0, lab_annotate = "***")
+                                            x_title = "Local Moran's I lag1 [dim.]", 
+                                            y_title =  "Local Moran's I [dim.]",
+                                            x_annotate = 0, lab_annotate = "***") +
+  theme(axis.title.y = element_text("Local Moran's I", angle = 90))
 
 (p5.prev.Morans)
 
@@ -2313,14 +2216,15 @@ p4.moran <- plot_effect_interactions(p4,
                                      y_col = "Morans_I_log", 
                                      temp_label = "Temp. lag0 [z-score]", 
                                      y_title = "Local Moran's I",
-                                     x_annotate = 1,
-                                     lab_annotate = "**") +
-  theme(legend.position = c(0.5, 0.8),
+                                     x_annotate = 0.3,
+                                     lab_annotate = "***") +
+  theme(legend.position = c(0.6, 0.8),
         legend.title = element_text(hjust = 0.5),       # Align the legend title with the legend items (centered)
         #legend.title = "SPEI levels" 
         legend.background = element_rect(fill = "white", color = NA)  # White background with alpha
         ) +
-  guides(color = guide_legend(ncol = 1))
+  guides(color = guide_legend(ncol = 1)) +
+  theme(axis.title.y = element_text("Local Moran's I", angle = 90))
 
  
 p4.moran
