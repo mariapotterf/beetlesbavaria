@@ -194,7 +194,8 @@ fin_tab_avg <- fin_tab_avg %>%
   mutate(log_sum_ips = log(sum_ips))
 
 
-
+years <- 2015:2021
+n_neighbors = 4
 
 get_lisa_avg <- function(i, ...) {
   
