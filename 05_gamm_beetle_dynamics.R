@@ -160,11 +160,7 @@ nrow(dat_fin)
 predictors_spei       <- c("spei1", "spei3","spei6", "spei12", "spei24")
 predictors_beetle_dyn <- c("spring_tmp", "veg_tmp",  "spei3", "spei12")
 predictors_Morans     <- c("spring_tmp", "veg_tmp",  "spei3", "spei12", "spei24", "sum_ips", "peak_doy", "peak_diff", "agg_doy")
-#predictors_RS         <- c("spring_tmp", "veg_tmp", "spei3", "spei12", "sum_ips", "peak_doy", "peak_diff", "agg_doy", "Morans_I", "Morans_I_log")
-#dependent_var <- 'sum_ips'
 lags <- 0:3
-#data <- dat_fin # Assuming dat_fin is your dataset
-
   
 
 # dat_fin: calculate climate lags --------------
@@ -187,12 +183,9 @@ dat_spei_lags <-  dat_fin %>%
          tmp_z_lag1 = lag(tmp_z, n = 1, default = NA),
          tmp_z_lag2 = lag(tmp_z, n = 2, default = NA),
          tmp_z_lag3 = lag(tmp_z, n = 3, default = NA),
-   #     spei_z_lag1 = lag(spei_z, n = 1, default = NA),
-  #       spei_z_lag2 = lag(spei_z, n = 2, default = NA),
-  #       spei_z_lag3 = lag(spei_z, n = 3, default = NA),
-    spei_lag1 = lag(spei, n = 1, default = NA),
-    spei_lag2 = lag(spei, n = 2, default = NA),
-    spei_lag3 = lag(spei, n = 3, default = NA),
+         spei_lag1 = lag(spei, n = 1, default = NA),
+         spei_lag2 = lag(spei, n = 2, default = NA),
+         spei_lag3 = lag(spei, n = 3, default = NA),
           ) %>%
   mutate(peak_diff  = as.integer(peak_diff )) %>% 
   ungroup(.) 
@@ -1013,13 +1006,6 @@ plot(m.counts.tw.test.f.rndm$gam, page = 1)
 
 
 
-
-vif_data <- avg_data_peak_diff[, c("year", "tmp_z_lag1", "spei_z_lag2", "x", "y", "peak_diff")]
-vif_result <- vif(lm(peak_diff ~ ., data = vif_data))
-
-
-appraise(fin.m.agg)
-
 ### TEST models with different temp autocorrelation and proper SPEI --------------------------------------------------------------
 
 # increase the number of iterations to converge the model
@@ -1117,25 +1103,6 @@ nrow(avg_data_filt_peak_doy) # 512
 nrow(avg_data_filt)
 
 
-# keep simple one for plottig purposes
-# m.peak.gamma.simple <- gamm(tr_peak_doy ~ 
-#                               s(tmp_z_lag2, k = 3)  + # 
-#                               s(spei_lag1, k = 3) + 
-#                               te(tmp_z_lag2, spei_lag1, k = 5, bs = 'tp') + #
-#                               #s(x, y, bs = 'gp', k = 10) + 
-#                               s(pairID, bs = 're')# +
-#                             # s(f_year, bs = 're')
-#                             ,
-#                             data =  avg_data_filt_peak_doy,#avg_data_filt , 
-#                             family = Gamma(link = "log"),
-#                             correlation = corAR1(form = ~ year | pairID),
-#                             control = control)
-# 
-# summary(m.peak.gamma.simple$gam)
-# appraise(m.peak.gamma.simple$gam)
-# k.check(m.peak.gamma.simple$gam)
-# plot(m.peak.gamma.simple$gam, page = 1, shade = TRUE)
-# 
 
 
 # previous PEAK_DOY -----------------
@@ -1153,7 +1120,7 @@ m.peak.previous.gamm <- gamm(tr_peak_doy ~
                        s(pairID, bs = 're')# +
                        #s(f_year, bs = 're')
                        ,
-                       data = avg_data_peak_no_out, ,
+                       data = avg_data_peak_no_out, 
                        family = Gamma(link = "log"),
                        control = control)
 
@@ -1253,7 +1220,7 @@ m.tw <- gam(Morans_I_log ~ s(sum_ips),
                 data = lisa_merged_df_avg,
                 correlation = corAR1(form = ~ year | pairID))
 
-
+# ----------------------------------
 
 # Initialize a data frame to store AIC values and deviance explained
 model_metrics_moran <- data.frame(Predictor = character(), 
@@ -1272,13 +1239,7 @@ for (dep in dependent_moran) {
     # Fit the model
     formula <- as.formula(paste(dep, "~ s(", pred, ", k = 10)"))
     print(formula)
-    #print(formula)
-   # model <- gamm(formula,  
-  #                family = tw,
-  #                method = 'REML',  
-  #                data = lisa_merged_df_avg,#avg_data_moran_sub,
-  #                correlation = corAR1(form = ~ year | pairID))
-    
+
     model <- gam(formula,  
                   family = gaussian(),
                   method = 'REML',  
@@ -1332,10 +1293,6 @@ draw(m.morans.previous)
 
 fin.m.moran <- m.morans.previous 
 
-sjPlot::tab_model(fin.m.moran,
-              #col.header = c(as.character(qntils), 'mean'),
-             # show.rownames = FALSE,
-              file="outTable/model_moran.doc") 
 
 
 
@@ -1366,7 +1323,7 @@ corrplot::corrplot(correlation_matrix)
 
 
 ##### quick plotting -----------------------------------------------
-fin.m <- fin.m.moran #m.agg.previous$gam # m2.agg.gamma$gam #m.counts.tw$gam # m.counts.tw.bam.year#m.counts.tw.test.f.rndm#  fin.m.agg#$gam
+fin.m <- m.agg.previous$gam # m2.agg.gamma$gam #m.counts.tw$gam # m.counts.tw.bam.year#m.counts.tw.test.f.rndm#  fin.m.agg#$gam
 
 # check for tempoeal autocorrelation
 
@@ -1420,14 +1377,14 @@ ggarrange(#plot1,
 # fin.m.agg        <- m2.agg.gamma$gam #m1.gamma$gam#result$tr_agg_doy$models$random_effect$gam  # lowest AIC
 # fin.m.peak       <- m.peak.gamma$gam #m.peak.diff.tw$gam #result$tr_peak_doy$models$random_effect$gam  # lowest AIC
 # fin.m.peak.diff  <- m.peak.diff.tw$gam #result_peak_diff$peak_diff$models$random_effect$gam  # lowest AIC
-
-
-save(fin.m.counts.previous.tw,
-     fin.m.peak.diff.previous.tw,
-     fin.m.agg.doy.gamma,
-     fin.m.peak.doy.gamma,
-         avg_data,
-     file = "outData/fin_models.RData")
+# 
+# 
+# save(fin.m.counts.previous.tw,
+#      fin.m.peak.diff.previous.tw,
+#      fin.m.agg.doy.gamma,
+#      fin.m.peak.doy.gamma,
+#          avg_data,
+#      file = "outData/fin_models.RData")
 
 
 
@@ -1735,6 +1692,20 @@ plot_effect_interactions(p3, avg_data = avg_data_filt_lagged_plotting)
 ##### Spagetting plot: development over time -----------------------------------------
 
 
+# get update table for the line an pint plotting
+avg_data_sum_ips <- avg_data %>%
+  mutate(sum_ips = sum_ips/1000,
+         peak_diff = peak_diff/10)
+
+# point table for potting 
+avg_data_filt_lagged_plotting <- avg_data_filt_lagged %>% 
+  mutate(sum_ips        = sum_ips/1000,
+         sum_ips_lag1   = sum_ips_lag1/1000,
+         peak_diff      = peak_diff/10,
+         peak_diff_lag1 = peak_diff_lag1/10
+  )
+
+
 
 
 plot_data_with_average <- function(data, y_var, y_label, my_title) {
@@ -1837,18 +1808,6 @@ p1 <- adjust_predictions_counts(p1, divisor_population)
 p2 <- adjust_predictions_counts(p2, divisor_population)
 p3 <- adjust_predictions_counts(p3, divisor_population)
 
-# get update table for the line an pint plotting
-avg_data_sum_ips <- avg_data %>%
-  mutate(sum_ips = sum_ips/1000,
-         peak_diff = peak_diff/10)
-
-# point table for potting 
-avg_data_filt_lagged_plotting <- avg_data_filt_lagged %>% 
-  mutate(sum_ips        = sum_ips/1000,
-         sum_ips_lag1   = sum_ips_lag1/1000,
-         peak_diff      = peak_diff/10,
-         peak_diff_lag1 = peak_diff_lag1/10
-         )
 
 
 p0.count <- create_effect_previous_year(data = p0, 
@@ -1856,7 +1815,7 @@ p0.count <- create_effect_previous_year(data = p0,
                               x_col = "sum_ips_lag1",
                               y_col = "sum_ips",
                               line_color = "darkgreen", 
-                              x_title = "Pop. level [*1000, lag1]", 
+                              x_title = "Pop. level lag1 [*1000]", 
                               y_title = paste(lab_popul_level, '*1000'),# "Population level\n[# beetle*100]",
                               #my_title = paste("[a]", 'Population level', '\n[#*100]'), 
                               x_annotate = 50, lab_annotate = "***")
@@ -1868,11 +1827,8 @@ p1.count <-
                      x_col = "tmp_z_lag1", 
                      y_col = "sum_ips", 
                      line_color = "red", 
-                     x_title = expression(paste("Temp. lag1 [", "z-score]")),
-                    # x_title = temp_label , 
+                     x_title = expression(paste("Temp. lag1 [z-score]")),
                      y_title = paste(lab_popul_level, '*1000'), 
-                    # my_title = paste("[a]", 'Population level', '\n[#*1000]'), 
-                     #my_title = "Effect of Year on Sum IPS", 
                      x_annotate = 2, 
                      lab_annotate = "**")
 
@@ -1880,9 +1836,8 @@ p1.count <-
 p2.count <- create_effect_plot(data = p2, avg_data = avg_data_filt_lagged_plotting, 
                                x_col = "spei_lag2", y_col = "sum_ips", 
                                line_color = "blue", 
-                               x_title = expression(paste("SPEI. lag2 [", "dim.]")),#spei_label , 
+                               x_title = expression(paste("SPEI. lag2 [dim.]")),#spei_label , 
                                y_title = paste(lab_popul_level, '*1000'), 
-                               #my_title = "Effect of Year on Sum IPS", 
                                x_annotate = -0.5, 
                                lab_annotate = "***")
 (p2.count)
@@ -1890,7 +1845,7 @@ p3.count <- plot_effect_interactions(data = p3,
                                      avg_data = avg_data_filt_lagged_plotting, 
                                      x_col = "tmp_z_lag1", 
                                      y_col = "sum_ips", 
-                                     temp_label = expression(paste("Temp. lag1 [", "z-score]")), 
+                                     temp_label = expression(paste("Temp. lag1 [z-score]")), 
                                      y_title = paste(lab_popul_level, '*1000'),
                                      x_annotate = 2,
                                      lab_annotate = "**") 
@@ -1930,38 +1885,34 @@ p0.agg <- create_effect_previous_year(data = p0,
                                x_col = "tr_agg_doy_lag1_plot",
                                y_col = "agg_doy",
                                line_color = "darkgreen",
-                               x_title = "Aggregation timing[DOY, lag1]",
+                               x_title = "Agg. timing lag1 [DOY]",
                                y_title = lab_colonization_time,
-                              # my_title = paste("[b]", 'Aggregation timing', '\n[DOY]'),
                                x_annotate = 175, lab_annotate = "***")
 
 (p0.agg)
 p1.agg <- 
   create_effect_plot(data = p1,  avg_data = filter(avg_data_filt_lagged_plotting, agg_doy < 200),  
-                     x_col = "tmp_z_lag1", y_col = "agg_doy", 
+                     x_col = "tmp_z_lag2", y_col = "agg_doy", 
                      line_color = "red", 
-                     x_title = expression(paste("Temp. lag1 [", "z-score]")) , 
+                     x_title = expression(paste("Temp. lag2 [z-score]")) , 
                      y_title = lab_colonization_time, 
-                     #my_title = paste("[b]", 'Aggregation timing', '\n[DOY]'), 
-                     # my_title = paste("[b]", 'Aggregation timing', '\n[DOY]'),
-                     #my_title = "Effect of Year on Sum IPS", 
-                     x_annotate = 2, 
+                      x_annotate = 2, 
                      lab_annotate = "***")
 
 (p1.agg)
 p2.agg <- create_effect_plot(data = p2, avg_data = filter(avg_data_filt_lagged_plotting, agg_doy < 200),    
-                               x_col = "spei_lag2", y_col = "agg_doy", 
+                               x_col = "spei_lag1", y_col = "agg_doy", 
                                line_color = "blue", 
-                               x_title = expression(paste("SPEI. lag2 [", "dim.]")) , 
+                               x_title = expression(paste("SPEI lag1 [dim.]")) , 
                                y_title = lab_colonization_time, 
                                x_annotate = -0.5, 
                                lab_annotate = "0.49")
 (p2.agg)
 p3.agg <- plot_effect_interactions(p3,
                                    avg_data = filter(avg_data_filt_lagged_plotting, agg_doy < 200),
-                                   x_col = "tmp_z_lag1", 
+                                   x_col = "tmp_z_lag2", 
                                    y_col = "agg_doy", 
-                                     temp_label = expression(paste("Temp. lag1 [", "z-score]")), 
+                                     temp_label = expression(paste("Temp. lag2 [z-score]")), 
                                      y_title = lab_colonization_time,
                                      x_annotate = 2,
                                      lab_annotate = "***") 
@@ -1988,13 +1939,11 @@ p0$x <- (p0$x * scale_factor) + doy.start
 
 p0.peak <- create_effect_previous_year(data = p0,
                                        avg_data = filter(avg_data_filt_lagged_plotting, tr_peak_doy_lag1_plot  < 220),
-                                      #avg_data = avg_data_filt_lagged_plotting,
                                       x_col = "tr_peak_doy_lag1_plot",
                                       y_col = "peak_doy",
                                       line_color = "darkgreen",
-                                      x_title = "Peak swarming timing [DOY, lag1]",
+                                      x_title = "Peak sw. timing lag1 [DOY]",
                                       y_title = lab_colonization_time,
-                                      #my_title = paste("[b]", 'Peak swarming timing', '\n[DOY]'),
                                       x_annotate = 160, lab_annotate = "***")
 
 (p0.peak)
@@ -2003,7 +1952,7 @@ p1.peak <-
                      avg_data = filter(avg_data_filt_lagged_plotting, tr_peak_doy_lag1_plot  < 220),
                      x_col = "tmp_z_lag2", y_col = "peak_doy", 
                      line_color = "red", 
-                     x_title = expression(paste("Temp. lag2 [", "z-score]")) , 
+                     x_title = expression(paste("Temp. lag2 [z-score]")) , 
                      y_title = lab_peak_time, 
                        x_annotate = 2, 
                      lab_annotate = "0.71")
@@ -2012,16 +1961,16 @@ p1.peak <-
 p2.peak <- create_effect_plot(data = p2,  avg_data = filter(avg_data_filt_lagged_plotting, tr_peak_doy_lag1_plot  < 220), 
                              x_col = "spei_lag1", y_col = "peak_doy", 
                              line_color = "blue", 
-                             x_title = expression(paste("SPEI. lag1 [", "dim.]")) , 
+                             x_title = expression(paste("SPEI lag1 [dim.]")) , 
                              y_title = lab_peak_time, 
                              x_annotate = -0.5, 
                              lab_annotate = "**")
 (p2.peak)
 p3.peak <- plot_effect_interactions(p3, 
                                     avg_data = filter(avg_data_filt_lagged_plotting, tr_peak_doy_lag1_plot  < 220),
-                                    x_col = "tmp_z_lag1", 
+                                    x_col = "tmp_z_lag2", 
                                     y_col = "peak_doy", 
-                                   temp_label = expression(paste("Temp. lag1 [", "z-score]")), 
+                                   temp_label = expression(paste("Temp. lag2 [z-score]")), 
                                    y_title = lab_peak_time,
                                    x_annotate = 2,
                                    lab_annotate = "0.09") 
@@ -2052,45 +2001,39 @@ p3 <- adjust_predictions_counts(p3, divisor_diff)
 
 p0.peak.diff <- create_effect_previous_year(data = p0, 
                                             avg_data = filter(avg_data_filt_lagged_plotting, tmp_z_lag1  < 4),
-                               #avg_data = avg_data_filt_lagged_plotting, #dplyr::filter(avg_data_sum_ips, peak_diff <200),
-                               x_col = "peak_diff_lag1",
+                                           x_col = "peak_diff_lag1",
                                y_col = "peak_diff",
                                line_color = "darkgreen", 
-                               x_title = "Peak swarming intensity [*10, lag1]", 
+                               x_title = "Peak sw. intensity lag1 [*10]", 
                                y_title = lab_peak_growth,
-                               #my_title = paste("[d]", 'Peak swarming\nintensity', '[#*10]'),  
                                x_annotate = 90, lab_annotate = "***")
 
 (p0.peak.diff)
 p1.peak.diff <- 
   create_effect_plot(data = p1, 
-                     avg_data = filter(avg_data_filt_lagged_plotting, tmp_z_lag1  < 4), x_col = "tmp_z_lag1", y_col = "peak_diff", 
+                     avg_data = filter(avg_data_filt_lagged_plotting, tmp_z_lag1  < 4), 
+                     x_col = "tmp_z_lag1", y_col = "peak_diff", 
                      line_color = "red", 
-                     x_title = expression(paste("Temp. lag2 [", "z-score]")) , 
+                     x_title = expression(paste("Temp. lag1 [z-score]")) , 
                      y_title = lab_peak_growth, 
-                    # my_title = paste("[d]", 'Peak swarming\nintensity', '[#*10]'),
-                     #my_title = "Effect of Year on Sum IPS", 
                      x_annotate = 2, 
                      lab_annotate = "0.14")
 
 (p1.peak.diff)
 p2.peak.diff <- create_effect_plot(data = p2,
-                                  # avg_data =  avg_data_filt_lagged_plotting,#dplyr::filter(avg_data_sum_ips, peak_diff <200), 
                                   avg_data = filter(avg_data_filt_lagged_plotting, tmp_z_lag1  < 4),
                                   x_col = "spei_lag2", y_col = "peak_diff", 
                                line_color = "blue", 
-                               x_title = expression(paste("SPEI. lag2 [", "dim.]")) , 
+                               x_title = expression(paste("SPEI lag2 [dim.]")) , 
                                y_title = lab_peak_growth, 
-                               #my_title = "Effect of Year on Sum IPS", 
                                x_annotate = -0.5, 
                                lab_annotate = "0.14")
 (p2.peak.diff)
 p3.peak.diff <- plot_effect_interactions(p3,
                                          avg_data = filter(avg_data_filt_lagged_plotting, tmp_z_lag1  < 4),
-                                         #avg_data = avg_data_filt_lagged_plotting, # avg_data_sum_ips, 
                                          x_col = "tmp_z_lag1", 
                                          y_col = "peak_diff", 
-                                     temp_label = expression(paste("Temp. lag1 [", "z-score]")), 
+                                     temp_label = expression(paste("Temp. lag1 [z-score]")), 
                                      y_title = lab_peak_growth,
                                      x_annotate = 2,
                                      lab_annotate = "*") 
@@ -2101,8 +2044,7 @@ ggarrange(p0.peak.diff,p1.peak.diff,p2.peak.diff,p3.peak.diff)
 
 # put in the same figure: tmp, spei, interaction, previous years on teh bottom
 
-p.previous <- ggarrange(p0.count, p0.agg, p0.peak, 
-                         p0.peak.diff, 
+p.previous <- ggarrange(p0.count, p0.agg, p0.peak, p0.peak.diff, 
                          ncol=4, nrow = 1 , #align = 'hv', 
                          font.label = list(size = 8, color = "black", face = "plain", family = NULL) )
 
@@ -2142,7 +2084,7 @@ ggsave(filename = 'outFigs/Fig_full_eff3.png', plot = full_preds,
 
 
 
-# PLOT Moran's I -------------------------------
+#### PLOT Moran's I -------------------------------
 summary(fin.m.moran)
 
 # Assuming 'model' is your glm.nb model
@@ -2243,7 +2185,7 @@ get_legend <- function(a.gplot){
 my_legend <- get_legend(p4.moran)
 
 
-# test statistical differences and add to plot --------------- 
+##### test statistical differences and add to plot --------------- 
 kruskal.test(Morans_I_log ~ year,dat_fin )
 
 library(dunn.test)
@@ -2304,42 +2246,21 @@ ggsave(filename = 'outFigs/Fig5.png', plot = p.effect.moran,
        width = 7, height = 5, dpi = 300, bg = 'white')
 
 
-# Export models summaries --------------------------------------------------
-
-# get characteristics
-r2(fin.m.counts )
-r2(fin.m.agg)
-r2(fin.m.peak)
-r2(fin.m.peak.diff)
 
 
-
-summary(fin.m.counts )
-summary(fin.m.agg)
-summary(fin.m.peak)
-summary(fin.m.peak.diff)
-#summary(fin.m.moran)
-#summary(fin.m.RS)
-
-
-
-# print models outputs: ---------------------------------------------------------
-
-
+###### print models outputs: ---------------------------------------------------------
 
 # export all models
 sjPlot::tab_model(fin.m.counts.previous.tw,    file = "outTable/model_counts.doc")
-sjPlot::tab_model(fin.m.agg.doy.gamma,       file = "outTable/model_agg.doc")
-sjPlot::tab_model(fin.m.peak.doy.gamma,      file = "outTable/model_peak.doc")
+sjPlot::tab_model(fin.m.agg.doy.gamma,         file = "outTable/model_agg.doc")
+sjPlot::tab_model(fin.m.peak.doy.gamma,        file = "outTable/model_peak.doc")
 sjPlot::tab_model(fin.m.peak.diff.previous.tw, file = "outTable/model_peak_diff.doc")
-sjPlot::tab_model(fin.m.moran,     file = "outTable/model_moran.doc")
+sjPlot::tab_model(fin.m.moran,                 file = "outTable/model_moran.doc")
 #sjPlot::tab_model(fin.m.RS,        file = "outTable/model_RS_3.doc")
 
-sum(dat_fin$sum_ips, na.rm = T)
 
 
-
-# add significance ----------------------------------------------------
+##### add significance ----------------------------------------------------
 glob_merged <- glob_merged %>% 
   mutate(sign = case_when(p_val > 0.05 ~ 'n.s',
                           p_val < 0.05 & p_val > 0.01 ~ '*',
