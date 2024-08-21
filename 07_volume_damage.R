@@ -794,6 +794,10 @@ k.check(m3$gam)
 # increase the number of iterations to converge the model
 control <- list(niterPQL = 50)
 
+fin_dat_damage_no_extremes <- fin_dat_damage %>% 
+  dplyr::filter(damage_vol<150000) %>% 
+  dplyr::filter(lag1_damage_vol<150000) 
+
 
 #### test effect of previuos year damage ----------------------------------------------
 m.damage.previous <- gamm(damage_vol ~ 
@@ -801,7 +805,7 @@ m.damage.previous <- gamm(damage_vol ~
                             s(lag1_damage_vol, k = 15), # + # Added term for previous beetle counts
                            # s(pairID, bs = 're') +
                             #s(f_year, bs = 're'),
-                          data = fin_dat_damage, 
+                          data = fin_dat_damage_no_extremes, 
                           family = tw,
                           control = control)
 
@@ -810,16 +814,17 @@ m.damage.previous2 <- gamm(damage_vol ~
                             s(lag1_damage_vol, k = 15) + # Added term for previous beetle counts
                            s(pairID, bs = 're'),# +
                           #s(f_year, bs = 're'),
-                          data = fin_dat_damage, 
+                          data = fin_dat_damage_no_extremes, 
                           family = tw,
                           control = control)
 
 m.damage.previous3 <- gamm(damage_vol ~ 
                              s(sum_ips, k = 3) +
-                             s(lag1_damage_vol, k = 15) + # Added term for previous beetle counts
+                             s(lag1_damage_vol, k = 4) + # Added term for previous beetle counts
                              s(pairID, bs = 're') +
+                             #s(x, y, bs = 'tp', k = 5),
                            s(f_year, bs = 're'),
-                           data = fin_dat_damage, 
+                           data = fin_dat_damage_no_extremes, 
                            family = tw,
                            control = control)
 
@@ -876,7 +881,8 @@ fin_dat_damage %>%
 
 
 fin_dat_RS_clean <- fin_dat_RS %>% 
-  dplyr::filter(RS_wind_beetle <2000)
+  dplyr::filter(RS_wind_beetle <2000) %>% 
+  dplyr::filter(lag1_RS_wind_beetle <2000)
 
 #increase complexity to assure the convergence  ------------------------------------------------------------------
 
@@ -952,19 +958,68 @@ m4.RS <- gamm(RS_wind_beetle ~ s(year,k = 4) +
 
 AIC(m0$lme, m1$lme,m1.2$lme, m2$lme, m3$lme, m4.RS$lme)
 
+# PREVIOUS RS --------------------------------------
+
+mRS.previous <- gamm(RS_wind_beetle ~ #s(year,k = 4) + 
+             s(lag1_RS_wind_beetle, k = 9) + 
+             s(sum_ips_lag1 , k=10), #+ 
+             # #s(pairID, bs = 're') +
+             #s(x, y, bs = 'tp', k = 50),
+           family = tw, 
+           method = 'REML',  
+           data = fin_dat_RS_clean)
+
+
+mRS.previous1 <- gamm(RS_wind_beetle ~ #s(year,k = 4) + 
+                       s(lag1_RS_wind_beetle, k = 6) + 
+                       s(sum_ips_lag1 , k=5)+ 
+                       s(pairID, bs = 're'),# +
+                     #s(x, y, bs = 'tp', k = 50),
+                     family = tw, 
+                     method = 'REML',  
+                     data = fin_dat_RS_clean)
+
+
+mRS.previous2 <- gamm(RS_wind_beetle ~ #s(year,k = 4) + 
+                        s(lag1_RS_wind_beetle, k = 6) + 
+                        s(sum_ips_lag1 , k=5)+ 
+                        s(pairID, bs = 're') +
+                       s(x, y, bs = 'tp', k = 5),
+                      family = tw, 
+                      method = 'REML',  
+                      data = fin_dat_RS_clean)
+
+
+AIC(mRS.previous1, mRS.previous, mRS.previous2)
+
+appraise(mRS.previous1$gam)
+summary(mRS.previous1$gam)
+plot(mRS.previous1$gam, page = 1)
+gam.check(mRS.previous1$gam)
+k.check(mRS.previous1$gam)
+draw(mRS.previous1$gam)
+
+# check for autocorrelation
+# Extract residuals from the model
+residuals <- resid(mRS.previous1$lme, type = "normalized")
+
+# Plot ACF of the residuals
+acf(residuals, main="ACF of Model Residuals")
+pacf(residuals, main="ACF of Model Residuals")
+
+
+
+
+
+
+
 
 
 # the best model!
-fin.m.RS <- m3$gam
+fin.m.RS <- mRS.previous1$gam
 
 sjPlot::tab_model(fin.m.RS, file = "outTable/model_trap_RS.doc")
 
-
-appraise(m3$gam)
-summary(m3$gam)
-plot(m3$gam, page = 1)
-gam.check(m3$gam)
-k.check(m3$gam)
 
 # prepare two plots as output: 
 # merge together the predicted data by year, log sum ips for RS, NFI
@@ -978,41 +1033,76 @@ summary(fin.m.RS)
 summary(fin.m.damage)
 
 
+# Spagetti plots for years -----------------------------------------------------
+
+# update data to scatter plot 
+fin_dat_damage_plot <- fin_dat_damage %>% 
+  dplyr::filter(lag1_damage_vol < 150000) %>% 
+  dplyr::filter(damage_vol < 150000) %>% 
+  mutate(damage_vol       = damage_vol/1000,
+         sum_ips          = sum_ips/1000,
+         lag1_damage_vol  = lag1_damage_vol/1000)
+
+fin_dat_RS_clean_plot <- fin_dat_RS_clean %>% 
+  mutate(RS_wind_beetle_ha = RS_wind_beetle*0.09)
+
+
+
+p_spagett_damage <- plot_data_with_average(fin_dat_damage_plot, "damage_vol", 'my_lab',   
+                                              my_title = expression("[a] Field observation [*1000 m"^3*"]"))+  scale_y_log10()
+
+p_spagett_RS     <- plot_data_with_average(fin_dat_RS_clean_plot, "RS_wind_beetle", 'my_lab',   
+                                       my_title = paste("[b]", 'Remote sensing observation', '\n[ha]')) +  
+                                         scale_y_log10()
+
+
 
 # PLOT: field based damage --------------------------
 
 # Assuming 'model' is your glm.nb model
 summary(fin.m.damage)
-p0 <- ggpredict(fin.m.damage, terms = "year [all]", allow.new.levels = TRUE)
-p1 <- ggpredict(fin.m.damage, terms = "log_sum_ips [all]", allow.new.levels = TRUE)
+p0 <- ggpredict(fin.m.damage, terms = "lag1_damage_vol [all]", allow.new.levels = TRUE)
+p1 <- ggpredict(fin.m.damage, terms = "sum_ips [all]", allow.new.levels = TRUE)
 
-p1$x <- exp(p1$x) # convert to original values
+p0$x <- p0$x/1000 # convert to original values
+p0$predicted <- p0$predicted/1000
+p0$conf.low <- p0$conf.low /1000
+p0$conf.high <- p0$conf.high /1000
 
-p0.damage <- create_effect_year(data = p0, 
-                               avg_data = fin_dat_damage,
-                               x_col = "year",
-                               y_col = "damage_vol",
-                               line_color = "darkgreen", 
-                               x_title = "Year", 
-                               y_title = paste(lab_popul_level, '*100'),# "Population level\n[# beetle*100]",
-                               my_title = expression("[a] Field observation m"^3*""), #paste("[a]", "", expression(m^3)), 
-                               x_annotate = 2019, lab_annotate = "***") + 
-  scale_y_log10()
+p1$x <- p1$x/1000 # convert to original values
+p1$predicted <- p1$predicted/1000
+p1$conf.low <- p1$conf.low /1000
+p1$conf.high <- p1$conf.high /1000
+
+
+p0.damage <- 
+  create_effect_plot(data = p0, 
+                     avg_data = fin_dat_damage_plot, 
+                     x_col = "lag1_damage_vol", 
+                     y_col = "damage_vol", 
+                     line_color = "grey30", 
+                     x_title = 'Tree mortality lag1 [*1000]' , 
+                     #y_title = paste(lab_popul_level, '*1000'), 
+                     #my_title = "Effect of Year on Sum IPS", 
+                     x_annotate = 50, 
+                     lab_annotate = "***")
 
 (p0.damage)
+
+
+
+
 p1.damage <- 
   create_effect_plot(data = p1, 
-                     avg_data = fin_dat_damage, 
+                     avg_data = fin_dat_damage_plot, 
                      x_col = "sum_ips", 
                      y_col = "damage_vol", 
                      line_color = "grey30", 
-                     x_title = 'Population level [log(counts)]' , 
-                     y_title = paste(lab_popul_level, '*100'), 
+                     x_title = 'Population level [*1000]' , 
+                     y_title = paste(lab_popul_level, '*1000'), 
                      #my_title = "Effect of Year on Sum IPS", 
-                     x_annotate = 10^4, 
-                     lab_annotate = "**") +
-  scale_y_log10() +
-  scale_x_log10()
+                     x_annotate = 50, 
+                     lab_annotate = "**")
 
 (p1.damage)
 
