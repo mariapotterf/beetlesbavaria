@@ -269,12 +269,13 @@ ips_damage_merge <-
   dplyr::arrange(year,.by_group = TRUE) %>% 
    mutate(sum_ips_lag1  = dplyr::lag(sum_ips, n = 1, default = NA),  # 
          sum_ips_lag2  = dplyr::lag(sum_ips, n = 2, default = NA),  # , order_by = year
-        agg_doy_lag1  = lag(agg_doy, n = 1, default = NA),
-        agg_doy_lag2  = lag(agg_doy, n = 2, default = NA),
-        peak_doy_lag1  = lag(peak_doy, n = 1, default = NA),
-        peak_doy_lag2  = lag(peak_doy, n = 2, default = NA),
-        peak_diff_lag1  = lag(peak_diff, n = 1, default = NA),
-        peak_diff_lag2  = lag(peak_diff, n = 2, default = NA)
+         agg_doy_lag1  = lag(agg_doy, n = 1, default = NA),
+         agg_doy_lag2  = lag(agg_doy, n = 2, default = NA),
+         peak_doy_lag1  = lag(peak_doy, n = 1, default = NA),
+         peak_doy_lag2  = lag(peak_doy, n = 2, default = NA),
+         peak_diff_lag1  = lag(peak_diff, n = 1, default = NA),
+         peak_diff_lag2  = lag(peak_diff, n = 2, default = NA),
+         lag1_damaged_volume_total  = lag(damaged_volume_total_m3, n = 1, default = NA)
         )  %>%
   
   ungroup(.) %>% 
@@ -288,7 +289,7 @@ ips_damage_merge <-
 ips_damage_merge  %>% 
    dplyr::filter(trapID == "Anzinger_Forst_1") %>% 
      dplyr::select(trapID, year, sum_ips, sum_ips_lag1, sum_ips_lag2,
-                   agg_doy, agg_doy_lag2)
+                   agg_doy, agg_doy_lag2, damaged_volume_total_m3, lag1_damaged_volume_total )
   
 
 
@@ -347,7 +348,10 @@ df_RS <- df_disturb_sum %>%
   dplyr::rename(RS_wind_beetle = type_1,
                 RS_fire    = type_2,
                 RS_harvest = type_3) %>% 
-  mutate(RS_sum = RS_wind_beetle + RS_fire +RS_harvest)
+  mutate(RS_sum = RS_wind_beetle + RS_fire +RS_harvest) %>% 
+  dplyr::select(c(ID,  year,  RS_wind_beetle)) %>% 
+  group_by(ID)
+  
 
 # type_1 = wind & beetles
 # type_2 = fire
@@ -357,7 +361,7 @@ df_RS <- df_disturb_sum %>%
 
 #### Merge RS with damage data -----------------------------------------------
 df_all <- df_RS %>% 
-  full_join(df_damage, by = c("ID" = "AELF_district_ID",
+  full_join(df_damage, by = c("ID"   = "AELF_district_ID",
                               "year" = "Year")) %>% 
  # dplyr::filter(year %in% 2015:2020) %>% 
   #dplyr::filter(RS_wind_beetle <2000) %>% 
@@ -438,38 +442,54 @@ df_cor <- df_all %>%
 # keep datasets separated, as RS has lower number of years
 # run analysis for trap vs RS damage
 # trap vs damaged volume
+df_all_lag1 <- df_all %>% 
+  group_by(ID) %>% 
+  arrange(year, .by_group = TRUE) %>%
+  mutate(lag1_RS_wind_beetle  = lag(RS_wind_beetle , n = 1, default = NA)) #%>% 
+  
+
+# check if correct:
+df_all_lag1 %>% 
+  dplyr::filter(ID == 10504) %>% 
+  dplyr::select(ID, year, RS_wind_beetle , lag1_RS_wind_beetle) #%>% # sum_ips, sum_ips_lag1
+
 
 df_traps_RS_damage <-  
   ips_damage_clean %>%  
-  left_join(df_all,
+  left_join(df_all_lag1,
              by = c("forstrev_1" =   "ID",
-                              "year" = "year",
+                    "year"       = "year",
                     "damaged_volume_total_m3" = "damaged_volume_total_m3") ) %>% 
   mutate(trapID = as.factor(trapID)) %>% 
   group_by(pairID, year) %>% 
- summarise(sum_ips = mean(sum_ips, na.rm = T),
-           agg_doy = mean(agg_doy, na.rm = T),
-           peak_doy= mean(peak_doy, na.rm = T),
-           peak_diff= mean(peak_diff, na.rm = T),
-           damage_vol= mean(damaged_volume_total_m3, na.rm = T),
-           x = mean(x, na.rm = T),
-           y = mean(y, na.rm = T),
+ summarise(sum_ips    = mean(sum_ips, na.rm = T),
+           agg_doy    = mean(agg_doy, na.rm = T),
+           peak_doy   = mean(peak_doy, na.rm = T),
+           peak_diff  = mean(peak_diff, na.rm = T),
+           damage_vol = mean(damaged_volume_total_m3, na.rm = T),
+           lag1_damage_vol = mean(lag1_damaged_volume_total, na.rm = T),
+           x              = mean(x, na.rm = T),
+           y              = mean(y, na.rm = T),
            RS_wind_beetle = mean(RS_wind_beetle, na.rm = T),
-            sum_ips_lag1 = mean(sum_ips_lag1, na.rm = T),
-           sum_ips_lag2 = mean(sum_ips_lag2, na.rm = T),
+           lag1_RS_wind_beetle = mean(lag1_RS_wind_beetle, na.rm = T),
+            sum_ips_lag1  = mean(sum_ips_lag1, na.rm = T),
+           sum_ips_lag2   = mean(sum_ips_lag2, na.rm = T),
            log_sum_ips_lag1 = mean(log(sum_ips_lag1), na.rm = T),
            log_sum_ips_lag2 = mean(log(sum_ips_lag2), na.rm = T),
-           agg_doy_lag1 = mean(agg_doy_lag1, na.rm = T),
-           agg_doy_lag2 = mean(agg_doy_lag2, na.rm = T),
-           peak_doy_lag1 = mean(peak_doy_lag1, na.rm = T),
-           peak_doy_lag2 = mean(peak_doy_lag2, na.rm = T),
-           peak_diff_lag1 = mean(peak_diff_lag1, na.rm = T),
-           peak_diff_lag2 = mean(peak_diff_lag2, na.rm = T)
+           agg_doy_lag1     = mean(agg_doy_lag1, na.rm = T),
+           agg_doy_lag2     = mean(agg_doy_lag2, na.rm = T),
+           peak_doy_lag1    = mean(peak_doy_lag1, na.rm = T),
+           peak_doy_lag2    = mean(peak_doy_lag2, na.rm = T),
+           peak_diff_lag1   = mean(peak_diff_lag1, na.rm = T),
+           peak_diff_lag2   = mean(peak_diff_lag2, na.rm = T)
            ) %>%
  ungroup(.) %>% 
  mutate(log_sum_ips = log(sum_ips)) %>% 
   mutate(f_year = as.factor(year))
   
+
+
+summary(df_traps_RS_damage)
 
 ###### create final tables for RS data and volume data 
 
@@ -510,7 +530,7 @@ model_metrics_damage <- data.frame(Predictor = character(),
 
 # list predictors to test
 selected_predictors <- c('sum_ips', 'sum_ips_lag1','sum_ips_lag2',
-                         'log_sum_ips', 'log_sum_ips_lag1','sum_ips_lag2',
+                         #'log_sum_ips', 'log_sum_ips_lag1','sum_ips_lag2',
                          'agg_doy'   , 'agg_doy_lag1', 'agg_doy_lag2' ,
                          'peak_doy', 'peak_doy_lag1','peak_doy_lag2',
                          'peak_diff', 'peak_diff_lag1',  'peak_diff_lag2'
@@ -525,7 +545,8 @@ for (dep in dependent_damage) {
   for (pred in selected_predictors) {
     print(pred)
     # Fit the model
-    formula <- as.formula(paste(dep, "~ s(", pred, ", by = f_year, k = 8) + s(year, k=5) +s(x, y, bs = 'gp', k = 20)"))
+   # formula <- as.formula(paste(dep, "~ s(", pred, ", by = f_year, k = 8) + s(year, k=5) +s(x, y, bs = 'gp', k = 20)"))
+    formula <- as.formula(paste(dep, "~ s(", pred, ", k = 8)"))
     
     #print(formula)
     model <- gamm(formula,  family = tw,
@@ -568,8 +589,8 @@ for (dep in dependent_RS) {
   for (pred in selected_predictors) {
     print(pred)
     # Fit the model
-    formula <- as.formula(paste(dep, "~ s(", pred, ", by = f_year, k = 8) + s(year, k=4) +s(x, y, bs = 'gp', k = 20)"))
-    print(formula)
+    #formula <- as.formula(paste(dep, "~ s(", pred, ", by = f_year, k = 8) + s(year, k=4) +s(x, y, bs = 'gp', k = 20)"))
+    formula <- as.formula(paste(dep, "~ s(", pred, ", k = 8)"))
     #print(formula)
     model <- gamm(formula,  family = tw,
                   method = 'REML',  
@@ -700,7 +721,8 @@ pairs(damage_vol ~  sum_ips + sum_ips_lag1 + sum_ips_lag2 +
 ips_damage_clean_no_outliers <- df_traps_RS_damage %>% 
   mutate(log_damage_vol = log(damage_vol + 1)) %>% 
   dplyr::filter(log_damage_vol>5,
-                log_sum_ips > 8.4)
+                log_sum_ips > 8.4) #%>% 
+  
 
 
 
@@ -756,7 +778,7 @@ m3 <- gamm(damage_vol ~ s(year,k = 5) +
 # including both is teh best
 AIC(m1$lme, m1.1$lme, m2$lme, m3$lme)
 
-fin.m.damage <- m3$gam
+#fin.m.damage <- m3$gam
 
 
 
@@ -766,6 +788,62 @@ summary(m3$gam)
 plot(m3$gam, page = 1)
 gam.check(m3$gam)
 k.check(m3$gam)
+
+
+### PREVIOUS DAMAGE ---------------------------------------------------------
+# increase the number of iterations to converge the model
+control <- list(niterPQL = 50)
+
+
+#### test effect of previuos year damage ----------------------------------------------
+m.damage.previous <- gamm(damage_vol ~ 
+                            s(sum_ips, k = 3) +
+                            s(lag1_damage_vol, k = 15), # + # Added term for previous beetle counts
+                           # s(pairID, bs = 're') +
+                            #s(f_year, bs = 're'),
+                          data = fin_dat_damage, 
+                          family = tw,
+                          control = control)
+
+m.damage.previous2 <- gamm(damage_vol ~ 
+                            s(sum_ips, k = 3) +
+                            s(lag1_damage_vol, k = 15) + # Added term for previous beetle counts
+                           s(pairID, bs = 're'),# +
+                          #s(f_year, bs = 're'),
+                          data = fin_dat_damage, 
+                          family = tw,
+                          control = control)
+
+m.damage.previous3 <- gamm(damage_vol ~ 
+                             s(sum_ips, k = 3) +
+                             s(lag1_damage_vol, k = 15) + # Added term for previous beetle counts
+                             s(pairID, bs = 're') +
+                           s(f_year, bs = 're'),
+                           data = fin_dat_damage, 
+                           family = tw,
+                           control = control)
+
+
+AIC(m.damage.previous2, m.damage.previous, m.damage.previous3)
+
+fin.m.damage <- m.damage.previous3$gam
+
+appraise(m.damage.previous3$gam)
+summary(m.damage.previous$gam)
+plot(m.damage.previous3$gam, page = 1)
+gam.check(m.damage.previous3$gam)
+k.check(m.damage.previous3$gam)
+draw(m.damage.previous3$gam)
+
+# check for autocorrelation
+# Extract residuals from the model
+residuals <- resid(m.damage.previous3$lme, type = "normalized")
+
+# Plot ACF of the residuals
+acf(residuals, main="ACF of Model Residuals")
+pacf(residuals, main="ACF of Model Residuals")
+
+
 
 
 
