@@ -1019,6 +1019,8 @@ pacf(residuals, main="ACF of Model Residuals")
 fin.m.RS <- mRS.previous1$gam
 
 sjPlot::tab_model(fin.m.RS, file = "outTable/model_trap_RS.doc")
+sjPlot::tab_model(fin.m.damage, file = "outTable/model_trap_damage.doc")
+
 
 
 # prepare two plots as output: 
@@ -1102,7 +1104,7 @@ p1.damage <-
                      y_title = paste(lab_popul_level, '*1000'), 
                      #my_title = "Effect of Year on Sum IPS", 
                      x_annotate = 50, 
-                     lab_annotate = "**")
+                     lab_annotate = "***")
 
 (p1.damage)
 
@@ -1110,40 +1112,50 @@ p1.damage <-
 
 # Assuming 'model' is your glm.nb model
 summary(fin.m.RS)
-p0 <- ggpredict(fin.m.RS, terms = "year [all]", allow.new.levels = TRUE)
-p1 <- ggpredict(fin.m.RS, terms = "log_sum_ips_lag1 [all]", allow.new.levels = TRUE)
+p0 <- ggpredict(fin.m.RS, terms = "lag1_RS_wind_beetle [all]", allow.new.levels = TRUE)
+p1 <- ggpredict(fin.m.RS, terms = "sum_ips_lag1 [all]", allow.new.levels = TRUE)
 
-p1$x <- exp(p1$x) # convert beetle log counts to original counts
+p0$x <- p0$x/1000 # convert to original values
+p0$predicted <- p0$predicted/1000
+p0$conf.low <- p0$conf.low /1000
+p0$conf.high <- p0$conf.high /1000
 
-p0.RS <- create_effect_year(data = p0, 
-                                avg_data = fin_dat_RS_clean,
-                                x_col = "year",
-                                y_col = "RS_wind_beetle",
-                                line_color = "darkgreen", 
-                                x_title = "Year", 
-                                y_title = paste(lab_popul_level, '*100'),# "Population level\n[# beetle*100]",
-                                my_title = paste("[b]", 'Remote sensing observation', '\n[#]'), 
-                                x_annotate = 2018.5, lab_annotate = "***") + 
-  scale_y_log10() +
-  scale_x_log10()
+p1$x <- p1$x/1000 # convert to original values
+p1$predicted <- p1$predicted/1000
+p1$conf.low <- p1$conf.low /1000
+p1$conf.high <- p1$conf.high /1000
+
+
+p0.RS <- 
+  create_effect_plot(data = p0, 
+                     avg_data = fin_dat_RS_clean_plot, 
+                     x_col = "lag1_RS_wind_beetle", 
+                     y_col = "RS_wind_beetle", 
+                     line_color = "grey30", 
+                     x_title = 'Tree mortality lag1 [*1000]' , 
+                     #y_title = paste(lab_popul_level, '*1000'), 
+                     #my_title = "Effect of Year on Sum IPS", 
+                     x_annotate = 50, 
+                     lab_annotate = "***")
 
 (p0.RS)
+
+
+
+
 p1.RS <- 
   create_effect_plot(data = p1, 
-                     avg_data = fin_dat_RS_clean, 
+                     avg_data = fin_dat_RS_clean_plot, 
                      x_col = "sum_ips_lag1", 
                      y_col = "RS_wind_beetle", 
                      line_color = "grey30", 
-                     x_title = 'Population level [#]' , 
-                     y_title = paste(lab_popul_level, '*100'), 
+                     x_title = 'Population level [*1000]' , 
+                     y_title = paste(lab_popul_level, '*1000'), 
                      #my_title = "Effect of Year on Sum IPS", 
-                     x_annotate = 10^4, 
-                     lab_annotate = "*") +
-  scale_y_log10() +
-  scale_x_log10()
+                     x_annotate = 50, 
+                     lab_annotate = "0.05")
 
-(p1.RS)
-
+(p1.damage)
 
 p.comp2 <- ggarrange(p0.damage, p1.damage, 
           p0.RS,
