@@ -10,7 +10,11 @@ lab_peak_growth       = "Peak swarming intensity [#]"
 
 
 
-# define my theme
+
+
+
+
+# Create effects plots and scatter points below
 
 my_theme_square <- function() {
   theme_minimal(base_size = 8) +
@@ -28,13 +32,43 @@ my_theme_square <- function() {
 
 
 
-# Create effects plots and scatter points below
+
+
+
+# Create effect plot function with an additional argument to control y-axis labels
+create_effect_previous_year <- function(data, avg_data, line_color = "grey40", 
+                                        x_col = "sum_ips_lag1", 
+                                        y_col = "sum_ips", 
+                                        x_title = "X-axis", 
+                                        y_title = "Y-axis", 
+                                        my_title = '',
+                                        x_annotate = 0, lab_annotate = "lab ann") {
+  x_col <- ensym(x_col)
+  y_col <- ensym(y_col)
+  
+  p <- ggplot() + 
+    geom_point(data = avg_data, aes(x = !!x_col, y = !!y_col, group = pairID), col = "gray60", alpha = 0.4) +
+    
+    geom_ribbon(data = data, aes(x = x, ymin = conf.low, ymax = conf.high), alpha = 0.25, fill = line_color) +
+    geom_line(data = data, aes(x = x, y = predicted), color = line_color) +
+    
+    labs(x = x_title,
+         title = my_title,
+         y = y_title) +
+    my_theme_square() + 
+    annotate("text", x = x_annotate, y = Inf, label = lab_annotate, hjust = 0.5, vjust = 1.5)
+  
+  return(p)
+}
+
 
 # Create effect plot function with additional arguments to select columns from avg_data
-create_effect_plot <- function(data, avg_data, 
+create_effect_plot <- function(data, 
+                               avg_data, 
                                x_col = "tmp_z_lag1", 
                                y_col = "sum_ips", 
-                               line_color = "blue", x_title = "X-axis", 
+                               line_color = "blue", 
+                               x_title = "X-axis", 
                                y_title = "Y-axis", my_title = '',
                                x_annotate = 0, lab_annotate = "lab ann") {
   
@@ -56,25 +90,64 @@ create_effect_plot <- function(data, avg_data,
 
 
 
-# Create effect plot function with an additional argument to control y-axis labels
-create_effect_year <- function(data, avg_data, line_color = "grey40", 
-                               x_col = "year", 
-                               y_col = "sum_ips", 
-                               x_title = "X-axis", 
-                               y_title = "Y-axis", my_title = '',
-                               x_annotate = 0, lab_annotate = "lab ann") {
+# plot interactions
+plot_effect_interactions <- function(data, 
+                                     avg_data, 
+                                     x_col = "tmp_z_lag1", 
+                                     y_col = "sum_ips", 
+                                     temp_label = 'Temp',
+                                     y_title = 'y_title',
+                                     x_annotate = 0, 
+                                     lab_annotate = "lab ann") {
+  #library(ggplot2)
   x_col <- ensym(x_col)
   y_col <- ensym(y_col)
   
-  p <- ggplot() + 
-    geom_line(data = avg_data, aes(x = !!x_col, y = !!y_col, group = pairID), col = "gray70", alpha = 0.4) +
-    geom_line(data = data, aes(x = x, y = predicted), color = line_color) +
-    geom_ribbon(data = data, aes(x = x, ymin = conf.low, ymax = conf.high), alpha = 0.25, fill = line_color) +
-    labs(x = x_title,
-         title = my_title,
-         y = y_title) +
-    my_theme_square() + 
-    annotate("text", x = x_annotate, y = Inf, label = lab_annotate, hjust = 0.5, vjust = 1.5)
+  p<- ggplot() +
+    geom_point(data = avg_data, aes(x = !!x_col, y = !!y_col), col = "gray60", alpha = 0.4) +
+    geom_ribbon(data=data, aes(x = x,
+                               ymin = conf.low, 
+                               ymax = conf.high, 
+                               fill = group), alpha = 0.25) +
+    geom_line(data = data, 
+              aes(x = x, y = predicted,
+                  color = group, linetype = group), linewidth = 1) +
+    labs(x = temp_label,
+         y = y_title,
+         fill = "SPEI levels",
+         color = "SPEI levels",
+         linetype = "SPEI levels") +  # Fixed "y_title" to "y" for correct y-axis label argument
+    
+    guides(color = guide_legend(nrow = 1), 
+           fill = guide_legend(nrow = 1),
+           linetype = guide_legend(nrow = 1)) +
+    annotate("text", x = x_annotate, y = Inf, 
+             label = lab_annotate, hjust = 0.5, vjust = 1.5) +
+    my_theme_square() +
+    theme(legend.position = "bottom")
   
   return(p)
+}
+
+
+plot_data_with_average <- function(data, y_var, y_label, my_title) {
+  # Convert the y_var argument to a symbol to use in aes()
+  y_var_sym <- rlang::sym(y_var)
+  
+  data %>%
+    ungroup() %>%
+    filter(year %in% 2015:2021) %>%
+    ggplot(aes(x = year, y = !!y_var_sym, group = pairID)) +
+    labs(x = 'Year', 
+         y = y_label, 
+         title = my_title) +
+    geom_line(alpha = 0.1) +  
+    stat_summary(
+      aes(x = year, y = !!y_var_sym, group = 1), 
+      fun = mean,  # Calculate the mean for each year
+      geom = "line", 
+      color = "#E69F00",  # Ensure the average line is also red
+      linewidth = 1  # Make the average line slightly thicker than individual lines
+    ) + my_theme_square()
+  
 }
