@@ -881,82 +881,82 @@ fin_dat_damage %>%
 
 
 fin_dat_RS_clean <- fin_dat_RS %>% 
-  dplyr::filter(RS_wind_beetle <2000) %>% 
-  dplyr::filter(lag1_RS_wind_beetle <2000)
+  dplyr::filter(RS_wind_beetle <1700) %>% 
+  dplyr::filter(lag1_RS_wind_beetle <1700)
 
 #increase complexity to assure the convergence  ------------------------------------------------------------------
 
-# evaluate again: rurrent year and two previous lags, just to make sure
-m0 <- gamm(RS_wind_beetle ~ #s(year,k = 4) + 
-             s(log_sum_ips, k = 15)+ 
-             #s(log_sum_ips_lag1, by = f_year, k = 20)+ 
-             # #s(pairID, bs = 're') +
-             s(x, y, bs = 'tp', k = 50),
-           family = tw, 
-           method = 'REML',  
-           data = fin_dat_RS_clean,
-           correlation = corAR1(form = ~ year | pairID))
-
-
-
-m1 <- gamm(RS_wind_beetle ~ #s(year,k = 4) + 
-             s(log_sum_ips_lag1, k = 15)+ 
-             #s(log_sum_ips_lag1, by = f_year, k = 20)+ 
-             # #s(pairID, bs = 're') +
-              s(x, y, bs = 'tp', k = 50),
-           family = tw, 
-           method = 'REML',  
-           data = fin_dat_RS_clean,
-           correlation = corAR1(form = ~ year | pairID))
-
-
-m1.2 <- gamm(RS_wind_beetle ~ #s(year,k = 4) + 
-             s(log_sum_ips_lag2, k = 15)+ 
-             #s(log_sum_ips_lag1, by = f_year, k = 20)+ 
-             # #s(pairID, bs = 're') +
-             s(x, y, bs = 'tp', k = 50),
-           family = tw, 
-           method = 'REML',  
-           data = fin_dat_RS_clean,
-           correlation = corAR1(form = ~ year | pairID))
-
-
-# check for only year
-m2 <- gamm(RS_wind_beetle ~ s(year,k = 4) + 
-            # s(log_sum_ips_lag1, k = 15), #+ 
-           #s(log_sum_ips_lag1, by = f_year, k = 20)+ 
-           # #s(pairID, bs = 're') +
-           s(x, y, bs = 'tp', k = 50),
-           family = tw, 
-           method = 'REML',  
-           data = fin_dat_RS_clean,
-           correlation = corAR1(form = ~ year | pairID))
-
-
-m3 <- gamm(RS_wind_beetle ~ s(year,k = 4) + 
-             s(log_sum_ips_lag1, k = 15)+ 
-           #s(log_sum_ips_lag1, by = f_year, k = 20)+ 
-           # #s(pairID, bs = 're') +
-            s(x, y, bs = 'tp', k = 50),
-           family = tw, 
-           method = 'REML',  
-           data = fin_dat_RS_clean,
-           correlation = corAR1(form = ~ year | pairID))
-
-
-m4.RS <- gamm(RS_wind_beetle ~ s(year,k = 4) + 
-             s(log_sum_ips_lag1, by = f_year, k = 20) + 
-           #s(log_sum_ips_lag1, by = f_year, k = 20)+ 
-           #s(pairID, bs = 're'), # +
-            s(x, y, bs = 'tp', k = 40),
-           family = tw, 
-           method = 'REML',  
-           data = fin_dat_RS_clean,
-           correlation = corAR1(form = ~ year | pairID))
-
-
-
-AIC(m0$lme, m1$lme,m1.2$lme, m2$lme, m3$lme, m4.RS$lme)
+# # evaluate again: rurrent year and two previous lags, just to make sure
+# m0 <- gamm(RS_wind_beetle ~ #s(year,k = 4) + 
+#              s(log_sum_ips, k = 15)+ 
+#              #s(log_sum_ips_lag1, by = f_year, k = 20)+ 
+#              # #s(pairID, bs = 're') +
+#              s(x, y, bs = 'tp', k = 50),
+#            family = tw, 
+#            method = 'REML',  
+#            data = fin_dat_RS_clean,
+#            correlation = corAR1(form = ~ year | pairID))
+# 
+# 
+# 
+# m1 <- gamm(RS_wind_beetle ~ #s(year,k = 4) + 
+#              s(log_sum_ips_lag1, k = 15)+ 
+#              #s(log_sum_ips_lag1, by = f_year, k = 20)+ 
+#              # #s(pairID, bs = 're') +
+#               s(x, y, bs = 'tp', k = 50),
+#            family = tw, 
+#            method = 'REML',  
+#            data = fin_dat_RS_clean,
+#            correlation = corAR1(form = ~ year | pairID))
+# 
+# 
+# m1.2 <- gamm(RS_wind_beetle ~ #s(year,k = 4) + 
+#              s(log_sum_ips_lag2, k = 15)+ 
+#              #s(log_sum_ips_lag1, by = f_year, k = 20)+ 
+#              # #s(pairID, bs = 're') +
+#              s(x, y, bs = 'tp', k = 50),
+#            family = tw, 
+#            method = 'REML',  
+#            data = fin_dat_RS_clean,
+#            correlation = corAR1(form = ~ year | pairID))
+# 
+# 
+# # check for only year
+# m2 <- gamm(RS_wind_beetle ~ s(year,k = 4) + 
+#             # s(log_sum_ips_lag1, k = 15), #+ 
+#            #s(log_sum_ips_lag1, by = f_year, k = 20)+ 
+#            # #s(pairID, bs = 're') +
+#            s(x, y, bs = 'tp', k = 50),
+#            family = tw, 
+#            method = 'REML',  
+#            data = fin_dat_RS_clean,
+#            correlation = corAR1(form = ~ year | pairID))
+# 
+# 
+# m3 <- gamm(RS_wind_beetle ~ s(year,k = 4) + 
+#              s(log_sum_ips_lag1, k = 15)+ 
+#            #s(log_sum_ips_lag1, by = f_year, k = 20)+ 
+#            # #s(pairID, bs = 're') +
+#             s(x, y, bs = 'tp', k = 50),
+#            family = tw, 
+#            method = 'REML',  
+#            data = fin_dat_RS_clean,
+#            correlation = corAR1(form = ~ year | pairID))
+# 
+# 
+# m4.RS <- gamm(RS_wind_beetle ~ s(year,k = 4) + 
+#              s(log_sum_ips_lag1, by = f_year, k = 20) + 
+#            #s(log_sum_ips_lag1, by = f_year, k = 20)+ 
+#            #s(pairID, bs = 're'), # +
+#             s(x, y, bs = 'tp', k = 40),
+#            family = tw, 
+#            method = 'REML',  
+#            data = fin_dat_RS_clean,
+#            correlation = corAR1(form = ~ year | pairID))
+# 
+# 
+# 
+# AIC(m0$lme, m1$lme,m1.2$lme, m2$lme, m3$lme, m4.RS$lme)
 
 # PREVIOUS RS --------------------------------------
 
@@ -1018,7 +1018,7 @@ pacf(residuals, main="ACF of Model Residuals")
 # the best model!
 fin.m.RS <- mRS.previous1$gam
 
-sjPlot::tab_model(fin.m.RS, file = "outTable/model_trap_RS.doc")
+sjPlot::tab_model(fin.m.RS,     file = "outTable/model_trap_RS.doc")
 sjPlot::tab_model(fin.m.damage, file = "outTable/model_trap_damage.doc")
 
 
@@ -1031,8 +1031,8 @@ sjPlot::tab_model(fin.m.damage, file = "outTable/model_trap_damage.doc")
 
 
 # Effect plots ----------------------------------------------------
-summary(fin.m.RS)
 summary(fin.m.damage)
+summary(fin.m.RS)
 
 
 # Spagetti plots for years -----------------------------------------------------
@@ -1115,10 +1115,10 @@ summary(fin.m.RS)
 p0 <- ggpredict(fin.m.RS, terms = "lag1_RS_wind_beetle [all]", allow.new.levels = TRUE)
 p1 <- ggpredict(fin.m.RS, terms = "sum_ips_lag1 [all]", allow.new.levels = TRUE)
 
-p0$x <- p0$x/1000 # convert to original values
-p0$predicted <- p0$predicted/1000
-p0$conf.low <- p0$conf.low /1000
-p0$conf.high <- p0$conf.high /1000
+p0$x <- p0$x/100 # convert to original values
+p0$predicted <- p0$predicted/100
+p0$conf.low <- p0$conf.low /100
+p0$conf.high <- p0$conf.high /100
 
 p1$x <- p1$x/1000 # convert to original values
 p1$predicted <- p1$predicted/1000
@@ -1159,7 +1159,9 @@ p1.RS <-
 
 p.comp2 <- ggarrange(p0.damage, p1.damage, 
           p0.RS,
-           p1.RS, align = 'hv')
+           p1.RS, ncol = 4, nrow = 1, align = 'hv')
+
+(p.comp2)
 
 ggsave(filename = 'outFigs/observation_vs_traps.png', 
        plot = p.comp2, width = 4, height = 4, dpi = 300, bg = 'white')
