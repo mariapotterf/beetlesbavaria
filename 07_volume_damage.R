@@ -1037,6 +1037,13 @@ summary(fin.m.RS)
 
 # Spagetti plots for years -----------------------------------------------------
 
+# keep high variance for the log scale
+fin_dat_damage_plot_spagetti <- fin_dat_damage %>% 
+  mutate(damage_vol       = damage_vol/1000,
+         sum_ips          = sum_ips/1000,
+         lag1_damage_vol  = lag1_damage_vol/1000)
+
+
 # update data to scatter plot 
 fin_dat_damage_plot <- fin_dat_damage %>% 
   dplyr::filter(lag1_damage_vol < 150000) %>% 
@@ -1045,17 +1052,25 @@ fin_dat_damage_plot <- fin_dat_damage %>%
          sum_ips          = sum_ips/1000,
          lag1_damage_vol  = lag1_damage_vol/1000)
 
+
 fin_dat_RS_clean_plot <- fin_dat_RS_clean %>% 
-  mutate(RS_wind_beetle_ha = RS_wind_beetle*0.09)
+  mutate(RS_wind_beetle_ha      = RS_wind_beetle*0.09,
+         lag1_RS_wind_beetle_ha = lag1_RS_wind_beetle*0.09,
+         sum_ips_lag1           = sum_ips_lag1/1000)
 
 
+fin_dat_RS_plot_spagetti <- fin_dat_RS %>% 
+  mutate(RS_wind_beetle_ha      = RS_wind_beetle*0.09)
 
-p_spagett_damage <- plot_data_with_average(fin_dat_damage_plot, "damage_vol", 'my_lab',   
-                                              my_title = expression("[a] Field observation [*1000 m"^3*"]"))+  scale_y_log10()
 
-p_spagett_RS     <- plot_data_with_average(fin_dat_RS_clean_plot, "RS_wind_beetle", 'my_lab',   
-                                       my_title = paste("[b]", 'Remote sensing observation', '\n[ha]')) +  
-                                         scale_y_log10()
+p_spagett_damage <- plot_data_with_average(fin_dat_damage_plot_spagetti, "damage_vol", 'my_lab',   
+                                              my_title = expression("Ground survey [*1000 m"^3*"]"))+  scale_y_log10() +
+  lims(x = c(2015,2021))
+
+p_spagett_RS<- plot_data_with_average(fin_dat_RS_plot_spagetti, "RS_wind_beetle_ha", 'my_lab',   
+                                       my_title = paste('Remote sensing', '[ha]')) +  
+                                         scale_y_log10() + 
+  lims(x = c(2015,2021))
 
 
 
@@ -1082,8 +1097,8 @@ p0.damage <-
                      avg_data = fin_dat_damage_plot, 
                      x_col = "lag1_damage_vol", 
                      y_col = "damage_vol", 
-                     line_color = "grey30", 
-                     x_title = 'Tree mortality lag1 [*1000]' , 
+                     line_color = "darkgreen", 
+                     x_title = expression('Tree mortality lag1' ~ "[" * m^3 * " * 1000]"), 
                      #y_title = paste(lab_popul_level, '*1000'), 
                      #my_title = "Effect of Year on Sum IPS", 
                      x_annotate = 50, 
@@ -1100,7 +1115,7 @@ p1.damage <-
                      x_col = "sum_ips", 
                      y_col = "damage_vol", 
                      line_color = "grey30", 
-                     x_title = 'Population level [*1000]' , 
+                     x_title = 'Population level [#*1000]' , 
                      y_title = paste(lab_popul_level, '*1000'), 
                      #my_title = "Effect of Year on Sum IPS", 
                      x_annotate = 50, 
@@ -1115,27 +1130,27 @@ summary(fin.m.RS)
 p0 <- ggpredict(fin.m.RS, terms = "lag1_RS_wind_beetle [all]", allow.new.levels = TRUE)
 p1 <- ggpredict(fin.m.RS, terms = "sum_ips_lag1 [all]", allow.new.levels = TRUE)
 
-p0$x <- p0$x/100 # convert to original values
-p0$predicted <- p0$predicted/100
-p0$conf.low <- p0$conf.low /100
-p0$conf.high <- p0$conf.high /100
+p0$x <- p0$x*0.09 # convert piel counts to hectares
+p0$predicted <- p0$predicted*0.09 #/100
+p0$conf.low <- p0$conf.low*0.09 #/100
+p0$conf.high <- p0$conf.high*0.09# /100
 
 p1$x <- p1$x/1000 # convert to original values
-p1$predicted <- p1$predicted/1000
-p1$conf.low <- p1$conf.low /1000
-p1$conf.high <- p1$conf.high /1000
+p1$predicted <- p1$predicted*0.09
+p1$conf.low <- p1$conf.low *0.09
+p1$conf.high <- p1$conf.high *0.09
 
 
 p0.RS <- 
   create_effect_plot(data = p0, 
                      avg_data = fin_dat_RS_clean_plot, 
-                     x_col = "lag1_RS_wind_beetle", 
-                     y_col = "RS_wind_beetle", 
-                     line_color = "grey30", 
-                     x_title = 'Tree mortality lag1 [*1000]' , 
+                     x_col = "lag1_RS_wind_beetle_ha", 
+                     y_col = "RS_wind_beetle_ha", 
+                     line_color = "darkgreen", 
+                     x_title = 'RS Tree mortality lag1 [ha]' , 
                      #y_title = paste(lab_popul_level, '*1000'), 
                      #my_title = "Effect of Year on Sum IPS", 
-                     x_annotate = 50, 
+                     x_annotate = 75, 
                      lab_annotate = "***")
 
 (p0.RS)
@@ -1147,24 +1162,30 @@ p1.RS <-
   create_effect_plot(data = p1, 
                      avg_data = fin_dat_RS_clean_plot, 
                      x_col = "sum_ips_lag1", 
-                     y_col = "RS_wind_beetle", 
+                     y_col = "RS_wind_beetle_ha", 
                      line_color = "grey30", 
-                     x_title = 'Population level [*1000]' , 
-                     y_title = paste(lab_popul_level, '*1000'), 
+                     x_title = 'Population level lag1 [#*1000]' , 
+                     #y_title = paste(lab_popul_level, '*1000'), 
                      #my_title = "Effect of Year on Sum IPS", 
-                     x_annotate = 50, 
-                     lab_annotate = "0.05")
+                     x_annotate = 40, 
+                     lab_annotate = "0.08")
 
-(p1.damage)
+(p1.RS)
 
-p.comp2 <- ggarrange(p0.damage, p1.damage, 
-          p0.RS,
-           p1.RS, ncol = 4, nrow = 1, align = 'hv')
-
+p.comp2 <- ggarrange(
+  p_spagett_damage, p0.damage, p1.damage, 
+  p_spagett_RS, p0.RS, p1.RS, 
+  ncol = 3, nrow = 2, align = 'hv',
+  labels = c('[a]', '[b]', '[c]', '[d]', '[e]', '[f]'),
+  font.label = list(size = 10, face = "plain"),  # Set font to normal (plain) and specify size
+  label.x = 0.15,  # Adjust these values to position the labels within the plot
+  label.y = 0.85
+)
 (p.comp2)
 
+
 ggsave(filename = 'outFigs/observation_vs_traps.png', 
-       plot = p.comp2, width = 4, height = 4, dpi = 300, bg = 'white')
+       plot = p.comp2, width = 6, height = 4, dpi = 300, bg = 'white')
 
 
 ##### quick plotting -----------------------------------------------
@@ -1224,7 +1245,8 @@ dmg_shp <-
   sf_simpled %>% 
     dplyr::select(c(forstrev_1)) %>% 
   full_join(df_damage_sum, by = c("forstrev_1" = "ID")) %>% 
-  dplyr::select(c(forstrev_1, sum_dmg,sum_RS))
+  dplyr::select(c(forstrev_1, sum_dmg,sum_RS)) %>% 
+  mutate(log_sum_dmg )
   
   
 
