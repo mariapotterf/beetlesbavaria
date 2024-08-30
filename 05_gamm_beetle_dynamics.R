@@ -244,6 +244,79 @@ dat_dynamics <- dat_fin %>%
                 ))
 fwrite(dat_dynamics, 'outTable/beetle_dynamic_indicators.csv')
 
+# get summary statistics for mean and sd for weather condistions:
+desc_stat_climate_summary <- dat_dynamics %>%
+  mutate(class = ifelse(year %in% c(2018:2020), "2018-2020", "Other Years")) %>%
+  group_by(class) %>%
+  summarise(
+    mean_veg_tmp = mean(veg_tmp, na.rm = TRUE),
+    sd_veg_tmp = sd(veg_tmp, na.rm = TRUE),
+    mean_spei = mean(spei, na.rm = TRUE),
+    sd_spei = sd(spei, na.rm = TRUE),
+    mean_veg_prcp = mean(veg_prcp, na.rm = TRUE),
+    sd_veg_prcp = sd(veg_prcp, na.rm = TRUE)
+  )
+
+(desc_stat_climate_summary)
+
+desc_stat_climate_summary_year <- dat_dynamics %>%
+  group_by(year) %>%
+  summarise(
+    mean_veg_tmp = mean(veg_tmp, na.rm = TRUE),
+    med_veg_tmp = median(veg_tmp, na.rm = TRUE),
+    sd_veg_tmp = sd(veg_tmp, na.rm = TRUE),
+    mean_spei = mean(spei, na.rm = TRUE),
+    med_spei_tmp = median(spei, na.rm = TRUE),
+    sd_spei = sd(spei, na.rm = TRUE),
+    mean_veg_prcp = mean(veg_prcp, na.rm = TRUE),
+    med_veg_prcp = median(veg_prcp, na.rm = TRUE),
+    sd_veg_prcp = sd(veg_prcp, na.rm = TRUE)
+  )
+
+(desc_stat_climate_summary_year)
+
+
+# make a plot for each variable per year 
+# Melt the data to long format for easier plotting with facets
+# Rename columns for clarity
+dat_dynamics2 <- dat_dynamics %>%
+  dplyr::rename(temperature = veg_tmp, precipitation = veg_prcp)
+
+# Prepare the data for plotting by pivoting it longer
+plot_data <- dat_dynamics2 %>%
+  dplyr::select(year, temperature, precipitation, spei) %>%
+  pivot_longer(cols = c(temperature, precipitation, spei), names_to = "variable", values_to = "value")
+
+# Set the order of facets
+plot_data$variable <- factor(plot_data$variable, levels = c("temperature", "precipitation", "spei"))
+
+
+
+# Calculate the mean value for each variable for horizontal lines
+mean_values <- plot_data %>%
+  group_by(variable) %>%
+  summarise(mean_value = mean(value, na.rm = TRUE))
+
+# Create the plot with violin plots, jittered points, mean with error bars, and horizontal mean lines
+weather_summary_plot <- ggplot(plot_data, aes(x = as.factor(year), y = value, color = variable, fill = variable)) +
+  geom_violin(alpha = 0.5) +  # Violin plot to show distribution
+  geom_jitter(width = 0.2, size = 1, alpha = 0.5) +  # Jitter points for individual data
+  stat_summary(fun.data = mean_sdl, fun.args = list(mult = 1), geom = "pointrange", 
+               position = position_dodge(width = 0.9), color = "black") +  # Mean and standard error bars
+  facet_wrap(~ variable, scales = "free_y") +  # Facet by variable
+  labs(x = "Year", y = "Value", title = "Distribution of Temperature, Precipitation, and SPEI by Year") +  # Labels and title
+  theme_classic() +  # Use a classic theme for better visualization
+  #scale_color_manual(values = c("grey", "red")) +  # Keep color grey by default, red for specific years
+ # scale_fill_manual(values = c("grey", "red")) +  # Same color logic for fill
+  theme(legend.position = "none") +  # Remove legend for cleaner appearance
+  # Add horizontal dashed line for the mean of each facet
+  geom_hline(data = mean_values, aes(yintercept = mean_value), linetype = "dashed", color = "grey30")
+
+# Display the plot
+print(weather_summary_plot)
+# get final tables fo rthe moel
+
+
 # table for ips counts, peak diff
 dat_fin_counts_m <- 
   dat_spei_lags %>%  
