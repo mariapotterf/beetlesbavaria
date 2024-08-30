@@ -439,6 +439,38 @@ df_cor <- df_all %>%
 
 # Final table: for RS and for damaged volume ----------------------------------
 
+### Tab for spagetti plot -----------------
+
+df_full_years_to_spagetti_plot <-  
+  ips_damage_merge %>%  
+  left_join(df_all,
+            by = c("forstrev_1" =   "ID",
+                   "year"       = "year",
+                   "damaged_volume_total_m3" = "damaged_volume_total_m3") ) %>% 
+  mutate(trapID = as.factor(trapID)) %>% 
+  group_by(pairID, year) %>% 
+  summarise(sum_ips    = mean(sum_ips, na.rm = T),
+            agg_doy    = mean(agg_doy, na.rm = T),
+            peak_doy   = mean(peak_doy, na.rm = T),
+            peak_diff  = mean(peak_diff, na.rm = T),
+            damage_vol = mean(damaged_volume_total_m3, na.rm = T),
+            RS_wind_beetle = mean(RS_wind_beetle, na.rm = T)#,
+  ) %>%
+  ungroup(.) %>% 
+  mutate(#log_sum_ips = log(sum_ips),
+         RS_wind_beetle_ha = RS_wind_beetle*0.09,  # update values for plotting
+         damage_vol_k = damage_vol/1000) %>% 
+#  mutate(f_year = as.factor(year)) %>% 
+  dplyr::filter(!pairID %in% c('Peiting', "Eschenbach_idOPf"))
+
+# Replace or filter out zero values before plotting
+df_full_years_to_spagetti_plot$damage_vol_k <- ifelse(df_full_years_to_spagetti_plot$damage_vol_k <= 0.01, 
+                                                    0.01, 
+                                                    df_full_years_to_spagetti_plot$damage_vol_k)
+
+
+
+
 # keep datasets separated, as RS has lower number of years
 # run analysis for trap vs RS damage
 # trap vs damaged volume
@@ -964,13 +996,7 @@ summary(fin.m.RS)
 
 # Spagetti plots for years -----------------------------------------------------
 
-# keep high variance for the log scale
-fin_dat_damage_plot_spagetti <- fin_dat_damage %>% 
-  mutate(damage_vol       = damage_vol/1000,
-         sum_ips          = sum_ips/1000,
-         lag1_damage_vol  = lag1_damage_vol/1000)
-
-
+library(scales)
 # update data to scatter plot 
 fin_dat_damage_plot <- fin_dat_damage %>% 
   dplyr::filter(lag1_damage_vol < 150000) %>% 
@@ -986,20 +1012,25 @@ fin_dat_RS_clean_plot <- fin_dat_RS_clean %>%
          sum_ips_lag1           = sum_ips_lag1/1000)
 
 
-fin_dat_RS_plot_spagetti <- fin_dat_RS %>% 
-  mutate(RS_wind_beetle_ha      = RS_wind_beetle*0.09)
 
 
-p_spagett_damage <- plot_data_with_average(fin_dat_damage_plot_spagetti, "damage_vol", 'my_lab',   
-                                              my_title = expression("Ground survey [*1000 m"^3*"]"))+  scale_y_log10() +
+p_spagett_damage <- plot_data_with_average(df_full_years_to_spagetti_plot, "damage_vol_k", 'my_lab',   
+                                              my_title = expression("Ground survey [*1000 m"^3*"]"))+ 
+  #scale_y_log10() +
+  scale_y_log10(labels = label_number()) +  # Adjust y-axis labels to avoid scientific notation
   lims(x = c(2015,2021))
 
-p_spagett_RS<- plot_data_with_average(fin_dat_RS_plot_spagetti, "RS_wind_beetle_ha", 'my_lab',   
+(p_spagett_damage)
+range(df_full_years_to_spagetti_plot$damage_vol_k)
+hist(df_full_years_to_spagetti_plot$damage_vol_k)
+
+
+p_spagett_RS<- plot_data_with_average(df_full_years_to_spagetti_plot, "RS_wind_beetle_ha", 'my_lab',   
                                        my_title = paste('Remote sensing', '[ha]')) +  
                                          scale_y_log10() + 
   lims(x = c(2015,2021))
 
-
+(p_spagett_RS)
 
 # PLOT: field based damage --------------------------
 
