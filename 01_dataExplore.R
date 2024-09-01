@@ -182,6 +182,29 @@ dat %>%
 # 16 Kupferstecher  2021   246
 
 
+# get median dates between two recordings
+# Calculate the number of days between recordings per 'falsto_name'
+median_days_between <- dat %>%
+  dplyr::filter(art == 'Buchdrucker') %>% 
+  arrange(falsto_name, kont_dat) %>%  # Sort data by 'falsto_name' and 'kont_dat'
+  group_by(falsto_name, year) %>%           # Group by 'falsto_name'
+  mutate(days_diff = as.numeric(difftime(kont_dat, lag(kont_dat), units = "days"))) %>%  # Calculate days difference
+  summarise(median_days = median(days_diff, na.rm = TRUE),
+            mean_days = mean(days_diff, na.rm = TRUE),
+            sd_days = sd(days_diff, na.rm = TRUE))  # Calculate median days difference, excluding NAs
+
+(median_days_between)
+hist(median_days_between$median_days)
+range(median_days_between$median_days, na.rm  =T)
+range(median_days_between$mean_days, na.rm  =T)
+
+# how many records have median of <7?
+# Calculate the number of median_days values that are less than 7
+med_less_than_7 <- sum(median_days_between$median_days <= 7, na.rm = TRUE)
+
+# Print the result
+print(med_less_than_7)
+
 
 ## Standardize beetle counts/trap/year --------------------------------------------------------------------
 
@@ -241,6 +264,9 @@ ips.year.avg %>%
   distinct(freq_visit) %>%
   pull() %>% 
   hist()
+
+
+
 
 # 6 recrding months: need at least 12 recordings!! or 10..
 # 
