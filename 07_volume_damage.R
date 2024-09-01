@@ -408,16 +408,6 @@ sjPlot::tab_df(observation_mortality_year,
 
 
 
-# Correlate between RS and volume data m3 ---------------------------------------------------
-df_cor <- df_all %>% 
-  dplyr::filter(!ID %in% c(0, 50104, 60613,62705)) %>% # exlude if there is missing data
-  group_by(ID) %>% 
-  dplyr::summarize(spearm_cor_beetle = cor(damaged_volume_total_m3, RS_wind_beetle, 
-                                    method = "spearman", use = "complete.obs"),
-                   spearm_cor_harvest = cor(damaged_volume_total_m3, RS_harvest, 
-                                           method = "spearman", use = "complete.obs"),
-                   spearm_cor_sum = cor(damaged_volume_total_m3, RS_sum, 
-                                            method = "spearman", use = "complete.obs"))
 
 
 #### MAP: correlations per XY: beetle counts vs damage volume --------------------
@@ -1182,6 +1172,25 @@ ggarrange(p1, p2, nrow = 1, ncol = 2, align = 'hv', labels = c('[a]', '[b]'))
 
 
 ##### merge damage data to geometry data ----------------------------------
+
+# Correlate between RS and volume data m3 ---------------------------------------------------
+df_cor <- df_all %>% 
+  dplyr::filter(!ID %in% c(0, 50104, 60613,62705)) %>% # exlude if there is missing data
+  group_by(ID) %>% 
+  dplyr::summarize(spearm_cor_beetle = cor(damaged_volume_total_m3, RS_wind_beetle, 
+                                           method = "spearman", use = "complete.obs"))
+
+
+summary(df_cor)
+
+df_all %>% 
+  dplyr::filter(RS_wind_beetle < 10000) %>% 
+  ggplot(aes(x = RS_wind_beetle, y = damaged_volume_total_m3)) + 
+  geom_point() + 
+  geom_smooth(method = "lm") + 
+  stat_cor(method = "pearson", label.x = 3000, label.y = max(df_all$damaged_volume_total_m3, na.rm = TRUE))
+
+
 cor_shp <- sf_simpled %>% 
   left_join(df_cor, by = c("forstrev_1" = "ID"))
 
