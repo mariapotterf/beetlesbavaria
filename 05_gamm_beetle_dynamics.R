@@ -194,6 +194,20 @@ dat_spei_lags <-  dat_fin %>%
 nrow(dat_spei_lags)
 
 
+
+# check correlation between tmp and spei ---------------------------------------
+# Calculate pairwise correlations for numeric columns
+numeric_cols <- dat_spei_lags %>%
+  dplyr::select_if(is.numeric)  %>% # Select only numeric columns
+  dplyr::select(tmp, tmp_lag1,tmp_lag2,tmp_lag3, spei,spei_lag1, spei_lag2, spei_lag3)
+
+
+correlations <- cor(numeric_cols, use = "complete.obs")  # Calculate correlations, excluding missing values
+
+# Display the correlation matrix
+print(correlations)
+
+
 dat_spei_lags %>% 
   dplyr::filter(trapID == "Anzinger_Forst_1") %>% 
   dplyr::select(trapID, year, tmp_z, tmp_z_lag1,tmp_z_lag2 ) # sum_ips, sum_ips_lag1
@@ -244,16 +258,26 @@ dat_dynamics <- dat_fin %>%
                 ))
 fwrite(dat_dynamics, 'outTable/beetle_dynamic_indicators.csv')
 
-# get summary statistics for mean and sd for weather condistions:
+
+
+
+hist(dat_dynamics$veg_tmp)
+hist(dat_dynamics$spei)
+
+
+# get summary statistics for mean and sd for weather condistions: --------------------------
 desc_stat_climate_summary <- dat_dynamics %>%
-  mutate(class = ifelse(year %in% c(2018:2020), "2018-2020", "Other Years")) %>%
+  mutate(class = ifelse(year %in% c(2018), "2018", "Other Years")) %>%
   group_by(class) %>%
   summarise(
     mean_veg_tmp = mean(veg_tmp, na.rm = TRUE),
+    med_veg_tmp = median(veg_tmp, na.rm = TRUE),
     sd_veg_tmp = sd(veg_tmp, na.rm = TRUE),
     mean_spei = mean(spei, na.rm = TRUE),
+    med_spei_tmp = median(spei, na.rm = TRUE),
     sd_spei = sd(spei, na.rm = TRUE),
     mean_veg_prcp = mean(veg_prcp, na.rm = TRUE),
+    med_veg_prcp = median(veg_prcp, na.rm = TRUE),
     sd_veg_prcp = sd(veg_prcp, na.rm = TRUE)
   )
 
@@ -280,17 +304,16 @@ desc_stat_climate_summary_year <- dat_dynamics %>%
 # Melt the data to long format for easier plotting with facets
 # Rename columns for clarity
 dat_dynamics2 <- dat_dynamics %>%
-  dplyr::rename(temperature = veg_tmp, precipitation = veg_prcp)
+  dplyr::rename(temperature = veg_tmp, precipitation = veg_prcp, 
+                SPEI = spei)
 
 # Prepare the data for plotting by pivoting it longer
 plot_data <- dat_dynamics2 %>%
-  dplyr::select(year, temperature, precipitation, spei) %>%
-  pivot_longer(cols = c(temperature, precipitation, spei), names_to = "variable", values_to = "value")
+  dplyr::select(year, temperature, precipitation, SPEI) %>%
+  pivot_longer(cols = c(temperature, precipitation, SPEI), names_to = "variable", values_to = "value")
 
 # Set the order of facets
-plot_data$variable <- factor(plot_data$variable, levels = c("temperature", "precipitation", "spei"))
-
-
+plot_data$variable <- factor(plot_data$variable, levels = c("temperature", "precipitation", "SPEI"))
 
 # Calculate the mean value for each variable for horizontal lines
 mean_values <- plot_data %>%
@@ -304,16 +327,29 @@ weather_summary_plot <- ggplot(plot_data, aes(x = as.factor(year), y = value, co
   stat_summary(fun.data = mean_sdl, fun.args = list(mult = 1), geom = "pointrange", 
                position = position_dodge(width = 0.9), color = "black") +  # Mean and standard error bars
   facet_wrap(~ variable, scales = "free_y") +  # Facet by variable
-  labs(x = "Year", y = "Value", title = "Distribution of Temperature, Precipitation, and SPEI by Year") +  # Labels and title
+  labs(x = "Year", y = "Value", title = "") +  # Labels and title
   theme_classic() +  # Use a classic theme for better visualization
-  #scale_color_manual(values = c("grey", "red")) +  # Keep color grey by default, red for specific years
- # scale_fill_manual(values = c("grey", "red")) +  # Same color logic for fill
-  theme(legend.position = "none") +  # Remove legend for cleaner appearance
+  theme(
+    legend.position = "none",  # Remove legend for cleaner appearance
+    text = element_text(size = 8),  # Set all font sizes to 8 points
+    axis.title = element_text(size = 8),  # Axis title font size
+    axis.text = element_text(size = 8),  # Axis text font size
+    axis.text.x = element_text(angle = 45, hjust = 1),  # Axis text font size
+    strip.text = element_text(size = 8)  # Facet strip text font size
+  ) +
   # Add horizontal dashed line for the mean of each facet
   geom_hline(data = mean_values, aes(yintercept = mean_value), linetype = "dashed", color = "grey30")
 
 # Display the plot
 print(weather_summary_plot)
+
+
+ggsave(filename = 'outFigs/vegetation_weather_summary2.png', 
+       plot = weather_summary_plot, width = 7, height = 3, dpi = 300, bg = 'white')
+
+
+
+
 # get final tables fo rthe moel
 
 
