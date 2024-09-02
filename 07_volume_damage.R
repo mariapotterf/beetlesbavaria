@@ -1411,11 +1411,18 @@ p1 <- ggplot(cor_shp) +
                                  max(cor_shp$spearm_cor_beetle, na.rm = TRUE)),
                        name = "Spearman\nCorrelation") +
   labs(title = "Spearman Correlation Coefficient",
-       subtitle = "Correlation between spruce damage [m3] and RS wind-beetle [pixel counts] by region") +
+       subtitle = "Correlation between ground surevy data and RS based estimation [ha] by forest district") +
   theme_minimal()  #
 
 
+summary(cor_shp$spearm_cor_beetle)
+mean(cor_shp$spearm_cor_beetle, na.rm = T)
+sd(cor_shp$spearm_cor_beetle, na.rm = T)
+median(cor_shp$spearm_cor_beetle, na.rm = T)
 
+
+# Min. 1st Qu.  Median    Mean 3rd Qu.    Max.    NA's 
+# -0.9856  0.1518  0.4928  0.4412  0.8117  1.0000       3 
 
 # RS harvest vs damage volume 
 
