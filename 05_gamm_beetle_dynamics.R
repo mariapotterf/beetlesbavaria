@@ -321,12 +321,16 @@ mean_values <- plot_data %>%
   summarise(mean_value = mean(value, na.rm = TRUE))
 
 # Create the plot with violin plots, jittered points, mean with error bars, and horizontal mean lines
-weather_summary_plot <- ggplot(plot_data, aes(x = as.factor(year), y = value, color = variable, fill = variable)) +
-  geom_violin(alpha = 0.5) +  # Violin plot to show distribution
-  geom_jitter(width = 0.2, size = 1, alpha = 0.5) +  # Jitter points for individual data
-  stat_summary(fun.data = mean_sdl, fun.args = list(mult = 1), geom = "pointrange", 
-               position = position_dodge(width = 0.9), color = "black") +  # Mean and standard error bars
-  facet_wrap(~ variable, scales = "free_y") +  # Facet by variable
+weather_summary_plot <- ggplot(plot_data, aes(x = as.factor(year), 
+                                              y = value#, 
+                                              #color = variable, 
+                                              #fill = variable
+                                              )) +
+  geom_violin(alpha = 0.5, fill = 'grey60', color = 'grey60') +  # Violin plot to show distribution
+  geom_jitter(width = 0.2, size = 0.2, alpha = 0.5, color = 'grey20') +  # Jitter points for individual data
+  stat_summary(fun.data = mean_sdl, fun.args = list(mult = 1), geom = "pointrange", size = 0.3,
+               position = position_dodge(width = 0.9), color = "red") +  # Mean and standard error bars
+  facet_wrap(variable ~ ., scales = "free_y") +  # Facet by variable
   labs(x = "Year", y = "Value", title = "") +  # Labels and title
   theme_classic() +  # Use a classic theme for better visualization
   theme(
@@ -344,7 +348,7 @@ weather_summary_plot <- ggplot(plot_data, aes(x = as.factor(year), y = value, co
 print(weather_summary_plot)
 
 
-ggsave(filename = 'outFigs/vegetation_weather_summary2.png', 
+ggsave(filename = 'outFigs/vegetation_weather_summary3.png', 
        plot = weather_summary_plot, width = 7, height = 3, dpi = 300, bg = 'white')
 
 
@@ -404,7 +408,7 @@ model_metrics_count <- data.frame(Predictor = character(),
 # List of dependent variables and predictors:
 # keep only spei3 and spei 12 - for the short term vs long term effect
 selected_predictors <- c(
-  #"tmp", "tmp_lag1", "tmp_lag2","tmp_lag3" ,
+  "tmp", "tmp_lag1", "tmp_lag2","tmp_lag3" ,
   "tmp_z", "tmp_z_lag1", "tmp_z_lag2","tmp_z_lag3" ,
   "spei", "spei_lag1", "spei_lag2","spei_lag3" )
   #"spei_z", "spei_z_lag1", "spei_z_lag2","spei_z_lag3") 
@@ -518,6 +522,13 @@ sjPlot::tab_df(full_lag_models,
                show.rownames = FALSE,
                file="outTable/find_lag_predictors.doc",
                digits = 1) 
+#fwrite(full_lag_models, 'outTable/fin_lag_predictors.csv')
+sjPlot::tab_df(full_lag_models,
+               #col.header = c(as.character(qntils), 'mean'),
+               show.rownames = FALSE,
+               file="outTable/find_lag_predictors_tmp.doc",
+               digits = 1) 
+
 
 # Calculate the correlation matrix for all predictors and their lags ---------------------------
 
