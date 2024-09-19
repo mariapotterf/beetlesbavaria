@@ -51,6 +51,13 @@ df_spei_year    <- fread('outTable/xy_spei_all_DWD.csv')
 
 anyNA(df_spei_year)
 
+df_spei_year %>% 
+  ungroup(.) %>% 
+  group_by(scale) %>% 
+  summarise(mean = mean(spei, na.rm = T),
+         sd = sd(spei, na.rm = T),
+         median = median(spei, na.rm = T))
+
 #df_clim$falsto_name <- iconv(df_clim$falsto_name, from = "UTF-8", to = "")
 
 #View(df_spei_season)
