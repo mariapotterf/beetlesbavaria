@@ -395,7 +395,7 @@ dat_fin_agg_m_scaled <- dat_fin_agg_m %>%
 
 
 
-####GAM: Find the best predictor lags  (univariate) --------------------------------------------------------------- 
+#### Variables selection: ips counts, peakdiff GAM: Find the best predictor lags  (univariate) --------------------------------------------------------------- 
 dependent_vars_counts <-  c("sum_ips", "peak_diff")
 dependent_vars_doy    <-  c("tr_agg_doy", "tr_peak_doy")
 
@@ -450,7 +450,7 @@ best_predictors_counts <- model_metrics_count %>%
  # slice(which.max(DevianceExplained))
 
 best_predictors_counts
-####### for DOY values ---------------------------------------------------------------
+####### GAM univariate : for DOY values ---------------------------------------------------------------
 
 # Initialize a data frame to store AIC values and deviance explained
 model_metrics_doy <- data.frame(Predictor = character(), 
@@ -542,134 +542,6 @@ corrplot::corrplot(cor_matrix)
 cor_matrix_masked <- cor_matrix
 cor_matrix_masked[cor_matrix > 0.4 | cor_matrix < -0.4] <- NA
 corrplot::corrplot(cor_matrix_masked)
-
-
-#### adreass lags in different way: provide plot with 0,1,2,3 lag ----------------------
-# plot for SPEIs (1,3,6,12)and for veg_tmp
-# Define the function
-run_models_and_collect_results <- function(data, predictors, response, k = 4, family = nb(), method = 'REML') {
-  # Define a function to fit the model and get predictions
-  fit_model_and_predict <- function(predictor) {
-    # Construct the formula
-    formula <- as.formula(paste(response, "~ s(", predictor, ", k = ", k, ")", sep = ""))
-    
-    # Fit the model
-    model <- gam(formula, family = family, method = method, data = data)
-    
-    # Get predictions using ggpredict
-    predictions <- ggpredict(model, terms = paste(predictor, "[all]", sep = ""), allow.new.levels = TRUE)
-    
-    # Add the predictor name to the results
-    predictions$predictor <- predictor
-    
-    return(predictions)
-  }
-  
-  # Use lapply to apply the function to each predictor
-  results_list <- lapply(predictors, fit_model_and_predict)
-  
-  # Combine all results into a single data frame
-  combined_results <- bind_rows(results_list)
-  
-  return(combined_results)
-}
-
-response <- "sum_ips"
-
-results_df <- run_models_and_collect_results(dat_fin_counts_m_scaled, 
-                                             selected_predictors  , response)
-
-# Modify the predictors
-results_df2 <- 
-  results_df %>% 
-    as.data.frame() %>%  
-  mutate(predictor = str_replace_all(predictor, "veg_tmp", "vegtmp"),
-         predictor = str_replace_all(predictor, "spring_tmp", "springtmp"),
-         predictor = str_replace_all(predictor, "tmp_z", "tmpz"),
-         predictor = str_replace_all(predictor, "spei", "spei")) %>% 
-    mutate(predictor_full = case_when(
-      str_detect(predictor, "_lag") ~ predictor,
-      TRUE ~ paste0(predictor, "_lag0")
-    )) %>%
-    # Split the strings into their components
-  mutate(predictor_split = stringr::str_split(predictor_full, "_")) %>%
-  # Unnest the list column into separate columns
-  mutate(type = map_chr(predictor_split, 1),
-         lag = map_chr(predictor_split, 2)) %>%
-  # Drop the temporary columns
-  dplyr::select(-predictor_split) 
-  
-
-
-# plot: effect of lags on beetle population level
-ggplot(results_df2, aes(x = x , y = predicted , ymin = conf.low, ymax = conf.high)) +
-  geom_ribbon(aes(ymin = conf.low, ymax = conf.high, fill = lag  ), alpha = 0.3) +
-  geom_line(aes(color = lag  , linetype = lag  ), linewidth = 1)  +
-  facet_grid(lag~type) +
-  theme_bw()
-
-
-
-# identify the 'hot and dry conditions'
-plot(dat_fin_counts_m_scaled$veg_tmp,dat_fin_counts_m_scaled$spei)
-plot(dat_fin_counts_m_scaled$tmp_z,dat_fin_counts_m_scaled$spei)
-
-pairs(sum_ips ~tmp_z_lag2 + spei_z_lag2,   data  = dat_fin_counts_m_scaled, panel=panel.smooth)
-
-# identify howt and ry conditions visually
-# Load your data
-dat <- dat_fin_counts_m_scaled_no_outliers
-
-# Identify the points in the lower right cluster
-cluster_points <- dat[dat$tmp_z > 1.5 & dat$spei < 0, ]
-
-# Print or inspect the identified points
-summary(cluster_points)
-
-# they are all in 2018: split data between before and after drought?
-dat_before <- dat %>% dplyr::filter(year%in% 2015:2017)
-dat_after <- dat %>% dplyr::filter(year%in% 2018:2021)
-
-mm <- gam(sum_ips ~s(tmp_z, k = 4), 
-          family = nb(), method = 'REML', data = dat[,year == 2018])
-
-plot(mm, page = 1)
-
-
-# check multicollinearity between SPEI and tmp: -------------------------------
-# Function to fit model and calculate VIF
-# Function to fit model and check multicollinearity
-fit_model_and_check_vif <- function(tmp_var, spei_var, data) {
-  formula <- as.formula(paste("sum_ips ~ s(", tmp_var, ", k = 5) + s(", spei_var, ", k = 5)", sep = ""))
-  model <- gam(formula, family = nb(), method = 'REML', data = data)
-  collinearity <- check_collinearity(model)
-  return(collinearity)
-}
-
-# Find combinations and check for multicollinearity
-results <- data.frame(tmp_var = character(), spei_var = character(), vif_tmp = numeric(), vif_spei = numeric(), stringsAsFactors = FALSE)
-
-tmp_vars <- selected_predictors[str_detect(selected_predictors, "veg_tmp|spring_tmp")]
-spei_vars <- selected_predictors[str_detect(selected_predictors, "spei3|spei12")]
-
-for (tmp in tmp_vars) {
-  for (spei in spei_vars) {
-    collinearity <- fit_model_and_check_vif(tmp, spei, dat_fin_counts_m_scaled)
-    vif_values <- collinearity$VIF
-    results <- rbind(results, data.frame(tmp_var = tmp, spei_var = spei, vif_tmp = vif_values[1], vif_spei = vif_values[2]))
-  }
-}
-
-
-# Filter combinations with acceptable VIF values (e.g., VIF < 5)
-acceptable_results <- results %>% filter(vif_tmp < 5 & vif_spei < 5)
-
-(acceptable_results)
-
-# based on this results I have removes the spei 12 from teh study - 
-# to avoid multicllinearity with tmp
-# spei 1, 6 were removed due to strong non-linear relaionship before
-
 
 
 
