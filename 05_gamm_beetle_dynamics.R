@@ -553,22 +553,29 @@ corrplot::corrplot(cor_matrix_masked)
 avg_data <- dat_spei_lags %>%
   group_by(pairID, year) %>%
   summarise(Morans_I_log  = mean(Morans_I_log , na.rm = TRUE),
+            
+            # dependents
             sum_ips     = mean(sum_ips, na.rm = TRUE),
             peak_diff   = mean(peak_diff, na.rm = TRUE),
             tr_agg_doy  = mean(tr_agg_doy, na.rm = TRUE),
             tr_peak_doy = mean(tr_peak_doy, na.rm = TRUE), 
             agg_doy     = mean(agg_doy, na.rm = TRUE),
             peak_doy    = mean(peak_doy, na.rm = TRUE),
+            # SPEIS - spei3
             spei        = mean(spei, na.rm = TRUE),
+            spei_lag1   = mean(spei_lag1, na.rm = TRUE), # for agg_doy
+            spei_lag2   = mean(spei_lag2, na.rm = TRUE),
+            # TMP
+            tmp         = mean(tmp, na.rm = T),
+            tmp_lag1    = mean(tmp_lag1, na.rm = TRUE),
+            tmp_lag2    = mean(tmp_lag2, na.rm = TRUE),  # for agg_doy
+            # TMP_z
             tmp_z       = mean(tmp_z, na.rm = TRUE),
-            spei_lag2 = mean(spei_lag2, na.rm = TRUE),
             tmp_z_lag1  = mean(tmp_z_lag1, na.rm = TRUE),
-           # tmp_lag1  = mean(tmp_lag1, na.rm = TRUE),
-            spei_lag1 = mean(spei_lag1, na.rm = TRUE), # for agg_doy
             tmp_z_lag2  = mean(tmp_z_lag2, na.rm = TRUE),  # for agg_doy
-          #  tmp_lag2  = mean(tmp_lag2, na.rm = TRUE),  # for agg_doy
+          
             x           = mean(x, na.rm = TRUE),
-            y           = mean(y, na.rm = TRUE),
+            y           = mean(y, na.rm = TRUE)
             ) %>%
   ungroup(.) %>% 
   na.omit() %>% 
@@ -577,103 +584,6 @@ avg_data <- dat_spei_lags %>%
 
 fwrite(avg_data, 'outTable/fin_tab_avg.csv')
 
-
-### automate models over all dependent variables and over increasing model complexity  -----------------------------------------
-# START 
-
-# Define a function to build and compare models with descriptive names for multiple dependent variables
-compare_models <- function(data, dependent_vars) {
-  results <- list()
-  
-  for (dep_var in dependent_vars) {
-    models <- list()
-    AIC_values <- data.frame(Model = character(), AIC = numeric(), stringsAsFactors = FALSE)
-    
-    # Determine the appropriate family for the dependent variable
-    if (dep_var %in% c("sum_ips", "peak_diff")) {
-      family <- nb()
-    } else if (dep_var %in% c("tr_agg_doy", "tr_peak_doy")) {
-      family <- betar()
-    } else {
-      stop("Unknown dependent variable family.")
-    }
-    
-    # Function to safely fit a model and catch errors
-    safe_gamm <- function(formula, data, family, correlation) {
-      tryCatch({
-        gamm(formula, data = data, family = family, correlation = correlation)
-      }, error = function(e) {
-        cat("Error in model fitting:", conditionMessage(e), "\n")
-        return(NULL)
-      })
-    }
-    
-    # Step 1: Initial Model (Base Model with Year)
-    models$base_model <- safe_gamm(as.formula(paste(dep_var, "~ s(year, k = 6)")),
-                                   data, family, corAR1(form = ~ year | pairID))
-    
-    if (!is.null(models$base_model)) {
-      AIC_values <- rbind(AIC_values, data.frame(Model = "Base Model (Year)", AIC = AIC(models$base_model$lme)))
-    }
-    
-    # Step 2: Add s(tmp_z_lag1, k = 8)
-    models$tmp_lag1 <- safe_gamm(as.formula(paste(dep_var, "~ s(year, k = 6) + s(tmp_z_lag1, k = 8)")),
-                                 data, family, corAR1(form = ~ year | pairID))
-    
-    if (!is.null(models$tmp_lag1)) {
-      AIC_values <- rbind(AIC_values, data.frame(Model = "Add tmp_z_lag1", AIC = AIC(models$tmp_lag1$lme)))
-    }
-    
-    # Step 3: Add s(spei_z_lag2, k = 4)
-    models$spei_lag2 <- safe_gamm(as.formula(paste(dep_var, "~ s(year, k = 6) + s(tmp_z_lag1, k = 8) + s(spei_z_lag2, k = 4)")),
-                                  data, family, corAR1(form = ~ year | pairID))
-    
-    if (!is.null(models$spei_lag2)) {
-      AIC_values <- rbind(AIC_values, data.frame(Model = "Add spei_z_lag2", AIC = AIC(models$spei_lag2$lme)))
-    }
-    
-    # Step 4: Add te(tmp_z_lag1, spei_z_lag2, k = 15)
-    models$tmp_spei_interaction <- safe_gamm(as.formula(paste(dep_var, "~ s(year, k = 6) + s(tmp_z_lag1, k = 8) + s(spei_z_lag2, k = 4) + te(tmp_z_lag1, spei_z_lag2, k = 15)")),
-                                             data, family, corAR1(form = ~ year | pairID))
-    
-    if (!is.null(models$tmp_spei_interaction)) {
-      AIC_values <- rbind(AIC_values, data.frame(Model = "Add tmp_spei_interaction", AIC = AIC(models$tmp_spei_interaction$lme)))
-    }
-    
-    # Step 5: Add s(x, y, bs = "gp")
-    models$spatial <- safe_gamm(as.formula(paste(dep_var, "~ s(year, k = 6) + s(tmp_z_lag1, k = 8) + s(spei_z_lag2, k = 4) + te(tmp_z_lag1, spei_z_lag2, k = 15) + s(x, y, bs = 'gp')")),
-                                data, family, corAR1(form = ~ year | pairID))
-    
-    if (!is.null(models$spatial)) {
-      AIC_values <- rbind(AIC_values, data.frame(Model = "Add spatial", AIC = AIC(models$spatial$lme)))
-    }
-    
-    # Step 6: Add s(pairID, bs = "re")
-    models$random_effect <- safe_gamm(as.formula(paste(dep_var, "~ s(year, k = 6) + s(tmp_z_lag1, k = 8) + s(spei_z_lag2, k = 4) + te(tmp_z_lag1, spei_z_lag2, k = 15) + s(x, y, bs = 'gp') + s(pairID, bs = 're')")),
-                                      data, family, corAR1(form = ~ year | pairID))
-    
-    if (!is.null(models$random_effect)) {
-      AIC_values <- rbind(AIC_values, data.frame(Model = "Add random effect", AIC = AIC(models$random_effect$lme)))
-    }
-    
-    # Store results for each dependent variable
-    results[[dep_var]] <- list(models = models, AIC_values = AIC_values)
-    
-    # Print AIC values for each dependent variable
-    cat("\nAIC values for", dep_var, ":\n")
-    print(AIC_values)
-  }
-  
-  # Return the results for further inspection if needed
-  return(results)
-}
-
-# Define the list of dependent variables
-dependent_vars <- c("sum_ips", "peak_diff", "tr_agg_doy", "tr_peak_doy")
-dependent_vars  <- c("peak_diff")
-# Run the function on your dataset
-result <- compare_models(avg_data, dependent_vars)
-result_peak_diff <- compare_models(avg_data, dependent_vars =  c("peak_diff"))
 
 
 ### Specify temp autocorrelation ------------------------------------------------
