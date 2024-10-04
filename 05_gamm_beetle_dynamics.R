@@ -546,63 +546,6 @@ corrplot::corrplot(cor_matrix_masked)
 
 
 
-###### check correlation between traps -------------------------- 
-# check correlation between trap counts: does it explains anything?
-# need to conevert to wide format for correlation
-df_wide <- dat_fin_counts_m %>%
-  dplyr::select(year, trapID, pairID, sum_ips) %>%
-  mutate(trap_number = str_sub(trapID, -1, -1)) %>%
-  dplyr::select(-trapID) %>% 
-  pivot_wider(
-    names_from = trap_number,
-    values_from = sum_ips,
-    names_prefix = "trap_"
-  ) %>% 
-  # calculkate difference between two traps
-  mutate(abs_trap_diff = trap_1 - trap_2,
-         ratio = trap_1/trap_2) # larger number shows higher difference
-
-
-df_corr <- df_wide %>%
-  group_by(pairID) %>%
-  mutate(
-    cor = cor(trap_1, trap_2, method = 'spearman', use = "complete.obs")  ) 
-
-
-
-df_wide %>% 
-  na.omit() %>% 
-  ggplot(aes(x = trap_1, y = trap_2)) + 
-  geom_point() + 
-  geom_smooth()
-
-
-plot(df_wide$trap_1, df_wide$trap_2 )
-
-
-df_corr %>% 
-  ggplot(aes(x = trap_1, y = trap_2)) + 
-  geom_point() + 
-  geom_smooth(method = 'lm') #+ 
-  #facet_wrap(.~pairID, scale = 'free')
-
-
-df_corr %>% 
-  ggplot(aes(x = trap_1, y = trap_2)) + 
-  geom_point() + 
-  geom_abline(intercept = 0, slope = 1, color = "red", lwd = 0.8, lty = 'dashed') +
-  geom_smooth(method = 'gam', formula = y ~ s(x, bs = "cs", k = 4)) + 
-  facet_wrap(.~year, scale = 'free')
-
-
-
-#data_filtered <- data %>% 
- # na.omit() # This removes rows with any NAs across all columns
-
-# check outliers in beetle counts
-boxplot(dat_fin_counts_m$sum_ips)
-boxplot(log(dat_fin_counts_m$sum_ips))
-
 
 
 
