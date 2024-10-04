@@ -354,7 +354,7 @@ ggsave(filename = 'outFigs/vegetation_weather_summary3.png',
 
 
 
-# get final tables fo rthe moel
+# get final tables fo the model -------------------------------------------------
 
 
 # table for ips counts, peak diff
@@ -395,7 +395,7 @@ dat_fin_agg_m_scaled <- dat_fin_agg_m %>%
 
 
 
-####GAM: Find the best predictor lags  (simple) --------------------------------------------------------------- 
+####GAM: Find the best predictor lags  (univariate) --------------------------------------------------------------- 
 dependent_vars_counts <-  c("sum_ips", "peak_diff")
 dependent_vars_doy    <-  c("tr_agg_doy", "tr_peak_doy")
 
