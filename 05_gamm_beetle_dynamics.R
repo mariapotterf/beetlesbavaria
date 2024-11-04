@@ -393,28 +393,6 @@ dat_fin_agg_m <-
   na.omit()
 nrow(dat_fin_agg_m)  # 1080
 
-# scale IPS_count data and AGG_doy tables --------
-# Specify the columns to skip
-columns_to_skip_counts <- c("year", "trapID", "sum_ips", "tr_peak_doy", "peak_diff","peak_doy",  "pairID", "x", "y", "year_fact")
-columns_to_skip_agg <- c("year", "trapID", "tr_agg_doy", "tr_peak_doy","agg_doy",  "pairID", "x", "y", "year_fact")
-
-
-# Scale and center the remaining numeric columns
-dat_fin_counts_m_scaled <- dat_fin_counts_m %>%
-  mutate(across(
-    .cols = where(is.numeric) & !all_of(columns_to_skip_counts),
-    .fns = ~ scale(.) %>% as.vector()
-  ))
-
-
-# Scale and center the remaining numeric columns
-dat_fin_agg_m_scaled <- dat_fin_agg_m %>%
-  mutate(across(
-    .cols = where(is.numeric) & !all_of(columns_to_skip_agg),
-    .fns = ~ scale(.) %>% as.vector()
-  ))
-
-
 
 #### Calculate the correlation matrix for all predictors and their lags ---------------------------
 
