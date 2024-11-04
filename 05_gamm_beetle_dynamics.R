@@ -426,10 +426,10 @@ avg_data <- dat_spei_lags %>%
             agg_doy     = mean(agg_doy, na.rm = TRUE),
             peak_doy    = mean(peak_doy, na.rm = TRUE),
             # SPEIS - spei3
-            spei_lag0        = mean(spei, na.rm = TRUE),
-            spei_lag1   = mean(spei_lag1, na.rm = TRUE), # for agg_doy
-            spei_lag2   = mean(spei_lag2, na.rm = TRUE),
-            # SPEI 12
+            # spei_lag0        = mean(spei, na.rm = TRUE),
+            # spei_lag1   = mean(spei_lag1, na.rm = TRUE), # for agg_doy
+            # spei_lag2   = mean(spei_lag2, na.rm = TRUE),
+            # # SPEI 12
             spei12_lag0        = mean(spei12, na.rm = TRUE),
             spei12_lag1   = mean(spei12_lag1, na.rm = TRUE), # for agg_doy
             spei12_lag2   = mean(spei12_lag2, na.rm = TRUE),
@@ -438,10 +438,10 @@ avg_data <- dat_spei_lags %>%
             tmp_lag1    = mean(tmp_lag1, na.rm = TRUE),
             tmp_lag2    = mean(tmp_lag2, na.rm = TRUE),  # for agg_doy
             # TMP_z
-            tmp_z_lag0       = mean(tmp_z, na.rm = TRUE),
-            tmp_z_lag1  = mean(tmp_z_lag1, na.rm = TRUE),
-            tmp_z_lag2  = mean(tmp_z_lag2, na.rm = TRUE),  # for agg_doy
-          
+            # tmp_z_lag0       = mean(tmp_z, na.rm = TRUE),
+            # tmp_z_lag1  = mean(tmp_z_lag1, na.rm = TRUE),
+            # tmp_z_lag2  = mean(tmp_z_lag2, na.rm = TRUE),  # for agg_doy
+            # 
             x           = mean(x, na.rm = TRUE),
             y           = mean(y, na.rm = TRUE)
             ) %>%
@@ -466,92 +466,16 @@ m.gamma <- gamm(tr_agg_doy ~ s(year, k = 7) +
            correlation = corAR1(form = ~ year | pairID))
 
 appraise(m.gamma$gam)
-
+boxplot(avg_data$tr_agg_doy)
 
 # gamme is better then quasi and betar!
 # filter extreme values: occuring too late in a year ()
 avg_data_agg <- avg_data %>% 
   dplyr::filter(tr_agg_doy < 0.54)
 
-# m1.agg.gamma one converges well!! - but seems very wiggly in teh iteraction
-m1.agg.gamma <- gamm(tr_agg_doy ~ s(year, k = 6) + 
-                       s(tmp_z_lag2, k = 7) + 
-                       s(spei_z_lag1, k = 5) + 
-             te(tmp_z_lag2, spei_z_lag1, k = 20) + 
-             #s(x, y, bs = 'gp', k = 15) + 
-             s(pairID, bs = 're'),
-             data = avg_data_agg , 
-           family = Gamma(link = "log"),
-           correlation = corAR1(form = ~ year | pairID))
-
-# test simpler model, change spline type: works well without xy!
-m2.agg.gamma <- gamm(tr_agg_doy ~ s(year, k = 6) + 
-                       s(tmp_z_lag2, k = 3,bs = "cs") + 
-                       s(spei_z_lag1, k = 3) + 
-                       te(tmp_z_lag2, spei_z_lag1, k = 8, bs = "cs") + 
-                       #s(x, y, bs = 'gp', k = 30) + 
-                       s(pairID, bs = 're'),
-                     data = avg_data_agg , 
-                     family = Gamma(link = "log"),
-                     correlation = corAR1(form = ~ year | pairID))
-
-AIC(m2.agg.gamma$lme, m1.agg.gamma$lme)
-#boxplot(avg_data_agg$tr_agg_doy)
-summary(m2.agg.gamma$gam)
-appraise(m2.agg.gamma$gam)
-k.check(m2.agg.gamma$gam)
-gam.check(m2.agg.gamma$gam)
-plot(m2.agg.gamma$gam, page = 1)
-
-
-###### PEAK DOY ------------------------------------
-m.peak.gamma <- gamm(tr_peak_doy ~ s(year, k = 6) + s(tmp_z_lag1, k = 5) + 
-                       s(spei_z_lag2, k = 5) + 
-                   te(tmp_z_lag1, spei_z_lag2, k = 20) + 
-                   s(x, y, bs = 'gp', k = 50) + 
-                   s(pairID, bs = 're'),
-                   data = avg_data_filt, 
-                 family = Gamma(link = "log"),
-                 correlation = corAR1(form = ~ year | pairID))
-
-appraise(m.peak.gamma$gam)
-plot(m.peak.gamma$gam, page = 1)
-k.check(m.peak.gamma$gam)
-gam.check(m.peak.gamma$gam)
-summary(m.peak.gamma$gam)
-
-###### PEAK DIFF TW  ------------------------------------
-
-m.peak.diff <- gamm(peak_diff ~ s(year, k = 6) + s(tmp_z_lag1, k = 5) + s(spei_z_lag2, k = 5) + 
-                   te(tmp_z_lag1, spei_z_lag2, k = 20) + 
-                   s(x, y, bs = 'gp', k = 15) + 
-                   s(pairID, bs = 're'),data = avg_data, 
-                 family = nb, #Gamma(link = "log"),
-                 #family = betar, 
-                 correlation = corAR1(form = ~ year | pairID))
-
-
 # remove outliers: Piding
 avg_data_peak_diff <- avg_data %>% 
   dplyr::filter(!pairID %in% c('Piding', 'Gangkofen'))
-
-m.peak.diff.tw <- gamm(peak_diff ~ s(year, k = 6) +
-                         s(tmp_z_lag1, k = 5) +
-                         s(spei_z_lag2, k = 5) + 
-                      te(tmp_z_lag1, spei_z_lag2, k = 20) + 
-                      s(x, y, bs = 'gp', k = 50) + 
-                      s(pairID, bs = 're'),
-                        data = avg_data_peak_diff, 
-                      family = tw,
-                      correlation = corAR1(form = ~ year | pairID))
-
-appraise(m.peak.diff.tw$gam)
-summary(m.peak.diff.tw$gam)
-k.check(m.peak.diff.tw$gam)
-gam.check(m.peak.diff.tw$gam)
-plot(m.peak.diff.tw$gam, page = 1)
-
-
 
 
 ###### SUM IPS TW  ------------------------------------
