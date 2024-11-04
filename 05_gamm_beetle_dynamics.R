@@ -199,6 +199,17 @@ dat_spei_lags <-  dat_fin %>%
 nrow(dat_spei_lags)
 
 
+# list predictors to test
+selected_predictors <- c('sum_ips', 'sum_ips_lag1','sum_ips_lag2',
+                         #'log_sum_ips', 'log_sum_ips_lag1','sum_ips_lag2',
+                         'tr_agg_doy'   , 'tr_agg_doy_lag1', 'tr_agg_doy_lag2' ,
+                         'tr_peak_doy', 'tr_peak_doy_lag1','tr_peak_doy_lag2',
+                         'peak_diff', 'peak_diff_lag1',  'peak_diff_lag2',
+                         'spei',  'spei_lag1','spei_lag2',
+                         'tmp_z',  'tmp_z_lag1', 'tmp_z_lag2'  
+) 
+
+
 
 # check correlation between tmp and spei ---------------------------------------
 # Calculate pairwise correlations for numeric columns
@@ -1460,15 +1471,6 @@ lisa_merged_df_avg <- lisa_merged_df_avg %>%
 
 dependent_moran <-  c("Morans_I_log")
 
-# list predictors to test
-selected_predictors <- c('sum_ips', 'sum_ips_lag1','sum_ips_lag2',
-                         #'log_sum_ips', 'log_sum_ips_lag1','sum_ips_lag2',
-                         'tr_agg_doy'   , 'tr_agg_doy_lag1', 'tr_agg_doy_lag2' ,
-                         'tr_peak_doy', 'tr_peak_doy_lag1','tr_peak_doy_lag2',
-                         'peak_diff', 'peak_diff_lag1',  'peak_diff_lag2',
-                        'spei',  'spei_lag1','spei_lag2',
-                        'tmp_z',  'tmp_z_lag1', 'tmp_z_lag2'  
-) 
 
 
 plot(lisa_merged_df_avg$sum_ips, lisa_merged_df_avg$Morans_I_log )
