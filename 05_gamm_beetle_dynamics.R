@@ -526,42 +526,6 @@ cor(avg_data$spei12_lag1, avg_data$tmp_lag0)
 
 
 ##### use previous years values: ----------------------------------------------------
-###### tmp_z  -------------------------------------------------------------------
-m.previous.tmp_z0_spei12_0 <- gamm(sum_ips ~ 
-                            s(tmp_z_lag0, k = 5) +
-                            s(spei12_lag0, k = 8) + 
-                            te(tmp_z_lag0, spei12_lag0, k = 7) + 
-                            s(sum_ips_lag1, k = 5) + # Added term for previous beetle counts
-                            s(x,y),
-                          data = avg_data_filt_lagged, 
-                          family = tw,
-                          control = control)
-
-
-m.previous.tmp_z0_spei12_1 <- gamm(sum_ips ~ 
-                                     s(tmp_z_lag0, k = 5) +
-                                     s(spei12_lag1, k = 8) + 
-                                     te(tmp_z_lag0, spei12_lag1, k = 7) + 
-                                     s(sum_ips_lag1, k = 5) + # Added term for previous beetle counts
-                                     s(x,y),
-                                   data = avg_data_filt_lagged, 
-                                   family = tw,
-                                   control = control)
-
-gam.check(m.previous.tmp_z0_spei12_1$gam)
-summary(m.previous.tmp_z0_spei12_1$gam)
-
-AIC(m.previous.tmp_z0_spei12_2, m.previous.tmp_z0_spei12_1, m.previous.tmp_z0_spei12_0)
-
-m.previous.tmp_z0_spei12_2 <- gamm(sum_ips ~ 
-                                  s(tmp_z_lag0, k = 5) +
-                                  s(spei12_lag2, k = 8) + 
-                                  te(tmp_z_lag0, spei12_lag2, k = 7) + 
-                                  s(sum_ips_lag1, k = 5) + # Added term for previous beetle counts
-                                  s(x,y),
-                                data = avg_data_filt_lagged, 
-                                family = tw,
-                                control = control)
 
 ##### tmp ---------------------
 
