@@ -747,8 +747,6 @@ plot(predict_data)
 
 
 # save final models : current year TMP and previous year SPEI12 ---------------------------------------
-
-###### PREVIOUS get final models ----------------
 fin.m.counts.previous.tw    <- m.previous.tmp0_spei12_1_te$gam
 fin.m.peak.diff.previous.tw <- m.peak.diff.previous.tmp_0_spei12_1$gam
 fin.m.agg.doy.gamma         <- m.agg.previous_tmp0_spei12_1$gam
@@ -813,40 +811,6 @@ print(p3)
 
 
 
-# Save models for RMarkdown file -------------------
-
-# Save the models and data to an .RData file
-save(
-  m.previous.tmp0_spei12_1, 
-  m.previous.tmp_z0_spei12_1,            # tmp_z is better
-  
-  # test for lags
-  m.previous.tmp_z0_spei12_2, 
-  #m.previous.tmp_z0_spei12_1, 
-  m.previous.tmp_z0_spei12_0,
-  
-  m.peak.diff.previous.tmp_0_spei12_1,
-  m.peak.diff.previous.tmp_z_0_spei12_1, # tmp is better 
-  
-  m.agg.previous_tmp0_spei12_1_year_re,   # without random effect is better
-  m.agg.previous_tmp0_spei12_1,           # tmp is better
-  m.agg.previous_tmp_z0_spei12_1,
-  
-  m.peak.doy.previous_tmp0_spei12_1_bam,   # tmp is better 
-  m.peak.doy.previous_tmp_z0_spei12_1_bam,
-   
-  avg_data_filt_lagged,                   # for ips counts and peak_diff
-   
-  avg_data_agg_no_out,                    # for doy_agg, 
-  avg_data_peak_no_out,                   # peak_agg
-  file = "outData/models_and_data.RData")
-
-
-
-
-
-
-# END
 
 ##### TW PREV COUNTS --------------------------------------------------------------
 
