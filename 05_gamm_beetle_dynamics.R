@@ -487,8 +487,19 @@ avg_data_filt <- avg_data %>%
   dplyr::filter(!pairID %in% pair_outliers )
 
 
+avg_data_lagged <- avg_data %>% 
+  group_by(pairID) %>%
+  arrange(year, .by_group = TRUE) %>%
+  # mutate(peak_diff = as.integer(round(peak_diff))) %>% 
+  mutate(sum_ips_lag1          = lag(sum_ips, n = 1, default = NA),  # laf previous year values to adress autocorrelation
+         peak_diff_lag1        = lag(peak_diff , n = 1, default = NA),
+         tr_agg_doy_lag1       = lag(tr_agg_doy , n = 1, default = NA),
+         tr_peak_doy_lag1      = lag(tr_peak_doy , n = 1, default = NA)) #%>%  
+  
+
 nrow(avg_data_filt) # 518
 nrow(avg_data) # 539
+nrow(avg_data_lagged) # 539
 
 # create extra table for sum_ips_lag1
 
@@ -507,7 +518,8 @@ avg_data_filt_lagged <- avg_data_filt %>% #  avg_data %>% #
 avg_data_filt_lagged$f_year <- droplevels(avg_data_filt_lagged$f_year)
 
 
-avg_data_filt_lagged %>% 
+#avg_data_filt_lagged %>% 
+  avg_data_lagged %>%
   dplyr::filter(pairID == 'Anzinger_Forst') %>% 
   dplyr::select(year, sum_ips, sum_ips_lag1, 
                 tr_peak_doy, tr_peak_doy_lag1 )
@@ -529,92 +541,53 @@ cor(avg_data$spei12_lag1, avg_data$tmp_lag0)
 
 ##### tmp ---------------------
 
-m.previous.tmp0_spei12_0 <- gamm(sum_ips ~ 
-                                     s(tmp_lag0, k = 5) +
-                                     s(spei12_lag0, k = 8) + 
-                                     te(tmp_lag0, spei12_lag0, k = 7) + 
+m.previous.tmp0_spei12_1_te <- gamm(sum_ips ~ 
+                                     # tmp_lag0 +
+                                     s(tmp_lag0, k = 3) +
+                                     s(spei12_lag1, k = 3) + 
+                                     te(tmp_lag0, spei12_lag1, k = 5) + 
                                      s(sum_ips_lag1, k = 5) + # Added term for previous beetle counts
                                      s(x,y),
-                                   data = avg_data_filt_lagged, 
+                                   data = avg_data_lagged, #avg_data_filt_lagged, 
                                    family = tw,
                                    control = control)
+vis.gam(m.previous.tmp0_spei12_1_te$gam)
+m.previous.tmp0_spei12_1_ti <- gamm(sum_ips ~ 
+                                   s(tmp_lag0, k = 5) +
+                                   # tmp_lag0 +
+                                   s(spei12_lag1, k = 5) + 
+                                   ti(tmp_lag0, spei12_lag1, k = 5) + 
+                                   s(sum_ips_lag1, k = 5) + # Added term for previous beetle counts
+                                   s(x,y),
+                                 data = avg_data_lagged, #avg_data_filt_lagged, 
+                                 family = tw,
+                                 control = control)
+plot.gam(m.previous.tmp0_spei12_1_ti$gam)
+#avg_data_filt_lagged %>% 
+  avg_data_lagged %>%
+    ggplot(aes(x = tmp_lag0, y = sum_ips, color = spei12_lag1)) +
+    geom_point() +
+    geom_smooth(method = "lm") +
+    labs(title = "Interaction between Temperature and SPEI12",
+         x = "Temperature (tmp_lag0)",
+         y = "Sum of Ips (sum_ips)",
+         color = "SPEI12 Lag1") +
+    theme_minimal()  
 
+plot(avg_data_filt_lagged$tmp_lag0, avg_data_filt_lagged$sum_ips)
 
-m.previous.tmp0_spei12_1 <- gamm(sum_ips ~ 
-                                     s(tmp_lag0, k = 5) +
-                                     s(spei12_lag1, k = 5) + 
-                                     te(tmp_lag0, spei12_lag1, k = 8) + 
-                                     s(sum_ips_lag1, k = 5) + # Added term for previous beetle counts
-                                     s(x,y),
-                                   data = avg_data_filt_lagged, 
-                                   family = tw,
-                                   control = control)
-gam.check(m.previous.tmp_z0_spei12_1$gam)
-k.check(m.previous.tmp_z0_spei12_1$gam)
-summary(m.previous.tmp_z0_spei12_1$gam)
+AIC(m.previous.tmp0_spei12_1_te, m.previous.tmp0_spei12_1_ti)
+gam.check(m.previous.tmp0_spei12_1_te$gam)
+k.check(m.previous.tmp0_spei12_1_te$gam)
+summary(m.previous.tmp0_spei12_1_te$gam)
+summary(m.previous.tmp0_spei12_1_ti$gam)
 
-m.previous.tmp0_spei12_2 <- gamm(sum_ips ~ 
-                                     s(tmp_lag0, k = 5) +
-                                     s(spei12_lag2, k = 8) + 
-                                     te(tmp_lag0, spei12_lag2, k = 7) + 
-                                     s(sum_ips_lag1, k = 5) + # Added term for previous beetle counts
-                                     s(x,y),
-                                   data = avg_data_filt_lagged, 
-                                   family = tw,
-                                   control = control)
-
-
-
-
-AIC(m.previous.tmp_z0_spei12_2, m.previous.tmp_z0_spei12_1,m.previous.tmp_z0_spei12_0,
-    #m.previous.tmp0_spei12_2, 
-    m.previous.tmp0_spei12_1,m.previous.tmp0_spei12_0)
-m.previous.tmp_z1_spei1 <- gamm(sum_ips ~ 
-                                  s(tmp_z_lag1, k = 5) +
-                                  s(spei_lag1, k = 8) + 
-                                  te(tmp_z_lag1, spei_lag1, k = 7) + 
-                                  s(sum_ips_lag1, k = 5) + # Added term for previous beetle counts
-                                  s(x,y),
-                                data = avg_data_filt_lagged, 
-                                family = tw,
-                                control = control)
-
-m.previous.tmp_z1_spei2 <- gamm(sum_ips ~ 
-                                  s(tmp_z_lag1, k = 5) +
-                                  s(spei_lag2, k = 8) + 
-                                  te(tmp_z_lag1, spei_lag2, k = 7) + 
-                                  s(sum_ips_lag1, k = 5) + # Added term for previous beetle counts
-                                  s(x,y),
-                                data = avg_data_filt_lagged, 
-                                family = tw,
-                                control = control)
-
-m.previous.tmp_z2_spei2 <- gamm(sum_ips ~ 
-                                  s(tmp_z_lag2, k = 5) +
-                                  s(spei_lag2, k = 8) + 
-                                  te(tmp_z_lag2, spei_lag2, k = 7) + 
-                                  s(sum_ips_lag1, k = 5) + # Added term for previous beetle counts
-                                  s(x,y),
-                                data = avg_data_filt_lagged, 
-                                family = tw,
-                                control = control)
-
+predict_data <- ggpredict(m.previous.tmp0_spei12_1_te$gam, terms = c('tmp_lag0'))
+predict_data <- ggpredict(m.previous.tmp0_spei12_1_te$gam, terms = c('spei12_lag1'))
+predict_data <- ggpredict(m.previous.tmp0_spei12_1_te$gam, terms = c('tmp_lag0', 'spei12_lag1'))
+plot(predict_data)
 
 #### previous peak_diff  ------------------------------------------------------
-
-
-m.peak.diff.previous.tmp_z_0_spei12_1 <- gamm(peak_diff ~ 
-                               s(tmp_z_lag0, k = 5) +
-                               s(spei12_lag1, k = 8) + 
-                               te(tmp_z_lag0, spei12_lag1, k = 7) + 
-                               s(peak_diff_lag1 , k = 5) + # Added term for previous beetle counts
-                                 s(x,y),
-                               #s(pairID, bs = 're') +
-                               #s(f_year, bs = 're'),
-                             data = avg_data_filt_lagged, 
-                             family = tw,
-                             control = control)
-
 
 m.peak.diff.previous.tmp_0_spei12_1 <- gamm(peak_diff ~ 
                                                 s(tmp_lag0, k = 5) +
