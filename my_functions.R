@@ -4,8 +4,8 @@
 # plot labels: 
 lab_popul_level       = "Population level [#]"
 lab_colonization_time = "Aggregation timing [DOY]"
-lab_peak_time         = "Peak swarming timing [DOY]"
-lab_peak_growth       = "Peak swarming intensity [#]"
+lab_peak_time         = "Peak sw. timing [DOY]"
+lab_peak_growth       = "Peak sw. intensity [#]"
 
 
 
@@ -47,7 +47,8 @@ create_effect_previous_year <- function(data, avg_data, line_color = "grey40",
   y_col <- ensym(y_col)
   
   p <- ggplot() + 
-    geom_point(data = avg_data, aes(x = !!x_col, y = !!y_col, group = pairID), col = "gray60", alpha = 0.4) +
+    geom_point(data = avg_data, aes(x = !!x_col, y = !!y_col, group = pairID), 
+               col = "gray80", alpha = 0.3, size = 0.3) +
     
     geom_ribbon(data = data, aes(x = x, ymin = conf.low, ymax = conf.high), alpha = 0.25, fill = line_color) +
     geom_line(data = data, aes(x = x, y = predicted), color = line_color) +
@@ -76,7 +77,7 @@ create_effect_plot <- function(data,
   y_col <- ensym(y_col)
   
   p <- ggplot() +
-    geom_point(data = avg_data, aes(x = !!x_col, y = !!y_col), col = "gray60", alpha = 0.3) +
+    geom_point(data = avg_data, aes(x = !!x_col, y = !!y_col), col = "gray80", alpha = 0.3,size = 0.3) +
     geom_line(data = data, aes(x = x, y = predicted), color = line_color) +
     geom_ribbon(data = data, aes(x = x, ymin = conf.low, ymax = conf.high), alpha = 0.25, fill = line_color) +
     labs(x = x_title,
@@ -104,7 +105,7 @@ plot_effect_interactions <- function(data,
   y_col <- ensym(y_col)
   
   p<- ggplot() +
-    geom_point(data = avg_data, aes(x = !!x_col, y = !!y_col), col = "gray60", alpha = 0.4) +
+    geom_point(data = avg_data, aes(x = !!x_col, y = !!y_col), col = "gray80", alpha = 0.4, size = 0.3) +
     geom_ribbon(data=data, aes(x = x,
                                ymin = conf.low, 
                                ymax = conf.high, 
