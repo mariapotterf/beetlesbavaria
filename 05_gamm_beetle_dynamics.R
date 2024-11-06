@@ -574,7 +574,7 @@ avg_data_filt_lagged$f_year <- droplevels(avg_data_filt_lagged$f_year)
 
 
 
-# TEST : discuss with Rupert and Dominic about best predictors ------------------
+# Final predictors: current year tmp_lag0 & spei12_lag1 best predictors ------------------
 # 
 # increase the number of iterations to converge the model
 control <- list(niterPQL = 50)
@@ -582,20 +582,18 @@ control <- list(niterPQL = 50)
 cor(avg_data$spei12_lag1, avg_data$tmp_lag0)
 
 # makde models with diffr autocorrelation structur (direct vs values from previous years) and compare their performacce 
+
+
 #### IPS_SUM ---------------------------------------------------------------------- 
-
-
-##### use previous years values: ----------------------------------------------------
-
-##### tmp ---------------------
-
 m.previous.tmp0_spei12_1_te <- gamm(sum_ips ~ 
                                      # tmp_lag0 +
                                      s(tmp_lag0, k = 3) +
                                      s(spei12_lag1, k = 3) + 
-                                     te(tmp_lag0, spei12_lag1, k = 5) + 
+                                     te(tmp_lag0, spei12_lag1, k = 7) + 
                                      s(sum_ips_lag1, k = 5) + # Added term for previous beetle counts
-                                     s(x,y),
+                                     s(x,y) +
+                                      s(pairID, bs = 're') +
+                                      s(f_year, bs = 're'),
                                    data = avg_data_lagged, #avg_data_filt_lagged, 
                                    family = tw,
                                    control = control)
@@ -604,10 +602,14 @@ AIC(m.previous.tmp0_spei12_1_te, m.previous.tmp0_spei12_1_ti)
 gam.check(m.previous.tmp0_spei12_1_te$gam)
 k.check(m.previous.tmp0_spei12_1_te$gam)
 summary(m.previous.tmp0_spei12_1_te$gam)
-summary(m.previous.tmp0_spei12_1_ti$gam)
+appraise(m.previous.tmp0_spei12_1_te$gam)
 
 predict_data <- ggpredict(m.previous.tmp0_spei12_1_te$gam, terms = c('tmp_lag0'))
+plot(predict_data)
+
 predict_data <- ggpredict(m.previous.tmp0_spei12_1_te$gam, terms = c('spei12_lag1'))
+plot(predict_data)
+
 predict_data <- ggpredict(m.previous.tmp0_spei12_1_te$gam, terms = c('tmp_lag0', 'spei12_lag1'))
 plot(predict_data)
 
@@ -929,9 +931,9 @@ sjPlot::tab_df(model_metrics_moran,
 #fin.m.moran
 
 m.morans.previous <- gam(Morans_I_log ~ 
-                            s(tmp_z, k = 8) +
-                            s(spei_lag1, k = 6) + 
-                            te(tmp_z, spei_lag1, k = 5) + 
+                            s(tmp, k = 8) +
+                            s(spei12_lag1, k = 6) + 
+                            te(tmp, spei12_lag1, k = 5) + 
                            s(sum_ips, k =5, bs = 'tp') + # Added term for  beetle counts
                           # s(sum_ips_lag1, k = 5) + # Added term for previous beetle counts
                             s(Morans_I_log_lag1, k = 5),# + # Added term for previous MOrans I 
@@ -1169,13 +1171,6 @@ sjPlot::tab_df(means_dat_fin_year,
 
 
 
-#cor(avg_data_sum_ips$tmp_z, avg_data_sum_ips$sum_ips)
-# Make table for response and predictor variables for models:
-
-
-
-
-
 # Effect plots ------------------------------------------------------------
 
 
@@ -1199,36 +1194,12 @@ avg_data_filt_lagged_plotting <- avg_data_filt_lagged %>%
 
 
 
-# Example usage:
-p_spagett_ips       <- plot_data_with_average(avg_data_filt_lagged_plotting, "sum_ips", lab_popul_level,   
-                                              my_title = paste("[a]", 'Population level', '\n[#*1000]'))
-p_spagett_agg_doy   <- plot_data_with_average(avg_data_filt_lagged_plotting, "agg_doy", lab_colonization_time, 
-                                              my_title = paste("[b]", 'Aggregation timing', '\n[DOY]'))
-p_spagett_peak_doy  <- plot_data_with_average(avg_data_filt_lagged_plotting, "peak_doy", lab_peak_time, 
-                                              my_title = paste("[c]", 'Peak swarming timing', '\n[DOY]'))
-p_spagett_peak_diff <- plot_data_with_average(avg_data_filt_lagged_plotting, "peak_diff", lab_peak_growth, 
-                                              my_title = paste("[d]", 'Peak swarming intensity', '\n[#*10]'))
-
-
-
-
-#windows(7,6)
-p_spagetti <- ggarrange(p_spagett_ips, 
-                        p_spagett_agg_doy, 
-                        p_spagett_peak_doy, 
-                        p_spagett_peak_diff, ncol = 4,nrow = 1, align = 'hv')
-p_spagetti
-#ggsave(filename = 'outFigs/Fig1.png', plot = p_spagetti, width = 7, height = 6, dpi = 300, bg = 'white')
-
-
-
-
 
 
 ##### PLOT: IPS SUM counts -----------------------------------------------------------
 
 temp_label <- expression(paste("Temp. [", degree, "C]", sep = ""))#expression(paste("Temperature [", degree, "C]", sep=""))
-spei_label <- 'SPEI [dim.]'
+spei_label <- 'SPEI lag1 [dim.]'
 
 # Define the transformation function
 adjust_predictions_counts <- function(df, divisor) {
@@ -1294,31 +1265,35 @@ p1.count <-
                      x_col = "tmp_lag0", 
                      y_col = "sum_ips", 
                      line_color = "red", 
-                     x_title = temp_label,#expression(paste("Temp. lag1 [z-score]")),
+                     x_title = temp_label,
                      y_title = paste(lab_popul_level, '*1000'), 
                      x_annotate = 15, 
-                     lab_annotate = "**")
+                     lab_annotate = "0.59")
 
 (p1.count)
 p2.count <- create_effect_plot(data = p2, avg_data = avg_data_filt_lagged_plotting, 
                                x_col = "spei12_lag1", y_col = "sum_ips", 
                                line_color = "blue", 
-                               x_title = spei_label, expression(paste("SPEI. lag2 [dim.]")),#spei_label , 
+                               x_title = spei_label,
                                y_title = paste(lab_popul_level, '*1000'), 
                                x_annotate = -0.5, 
-                               lab_annotate = "***")
+                               lab_annotate = "0.59")
 (p2.count)
 p3.count <- plot_effect_interactions(data = p3, 
                                      avg_data = avg_data_filt_lagged_plotting, 
                                      x_col = "tmp_lag0", 
                                      y_col = "sum_ips", 
-                                     temp_label = temp_label, #expression(paste("Temp. lag1 [z-score]")), 
+                                     temp_label = temp_label, 
                                      y_title = paste(lab_popul_level, '*1000'),
                                      x_annotate = 15,
-                                     lab_annotate = "**") 
+                                     lab_annotate = "*") 
 
 (p3.count)
-ggarrange(p0.count,p1.count,p2.count, p3.count)
+ggarrange(p0.count,p1.count,p2.count, p3.count,
+          labels = c("[a]", "[b]", "[c]", "[d]"), # Custom labels
+          label.x = 0.1, # Adjust x-position (0 is left, 1 is right)
+          label.y = 0.9, # Adjust y-position (1 is top, 0 is bottom)
+          font.label = list(size = 8, face = "plain"))
 
 
 
@@ -1370,10 +1345,10 @@ p1.agg <-
 p2.agg <- create_effect_plot(data = p2, avg_data = filter(avg_data_filt_lagged_plotting, agg_doy < 200),    
                                x_col = "spei12_lag1", y_col = "agg_doy", 
                                line_color = "blue", 
-                               x_title = spei_label, #expression(paste("SPEI lag1 [dim.]")) , 
+                               x_title = spei_label,
                                y_title = lab_colonization_time, 
                                x_annotate = -0.5, 
-                               lab_annotate = "0.49")
+                               lab_annotate = "0.40")
 (p2.agg)
 p3.agg <- plot_effect_interactions(p3,
                                    avg_data = filter(avg_data_filt_lagged_plotting, agg_doy < 200),
@@ -1382,7 +1357,7 @@ p3.agg <- plot_effect_interactions(p3,
                                      temp_label = temp_label, #expression(paste("Temp. lag2 [z-score]")), 
                                      y_title = lab_colonization_time,
                                      x_annotate = 15,
-                                     lab_annotate = "***") 
+                                     lab_annotate = "0.49") 
 
 (p3.agg)
 
@@ -1422,16 +1397,16 @@ p1.peak <-
                      x_title = temp_label, #expression(paste("Temp. lag2 [z-score]")) , 
                      y_title = lab_peak_time, 
                        x_annotate = 15, 
-                     lab_annotate = "0.71")
+                     lab_annotate = "***")
 
 (p1.peak)
 p2.peak <- create_effect_plot(data = p2,  avg_data = filter(avg_data_filt_lagged_plotting, tr_peak_doy_lag1_plot  < 220), 
                              x_col = "spei12_lag1", y_col = "peak_doy", 
                              line_color = "blue", 
-                             x_title = spei_label, #expression(paste("SPEI lag1 [dim.]")) , 
+                             x_title = spei_label, 
                              y_title = lab_peak_time, 
                              x_annotate = -0.5, 
-                             lab_annotate = "**")
+                             lab_annotate = "***")
 (p2.peak)
 p3.peak <- plot_effect_interactions(p3, 
                                     avg_data = filter(avg_data_filt_lagged_plotting, tr_peak_doy_lag1_plot  < 220),
@@ -1440,7 +1415,7 @@ p3.peak <- plot_effect_interactions(p3,
                                    temp_label = temp_label, #expression(paste("Temp. lag2 [z-score]")), 
                                    y_title = lab_peak_time,
                                    x_annotate = 15,
-                                   lab_annotate = "0.09") 
+                                   lab_annotate = "***") 
 
 (p3.peak)
 
@@ -1467,7 +1442,7 @@ p3 <- adjust_predictions_counts(p3, divisor_diff)
 
 
 p0.peak.diff <- create_effect_previous_year(data = p0, 
-                                            avg_data = filter(avg_data_filt_lagged_plotting, tmp_lag0  < 4),
+                                            avg_data = avg_data_filt_lagged_plotting, #dplyr::filter(avg_data_filt_lagged_plotting, tmp_lag0  < 18),
                                            x_col = "peak_diff_lag1",
                                y_col = "peak_diff",
                                line_color = "darkgreen", 
@@ -1478,66 +1453,104 @@ p0.peak.diff <- create_effect_previous_year(data = p0,
 (p0.peak.diff)
 p1.peak.diff <- 
   create_effect_plot(data = p1, 
-                     avg_data = filter(avg_data_filt_lagged_plotting, tmp_lag0  < 4), 
+                     avg_data = avg_data_filt_lagged_plotting, #filter(avg_data_filt_lagged_plotting, tmp_lag0  <18), 
                      x_col = "tmp_lag0", y_col = "peak_diff", 
                      line_color = "red", 
-                     x_title = temp_label, #expression(paste("Temp. lag1 [z-score]")) , 
+                     x_title = temp_label, 
                      y_title = lab_peak_growth, 
                      x_annotate = 15, 
-                     lab_annotate = "0.14")
+                     lab_annotate = "*")
 
 (p1.peak.diff)
 p2.peak.diff <- create_effect_plot(data = p2,
-                                  avg_data = filter(avg_data_filt_lagged_plotting, tmp_lag0  < 4),
+                                  avg_data = avg_data_filt_lagged_plotting, #filter(avg_data_filt_lagged_plotting, tmp_lag0  < 4),
                                   x_col = "spei12_lag1", y_col = "peak_diff", 
                                line_color = "blue", 
-                               x_title = spei_label, #expression(paste("SPEI lag2 [dim.]")) , 
+                               x_title = spei_label,  
                                y_title = lab_peak_growth, 
                                x_annotate = -0.5, 
-                               lab_annotate = "0.14")
+                               lab_annotate = "*")
 (p2.peak.diff)
 p3.peak.diff <- plot_effect_interactions(p3,
-                                         avg_data = filter(avg_data_filt_lagged_plotting, tmp_lag0  < 4),
+                                         avg_data = avg_data_filt_lagged_plotting, #filter(avg_data_filt_lagged_plotting, tmp_lag0  < 4),
                                          x_col = "tmp_lag0", 
                                          y_col = "peak_diff", 
-                                     temp_label = temp_label, #expression(paste("Temp. lag1 [z-score]")), 
+                                     temp_label = temp_label, 
                                      y_title = lab_peak_growth,
                                      x_annotate = 15,
-                                     lab_annotate = "*") 
+                                     lab_annotate = "0.16") 
 
 (p3.peak.diff)
 ggarrange(p0.peak.diff,p1.peak.diff,p2.peak.diff,p3.peak.diff)
 
 
-# put in the same figure: tmp, spei, interaction, previous years on teh bottom
+### put in the same figure: tmp, spei, interaction, previous years on teh bottom -----
+
+p_spagett_ips       <- plot_data_with_average(avg_data_filt_lagged_plotting, "sum_ips", lab_popul_level,   
+                                              my_title = paste( 'Pop. level', '[#*1000]'))
+p_spagett_agg_doy   <- plot_data_with_average(avg_data_filt_lagged_plotting, "agg_doy", lab_colonization_time, 
+                                              my_title = paste('Aggregation timing', '[DOY]'))
+p_spagett_peak_doy  <- plot_data_with_average(avg_data_filt_lagged_plotting, "peak_doy", lab_peak_time, 
+                                              my_title = paste('Peak sw. timing', '[DOY]'))
+p_spagett_peak_diff <- plot_data_with_average(avg_data_filt_lagged_plotting, "peak_diff", lab_peak_growth, 
+                                              my_title = paste('Peak sw. intensity', '[#*10]'))
+
+
+
+
+#windows(7,6)
+p_spagetti <- ggarrange(p_spagett_ips, 
+                        p_spagett_agg_doy, 
+                        p_spagett_peak_doy, 
+                        p_spagett_peak_diff, ncol = 4,nrow = 1, align = 'hv',
+                        labels = c("[a]", "[b]", "[c]", "[d]"), # Custom labels
+                        label.x = 0.15, # Adjust x-position (0 is left, 1 is right)
+                        label.y = 0.85, # Adjust y-position (1 is top, 0 is bottom)
+                        font.label = list(size = 8, face = "plain"))
+p_spagetti
+#ggsave(filename = 'outFigs/Fig1.png', plot = p_spagetti, width = 7, height = 6, dpi = 300, bg = 'white')
+
+
 
 p.previous <- ggarrange(p0.count, p0.agg, p0.peak, p0.peak.diff, 
-                         ncol=4, nrow = 1 , #align = 'hv', 
-                         font.label = list(size = 8, color = "black", face = "plain", family = NULL) )
+                        labels = c("[e]", "[f]", "[g]", "[h]"), # Custom labels
+                        ncol=4, nrow = 1 , #align = 'hv', 
+                        label.x = 0.15, # Adjust x-position (0 is left, 1 is right)
+                        label.y = 0.85, # Adjust y-position (1 is top, 0 is bottom)
+                        font.label = list(size = 8, color = "black", face = "plain", family = NULL) )
 
 (p.previous)
 
 p.temp <-  ggarrange(p1.count, p1.agg, p1.peak, p1.peak.diff, 
-                     ncol=4, nrow = 1 , align = 'hv', 
+                     ncol=4, nrow = 1 , align = 'hv',
+                     label.x = 0.15, # Adjust x-position (0 is left, 1 is right)
+                     label.y = 0.85, # Adjust y-position (1 is top, 0 is bottom)
+                     labels = c("[i]", "[j]", "[k]", "[l]"),
                      font.label = list(size = 8, color = "black", face = "plain", family = NULL))
 
 
 p.spei <-  ggarrange(p2.count, p2.agg, p2.peak, p2.peak.diff, 
                      ncol=4, nrow = 1 , align = 'hv', 
+                     label.x = 0.15, # Adjust x-position (0 is left, 1 is right)
+                     label.y = 0.85, # Adjust y-position (1 is top, 0 is bottom)
+                     labels = c("[m]", "[n]", "[o]", "[p]"),
                      font.label = list(size = 8, color = "black", face = "plain", family = NULL))
 
 
 p.int <- ggarrange(p3.count,  p3.agg, p3.peak, p3.peak.diff,
+                   labels = c("[q]", "[r]", "[s]", "[t]"),
+                   label.x = 0.15, # Adjust x-position (0 is left, 1 is right)
+                   label.y = 0.9, # Adjust y-position (1 is top, 0 is bottom)
                    ncol=4, nrow = 1 , align = 'hv',common.legend = TRUE, legend = 'bottom',
                    font.label = list(size = 8, color = "black", face = "plain", family = NULL))
 windows(7,10)
 full_preds <- ggarrange(p_spagetti,
+                        p.previous,
                         p.temp, 
                         p.spei,  
-                        p.previous,
                         p.int,
                         ncol = 1, nrow= 5, 
-                        align = 'hv', heights = c(1.1, 1, 1, 1, 1.1),
+                        align = 'hv', heights = c(1, 1, 1, 1, 1.1),
                         widths = c(1, 1, 1, 1, 1))
 #"#009E73" 
 (full_preds)
