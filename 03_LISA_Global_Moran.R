@@ -91,94 +91,6 @@ ips_sum <-
   left_join(xy_df, by = c("falsto_name", 'year')) #%>% # df_xy3035
  # mutate(falsto_name = gsub("[^A-Za-z0-9_]", "", falsto_name)) #%>% 
 
-hist(ips_sum$sum_beetle)
-
-hist(ips_sum$log_sum_beetle)
-nrow(ips_sum)
-
-
-
-# Run LISA for each year separately
-years <- 2015:2021
-
-get_lisa <- function(i, ...) {
- 
-  #i = 2015
-  #  # Slice specific year
-  ips_sum_sub <-ips_sum %>%
-    filter(year == i)
-  #
-  #  # Local variation analysis (LISA) per year:
-  #  # Create a spatial points data frame
-  coordinates(ips_sum_sub) <- ~ x + y
-  #
-  #  # Create queen contiguity neighbors object
-  nb <- knn2nb(knearneigh(coordinates(ips_sum_sub),
-                          k = n_neighbors),  # nearest neighbor
-               sym = TRUE)
-  
-  #  # Calculate LISA
-  lisa_res_log<-localmoran(ips_sum_sub$log_sum_beetle, nb2listw(nb,style="W"))
-  lisa_res    <-localmoran(ips_sum_sub$sum_beetle, nb2listw(nb,style="W"))
-  #
-  # add LISA to points:
-  ips_sum_sub$Morans_I <-lisa_res[,1] # get the first column: Ii - local moran  stats
-  ips_sum_sub$clust <-attributes(lisa_res)$quadr$mean  # get classified data
-  
-  ips_sum_sub$Morans_I_log <-lisa_res_log[,1] # get the first column: Ii - local moran  stats
-  ips_sum_sub$clust_log    <-attributes(lisa_res_log)$quadr$mean  # get classified data
-  
-  #
-  # convert to sf for plotting
-  ips_sum_sub_sf <- st_as_sf(ips_sum_sub)
-  
-  return(ips_sum_sub_sf)
-}
-
-# Run LISA on all years separately
-lisa_out <- lapply(years, get_lisa )
-
-# Merge all in one sf
-lisa_merged_sf <- dplyr::bind_rows(lisa_out)
-
-st_crs(lisa_merged_sf) <- my_crs
-
-lisa_merged_df <- as.data.frame(lisa_merged_sf)
-
-# compare the MOra's I from log and non log ips sums
-lisa_merged_df %>% 
-ggplot(aes(x = Morans_I,
-           y = Morans_I_log #,
-           #color = factor(year)
-           )) + 
-  geom_point() +
- # geom_smooth() +
-  facet_wrap(~year) +
-  labs(y = "Moran's I [log(beetle sum)]",
-       x = "Moran's I [beetle sum]") +
-  theme_bw()
-
-
-
-lisa_merged_df %>% 
-  ggplot(aes(x = sum_beetle,
-             y = log_sum_beetle)) + 
-  geom_point()
-
-table(lisa_merged_df$clust, lisa_merged_df$clust_log )
-
-sum(table(lisa_merged$clust))
-sum(table(lisa_merged$clust_log ))
-
-lisa_merged_df %>% 
-  ggplot(aes(x = clust,
-             y = clust_log,
-             color = as.factor(year))) + 
-  geom_jitter() 
-  #facet_grid(~year)
-
-  
-# = TEST AVG DATA ----------------------------------------------------------
 
 #i = 2015
 library(sp)
@@ -242,18 +154,6 @@ st_crs(lisa_merged_sf_avg) <- my_crs
 lisa_merged_df_avg <- as.data.frame(lisa_merged_sf_avg)
 
 
-# compare the MOra's I from log and non log ips sums
-lisa_merged_df_avg %>% 
-  ggplot(aes(x = Morans_I,
-             y = Morans_I_log ,
-             color = factor(year)
-  )) + 
-  geom_point() +
-  # geom_smooth() +
-  facet_wrap(~year) +
-  labs(y = "Moran's I [log(beetle sum)]",
-       x = "Moran's I [beetle sum]")# +
-  #theme_bw()
 
 boxplot(lisa_merged_df_avg$Morans_I)
 boxplot(lisa_merged_df_avg$Morans_I_log)
