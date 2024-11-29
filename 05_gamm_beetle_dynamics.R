@@ -178,7 +178,7 @@ dat_spei_lags <-  dat_fin %>%
   group_by(trapID) %>%
   mutate(trapID = as.factor(trapID),
          pairID = as.factor(pairID),
-         year_f = as.factor(year)) %>% 
+         f_year = as.factor(year)) %>% 
   arrange(year, .by_group = TRUE) %>%
   # add lags
   mutate(sum_ips_lag1      = lag(sum_ips, n = 1, default = NA),
@@ -522,11 +522,7 @@ avg_data_agg <- avg_data %>%
 avg_data_peak_diff <- avg_data %>% 
   dplyr::filter(!pairID %in% c('Piding', 'Gangkofen'))
 
-
-###### SUM IPS TW  ------------------------------------
-
-###  Use previous year ------------------------------------------------
-
+# filetr data ----------------------------------------------------------------------
 avg_data_filt <- avg_data %>% 
   #mutate(f_year = as.factor(year)) %>% 
   dplyr::filter(!pairID %in% pair_outliers )
@@ -567,8 +563,6 @@ avg_data_filt_lagged$f_year <- droplevels(avg_data_filt_lagged$f_year)
 
 # Final predictors: current year tmp_lag0 & spei12_lag1 best predictors ------------------
 # 
-# increase the number of iterations to converge the model
-control <- list(niterPQL = 50)
 
 cor(avg_data$spei12_lag1, avg_data$tmp_lag0)
 cor(avg_data$spei24_lag0, avg_data$tmp_lag0)
@@ -579,73 +573,45 @@ cor(avg_data$spei24_lag0, avg_data$tmp_lag0)
 # try on trap level data: 
 dat_spei_lags_clean <- dat_spei_lags %>% 
   na.omit(dat_spei_lags)
-
-m_count_full_tmp0_spei12_1_ti <- gamm(sum_ips ~ 
-                                      # tmp_lag0 +
-                                      s(tmp_lag0, k = 3) +
-                                      s(spei12, k = 3) + 
-                                      ti(tmp_lag0, spei12, k = 5) + 
-                                      s(sum_ips_lag1, k = 5) + # Added term for previous beetle counts
-                                      s(x,y) +
-                                      s(pairID, bs = 're') +
-                                      s(year_f, bs = 're'),
-                                    data = dat_spei_lags_clean, #avg_data_filt_lagged, 
-                                    family = tw,
-                                    control = control)
-
-
 #### IPS_SUM ---------------------------------------------------------------------- 
-m.previous.tmp0_spei12_1_te <- gam(sum_ips ~ 
-                                     # tmp_lag0 +
-                                     s(tmp_lag0, k = 5) +
-                                     s(spei12_lag1, k = 5) + 
-                                     te(tmp_lag0, spei12_lag1, k = 10) + 
-                                     s(sum_ips_lag1, k = 7) + # Added term for previous beetle counts
-                                     #s(x,y) +
-                                     # s(pairID, bs = 're') +
-                                      s(f_year, bs = 're'),
-                                   data = avg_data_lagged, #avg_data_filt_lagged, 
-                                   family = tw,
-                                   select = TRUE#,
-                                   #control = control
-                                   )
 
+# model on traps:
 
-m.previous.tmp0_spei12_1_ti <- gam(sum_ips ~ 
-                                       #tmp_lag0 +
-                                      s(tmp_lag0, k = 5) +
-                                      s(spei12_lag1, k = 5) + 
-                                      ti(tmp_lag0, spei12_lag1, k = 10) + 
-                                      s(sum_ips_lag1, k = 7) + # Added term for previous beetle counts
-                                      s(x,y) +
-                                      s(pairID, bs = 're') +
-                                      s(f_year, bs = 're'),
-                                    data = avg_data_lagged, #avg_data_filt_lagged, 
-                                    family = tw,
-                                   method = "REML",
-                                    select = TRUE)
+m2_full <- gam(sum_ips ~ 
+                 #tmp_lag0 +
+                 #s(tmp_lag0, k = 5) +
+                 #s(spei12_lag1, k = 5) + 
+                 te(tmp_lag0, spei12_lag1, k = 3) + 
+                 s(sum_ips_lag1, k = 5) + # Added term for previous beetle counts
+                 s(x,y) +
+                 s(pairID, bs = 're') +
+                 s(f_year, bs = 're')
+               ,
+               data = dat_spei_lags_clean, #avg_data_filt_lagged, 
+               family = tw,
+               method = "REML",
+               select = TRUE)
 
+m2_full_ti <- gam(sum_ips ~ 
+                 tmp_lag0 +
+                 #s(tmp_lag0, k = 3) +
+                 s(spei12_lag1, k = 3) + 
+                 ti(tmp_lag0, spei12_lag1, k = 3) + 
+                 s(sum_ips_lag1, k = 5) + # Added term for previous beetle counts
+                 s(x,y) +
+                 s(pairID, bs = 're') +
+                 s(f_year, bs = 're')
+               ,
+               data = dat_spei_lags_clean, #avg_data_filt_lagged, 
+               family = tw,
+               method = "REML",
+               select = TRUE)
 
-# investigate effects ----------------------------------
+AIC(m2_full_ti, m2_full)
+summary(m2_full_ti)
 
-#star with simple model, and check why i have a bum at 14 C
-m1 <- gam(sum_ips ~ 
-                                     #tmp_lag0 +
-                                     s(tmp_lag0, k = 3) +
-                                     s(spei12_lag1, k = 4) + 
-                                     ti(tmp_lag0, spei12_lag1, k = 3) + 
-                                     s(sum_ips_lag1, k = 5) + # Added term for previous beetle counts
-                                     s(x,y) #+
-                                     #s(pairID, bs = 're')# +
-                                     #s(f_year, bs = 're')
-          ,
-                                   data = avg_data_lagged, #avg_data_filt_lagged, 
-                                   family = tw,
-                                   method = "REML",
-                                   select = TRUE)
-
-
-#star with simple model, and check why i have a bum at 14 C
+#### model on paired level: averaged ------------------------------------------------
+# => now it works well on the trap level
 m2 <- gam(sum_ips ~ 
             #tmp_lag0 +
             #s(tmp_lag0, k = 5) +
@@ -662,68 +628,38 @@ m2 <- gam(sum_ips ~
           select = TRUE)
 
 AIC(m1, m2)
-m<-m2
+m<-m2_full_ti
 summary(m)
 k.check(m)
-predict_data <- ggpredict(m, terms = c('tmp_lag0[13:17]'))
+predict_data <- ggpredict(m, terms = c('tmp_lag0'))
 plot(predict_data)
 
 predict_data <- ggpredict(m, terms = c('spei12_lag1'))
 plot(predict_data)
 
-predict_data <- ggpredict(m, terms = c('tmp_lag0', 'spei12_lag1[-2,0,1]'))
+predict_data <- ggpredict(m, terms = c('tmp_lag0', 'spei12_lag1[-1.5,0]'))
 plot(predict_data)
 
-
-
-cor(avg_data_lagged$spei12_lag1, avg_data_lagged$sum_ips_lag1,use = "complete.obs")
-hist(avg_data_lagged$tmp_lag0)
-hist(avg_data_lagged$spei12_lag0)
-# END
-
-
-
-AIC(m.previous.tmp0_spei12_1_ti, m.previous.tmp0_spei12_1_te,m.previous.tmp0_spei12_1_ti_test)
-vis.gam(m_count_full_tmp0_spei12_1_ti$gam)
-
-m <- m_count_full_tmp0_spei12_1_ti$gam
-summary(m)
-
-predict_data <- ggpredict(m, terms = c('tmp_lag0'))
-plot(predict_data)
-
-predict_data <- ggpredict(m, terms = c('spei12'))
-plot(predict_data)
-
-predict_data <- ggpredict(m, terms = c('sum_ips_lag1'))
-plot(predict_data)
-
-
-predict_data <- ggpredict(m, terms = c('tmp_lag0', 'spei12_lag0[-1.5,0]'))
-plot(predict_data)
-hist(avg_data_lagged$spei12_lag1)
-
-avg_data_lagged %>% 
-  ggplot(aes(y = sum_ips, x =sum_ips_lag1)) +
-  geom_point() + geom_smooth()
+fin.m.counts.previous.tw <- m2_full_ti
 
 #### previous peak_diff  ------------------------------------------------------
 
-m.peak.diff.previous.tmp_0_spei12_1 <- gamm(peak_diff ~ 
-                                                s(tmp_lag0, k = 3) +
+m.peak.diff.previous.tmp_0_spei12_1 <- gam(peak_diff ~ 
+                                             tmp_lag0 +
+                                              #  s(tmp_lag0, k = 3) +
                                                 s(spei12_lag1, k = 3) + 
-                                                te(tmp_lag0, spei12_lag1, k = 10) + 
+                                                ti(tmp_lag0, spei12_lag1, k = 3) + 
                                                 s(peak_diff_lag1 , k =5) + # Added term for previous beetle counts
                                                 s(x,y) + #,
                                               s(pairID, bs = 're') +
                                               s(f_year, bs = 're'),
-                                              data = avg_data_lagged, #avg_data_filt_lagged, 
+                                              data = dat_spei_lags_clean, #avg_data_filt_lagged, 
                                               family = tw,
-                                              control = control)
+                                           select = TRUE)
 
-m<-m.peak.diff.previous.tmp_0_spei12_1$gam
+m<-m.peak.diff.previous.tmp_0_spei12_1
 
-appraise(m)
+#appraise(m)
 summary(m)
 
 predict_data <- ggpredict(m, terms = c('tmp_lag0'))
@@ -735,7 +671,7 @@ plot(predict_data)
 predict_data <- ggpredict(m, terms = c('peak_diff_lag1'))
 plot(predict_data)
 
-predict_data <- ggpredict(m, terms = c('tmp_lag0', 'spei12_lag1'))
+predict_data <- ggpredict(m, terms = c('tmp_lag0', 'spei12_lag1[-1.5,0]'))
 plot(predict_data)
 
 
@@ -751,30 +687,21 @@ avg_data_lagged_noNA <- avg_data_lagged[complete.cases(avg_data_lagged), ]
 
 anyNA(avg_data_lagged_noNA)
 
-m.agg.previous_tmp0_spei12_1 <- gamm(tr_agg_doy ~
+m.agg.previous_tmp0_spei12_1 <- gam(tr_agg_doy ~
                                                s(tmp_lag0, k = 3) +
                                                s(spei12_lag1, k = 3) +
-                                               te(tmp_lag0, spei12_lag1, k = 5) +
+                                               ti(tmp_lag0, spei12_lag1, k = 3) +
                                                s(tr_agg_doy_lag1 , k = 5) +# Added term for previous year numbers to account ofr autocorrelation
                                                s(x,y) +  
                                                s(pairID, bs = 're') +
                                                s(f_year, bs = 're')
                                              ,
-                                             data = avg_data_lagged_noNA, #avg_data_agg_no_out, #avg_data_filt_lagged, #, #,
+                                             data = dat_spei_lags_clean, 
                                              family = Gamma(link = "log"),
-                                             control = control)
+                                    select = TRUE)
 
 
-
-
-
-summary(m.agg.previous_tmp0_spei12_1$gam)
-summary(m.agg.previous_tmp0_spei12_1_year_re$gam)
-AIC(m.agg.previous_tmp0_spei12_1_year_re, 
-    m.agg.previous_tmp0_spei12_1, 
-    m.agg.previous_tmp_z0_spei12_1)
-
-m<-m.agg.previous_tmp0_spei12_1$gam
+m<-m.agg.previous_tmp0_spei12_1
 k.check(m)
 
 appraise(m)
@@ -789,7 +716,7 @@ plot(predict_data)
 predict_data <- ggpredict(m, terms = c('tr_agg_doy_lag1'))
 plot(predict_data)
 
-predict_data <- ggpredict(m, terms = c('tmp_lag0', 'spei12_lag1'))
+predict_data <- ggpredict(m, terms = c('tmp_lag0', 'spei12_lag1[-1.5,0]'))
 plot(predict_data)
 
 
@@ -809,21 +736,20 @@ plot(avg_data_peak_no_out$tmp_lag0, avg_data_peak_no_out$tr_peak_doy)
 plot(avg_data_peak_no_out$spei12_lag1, avg_data_peak_no_out$tr_peak_doy)
 
 
-m.peak.doy.previous_tmp0_spei12_1 <- gamm(tr_peak_doy ~ 
+m.peak.doy.previous_tmp0_spei12_1 <- gam(tr_peak_doy ~ 
                                               s(tmp_lag0, k = 5) +
                                               s(spei12_lag1, k = 5) +
-                                              te(tmp_lag0, spei12_lag1, k = 3) +
+                                              ti(tmp_lag0, spei12_lag1, k = 3) +
                                               s(tr_peak_doy_lag1 , k = 5) + # Added term for previous year numbers to account ofr autocorrelation
                                               s(x,y, bs = 'gp')   +
                                               s(pairID, bs = 're') +
                                             s(f_year, bs = 're')
                                             ,
-                                            data = avg_data_lagged_noNA, # avg_data_peak_no_out, 
-                                            family = Gamma(link = "log"),
-                                            control = control)
+                                            data = dat_spei_lags_clean, # avg_data_peak_no_out, 
+                                            family = Gamma(link = "log"))
 
 
-m<-m.peak.doy.previous_tmp0_spei12_1$gam
+m<-m.peak.doy.previous_tmp0_spei12_1
 k.check(m)
 
 appraise(m)
@@ -838,15 +764,15 @@ plot(predict_data)
 predict_data <- ggpredict(m, terms = c('tr_peak_doy_lag1'))
 plot(predict_data)
 
-predict_data <- ggpredict(m, terms = c('tmp_lag0', 'spei12_lag1'))
+predict_data <- ggpredict(m, terms = c('tmp_lag0', 'spei12_lag1[-1.5,0]'))
 plot(predict_data)
 
 
 # save final models : current year TMP and previous year SPEI12 ---------------------------------------
-fin.m.counts.previous.tw    <- m.previous.tmp0_spei12_1_te$gam
-fin.m.peak.diff.previous.tw <- m.peak.diff.previous.tmp_0_spei12_1$gam
-fin.m.agg.doy.gamma         <- m.agg.previous_tmp0_spei12_1$gam
-fin.m.peak.doy.gamma        <- m.peak.doy.previous_tmp0_spei12_1$gam
+fin.m.counts.previous.tw    <- m2_full_ti
+fin.m.peak.diff.previous.tw <- m.peak.diff.previous.tmp_0_spei12_1
+fin.m.agg.doy.gamma         <- m.agg.previous_tmp0_spei12_1
+fin.m.peak.doy.gamma        <- m.peak.doy.previous_tmp0_spei12_1
 
 
 
@@ -855,7 +781,7 @@ fin.m.peak.doy.gamma        <- m.peak.doy.previous_tmp0_spei12_1$gam
 # check for spatial and tmp autocorrelaton ----------------------------------
 # Extract residuals
 # Extract residuals from the model
-residuals <- resid(m.peak.diff.previous.tmp_z_0_spei12_1$lme, type = "normalized")
+residuals <- resid(m.peak.diff.previous.tmp_z_0_spei12_1, type = "normalized")
 
 
 # Check for temporal autocorrelation
@@ -884,28 +810,6 @@ listw <- nb2listw(nb, style = "W")
 # Perform Moran's I test
 moran_test <- moran.test(model_residuals, listw)
 print(moran_test)
-
-m <- m.previous.tmp_z0_spei1$gam
-# Generate predicted values for temperature and SPEI
-pred_temp <- ggpredict(m, terms = "tmp_z")
-pred_spei <- ggpredict(m, terms = "spei_lag1")
-pred_interaction <- ggpredict(m, terms = c("tmp_z", "spei_lag1[-1.5,-0.5,0]"))
-
-
-# Plot for temperature predictor
-p1 <- plot(pred_temp)
-# Plot for SPEI predictor
-p2 <- plot(pred_spei)
-
-# Plot for interaction between temperature and SPEI
-p3 <- plot(pred_interaction)
-
-# Print the plots
-print(p1)
-print(p2)
-print(p3)
-
-
 
 
 ####### Find predicors &  lags: MOrans  -------------
@@ -1077,19 +981,12 @@ corrplot::corrplot(correlation_matrix)
 
 # update& save the best models: --------------------------------------------------------
 
-# # explore results for individual dependent variables: select the onse with the lowest AIC/with the all random effects
-# fin.m.counts     <- m.counts.tw$gam #result$sum_ips$models$random_effect$gam  # lowest AIC
-# fin.m.agg        <- m2.agg.gamma$gam #m1.gamma$gam#result$tr_agg_doy$models$random_effect$gam  # lowest AIC
-# fin.m.peak       <- m.peak.gamma$gam #m.peak.diff.tw$gam #result$tr_peak_doy$models$random_effect$gam  # lowest AIC
-# fin.m.peak.diff  <- m.peak.diff.tw$gam #result_peak_diff$peak_diff$models$random_effect$gam  # lowest AIC
-# 
-# 
-# save(fin.m.counts.previous.tw,
-#      fin.m.peak.diff.previous.tw,
-#      fin.m.agg.doy.gamma,
-#      fin.m.peak.doy.gamma,
-#          avg_data,
-#      file = "outData/fin_models.RData")
+save(fin.m.counts.previous.tw,
+     fin.m.peak.diff.previous.tw,
+     fin.m.agg.doy.gamma,
+     fin.m.peak.doy.gamma,
+         avg_data,
+     file = "outData/fin_models.RData")
 
 
 
@@ -1292,6 +1189,35 @@ avg_data_filt_lagged_plotting <- avg_data_filt_lagged %>%
 
 
 ##### PLOT: IPS SUM counts -----------------------------------------------------------
+
+format_p_value_label <- function(model_summary, term) {
+  # Extract p-value based on whether the term is parametric or smooth
+  if (term %in% rownames(model_summary$p.table)) {
+    # Parametric term
+    p_value <- model_summary$p.table[term, "Pr(>|t|)"]
+  } else if (term %in% rownames(model_summary$s.table)) {
+    # Smooth term
+    p_value <- model_summary$s.table[term, "p-value"]
+  } else {
+    # Term not found
+    return(paste(term, ": Not found in model"))
+  }
+  
+  # Format the p-value
+  if (p_value < 0.001) {
+    formatted_p <- "< 0.001"
+  } else {
+    formatted_p <- signif(p_value, 3)
+  }
+  
+  # Return formatted text
+  #paste(term, "(p =", formatted_p, ")")
+  paste(formatted_p)
+}
+
+# Get formatted label for tmp_lag0
+label_tmp <- format_p_value_label(summary(fin.m.counts.previous.tw), "tmp_lag0")
+
 
 temp_label <- expression(paste("Temp. [", degree, "C]", sep = ""))#expression(paste("Temperature [", degree, "C]", sep=""))
 spei_label <- 'SPEI lag1 [dim.]'
