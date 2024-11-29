@@ -8,7 +8,32 @@ lab_peak_time         = "Peak sw. timing [DOY]"
 lab_peak_growth       = "Peak sw. intensity [#]"
 
 
+# extract p value from the model and keep it as label
 
+format_p_value_label <- function(model_summary, term) {
+  # Extract p-value based on whether the term is parametric or smooth
+  if (term %in% rownames(model_summary$p.table)) {
+    # Parametric term
+    p_value <- model_summary$p.table[term, "Pr(>|t|)"]
+  } else if (term %in% rownames(model_summary$s.table)) {
+    # Smooth term
+    p_value <- model_summary$s.table[term, "p-value"]
+  } else {
+    # Term not found
+    return(paste(term, ": Not found in model"))
+  }
+  
+  # Format the p-value
+  if (p_value < 0.001) {
+    formatted_p <- "< 0.001"
+  } else {
+    formatted_p <- signif(p_value, 3)
+  }
+  
+  # Return formatted text
+  #paste(term, "(p =", formatted_p, ")")
+  paste(formatted_p)
+}
 
 
 

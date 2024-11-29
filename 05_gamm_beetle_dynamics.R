@@ -1215,10 +1215,17 @@ format_p_value_label <- function(model_summary, term) {
   paste(formatted_p)
 }
 
+## Get labels --------------------------------------------------------------
 # Get formatted label for tmp_lag0
-label_tmp <- format_p_value_label(summary(fin.m.counts.previous.tw), "tmp_lag0")
+p_val_tmp           <- format_p_value_label(summary(m), "tmp_lag0")
+p_val_spei          <- format_p_value_label(summary(m), "spei12_lag1")
+p_val_int           <- format_p_value_label(summary(m), "ti(tmp_lag0,spei12_lag1)")
+p_val_lag_count     <- format_p_value_label(summary(m), "sum_ips_lag1")
+p_val_lag_diff      <- format_p_value_label(summary(m), "tmp_lag0")
+p_val_lag_agg_doy   <- format_p_value_label(summary(m), "tr_agg_doy_lag1")
+p_val_lag_peak_doy  <- format_p_value_label(summary(m), "tr_peak_doy_lag1")
 
-
+# TMP and SPEI labs
 temp_label <- expression(paste("Temp. [", degree, "C]", sep = ""))#expression(paste("Temperature [", degree, "C]", sep=""))
 spei_label <- 'SPEI lag1 [dim.]'
 
