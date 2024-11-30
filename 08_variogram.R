@@ -12,7 +12,7 @@ library(plyr)
 library(dplyr)
 library(data.table)
 library(tidyr)
-library(rgdal) # for sp data
+#library(rgdal) # for sp data
 library(sp)
 library(fasterize)
 library(terra)
@@ -117,7 +117,7 @@ get_variogram <- function(i, var_name, cutoff = 300000) {
 years <- 2015:2021
 
 # List of dependent variables
-dependent_vars <- c("log_sum_ips",  "tr_agg_doy", "tr_peak_doy", "log_peak_diff")
+dependent_vars <- c("log_sum_ips",  "tr_agg_doy", "tr_peak_doy", "log_peak_diff", "spei12", "veg_tmp")
 
 # Create a data frame of all combinations of years and variables;
 # to run lapply afterwards
@@ -253,28 +253,53 @@ sjPlot::tab_df(out_tab_variograms,
 # Plot using ggplot2
 combined_results_sub <- combined_results %>% 
  # mutate(year_color = ifelse(year %in% 2018:2020, "red", "grey")) %>% 
-  dplyr::filter(dist <190000) %>% 
+  dplyr::filter(dist <300000) %>% 
   mutate(variable = factor(variable, 
-                           levels = c('log_sum_ips', 'tr_agg_doy', 'tr_peak_doy', 'log_peak_diff'),
-                           labels = c('Population level\n[#]', 'Aggregation timing\n[DOY]', 
-                                      'Peak swarming\ntiming [DOY]', "Peak swarming\nintensity [#]"))) #%>%
+                           levels = c('log_sum_ips', 'tr_agg_doy', 'veg_tmp', 
+                                      'tr_peak_doy', 'log_peak_diff', 'spei12'),
+                           labels = c('Population level\n[#]', 'Aggregation timing\n[DOY]', expression("Temperature [°C]"),
+                                      'Peak swarming\ntiming [DOY]', "Peak swarming\nintensity [#]",
+                                       'SPEI [dim.]'))) %>%
+  mutate(drought = factor(ifelse(year %in% 2018:2020, "yes", "no"))) #%>%
 
+# Reverse the color palette and map to the species in the desired order
+
+my_colors <- c(
+  "grey90",  # Light gray (2015)
+  "grey75",  # Medium gray (2016)
+  "grey60",  # Dark gray (2017)
+  "#A50026",  # Bright yellow-green (2018, emphasized)
+  "#FDBE6E",  # Bright green (2019, emphasized)
+  "#3366CC",  # Turquoise-green (2020, emphasized)
+  "grey50"   # Charcoal gray (2021)
+)
 p_vario_color <- 
   combined_results_sub %>% 
     ggplot(aes(x = dist/1000, 
              y = gamma, 
-             color = factor(year)#,
+             color = factor(year),
+             size = drought
+            # linewidth = drought
             # group = factor(year)
              )) +
   geom_point(data = subset(combined_results_sub, type == "Empirical"), 
-             alpha = 0.5, size = 1.2) +
-  geom_line(data = subset(combined_results_sub, type == "Fitted"), lwd = 1) +
+             alpha = 0.9) +
+  geom_line(data = subset(combined_results_sub, type == "Fitted"),
+            aes(linewidth = drought)) +
   labs(#title = "Empirical and Fitted Variogram", 
        x = "Distance [km]", 
        y = "Semivariance",
        color = "Year"
        ) +
-  scale_color_brewer(palette = "Set1", direction = -1) +
+  scale_color_manual(values = my_colors) +
+  scale_linewidth_manual(values = c("no" = 0.4, "yes" = 0.8
+                                    ),
+                         name = "Drought",                     # Legend title
+                         labels = c("no" = "No Drought", "yes" = "Drought")) +  # Custom labels) +
+  scale_size_manual(values = c("no" = 0.2, "yes" = 0.6),
+                    name = "Drought",                     # Legend title
+                    labels = c("no" = "No Drought", "yes" = "Drought")) +  # Custom labels) +
+  #scale_color_brewer(palette = "Set1", direction = -1) +
   theme_minimal(base_size = 10) +
    theme(aspect.ratio = 1, 
          legend.position = 'right',
@@ -282,10 +307,22 @@ p_vario_color <-
          #panel.border = element_rect(color = "black")
          ) +
   facet_wrap(variable~., scales = 'free') +
-    theme_bw()
-
+   # theme_classic()+
+  theme_minimal(base_size = 10) +
+  theme(
+    aspect.ratio = 1, 
+    legend.position = 'right',
+    legend.title = element_blank(),
+    panel.background = element_rect(fill = "grey99", color = 'black'), # Light grey background
+    strip.background = element_blank(), # Remove boxes around facet labels
+    strip.text = element_text(face = "plain"), # Optional: make facet labels bold
+    panel.grid.major = element_blank(), #element_line(color = "white", linetype = "solid"), # Show major grid lines
+    panel.grid.minor = element_blank(),                                    # Hide minor grid lines
+    
+  ) 
+p_vario_color
 ggsave(filename = 'outFigs/p_vario_color.png', plot = p_vario_color, 
-       width = 7, height = 7, dpi = 300, 
+       width = 7, height = 5, dpi = 300, 
        bg = 'white')
 
 
