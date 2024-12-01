@@ -72,42 +72,7 @@ get_variogram <- function(i, var_name, cutoff = 300000) {
   variogram_raw$year <- i
   variogram_raw$variable <- var_name
   
-  #!!!
-  # Calculate the Nugget (gamma at the smallest distance)
-  #nugget <- mean(variogram_raw$gamma[1:5])
-  
-  # Estimate the Sill (average gamma at the highest distances, e.g., last 3-5 points)
-  #sill <- mean(variogram_raw$gamma[(nrow(variogram_raw)-2):nrow(variogram_raw)])
-  
-  # Estimate the Range (distance where the variogram levels off, e.g., 
-  # first row where gamma is near the sill)
-  #range <- variogram_raw$dist[which.max(variogram_raw$gamma >= sill * 0.95)]
-  
-  # Specify the initial variogram model
-  #initial_model <- vgm(psill = sill - nugget, model = "Mat", range = range, nugget = nugget)
-  
-  # Fit the variogram model to the empirical data
-  #fitted_variogram <- fit.variogram(variogram_raw, model = initial_model)
-  
-  # Extract fitted parameters
-  #fitted_nugget <- fitted_variogram$psill[1]
-  #fitted_sill   <- sum(fitted_variogram$psill)
-  #fitted_range  <- fitted_variogram$range[2]
-  
-  # Create a data frame with the initial and fitted parameters
-  #df <- data.frame(year           = i,
-  #                 variable       = var_name,
-  #                 #initial_nugget = nugget,
-  #                 #initial_sill   = sill,
-  #                 #initial_range  = range,
-  #                 fitted_nugget  = fitted_nugget,
-  #                 fitted_sill    = fitted_sill,
-  #                 fitted_range   = fitted_range
-  #)
-  
-  #return(df)
-  #!!!
-  
+   
   # Return the variogram data frame
   return(variogram_raw)
 }
@@ -250,6 +215,11 @@ sjPlot::tab_df(out_tab_variograms,
                digits = 3) 
 
 
+
+
+
+
+
 # Plot using ggplot2
 combined_results_sub <- combined_results %>% 
  # mutate(year_color = ifelse(year %in% 2018:2020, "red", "grey")) %>% 
@@ -329,33 +299,103 @@ ggsave(filename = 'outFigs/p_vario_color.png', plot = p_vario_color,
 
 fwrite(combined_results, 'outTable/variogram.csv')
 
-# make it black and red
 
-#p_vario_red_grey <- 
-  combined_results_sub %>% 
-  ggplot(aes(x = dist/1000, 
-             y = gamma, 
-             #color = year_color,
-             group = factor(year))) +
-  geom_point(data = subset(combined_results_sub, type == "Empirical"), 
-             alpha = 0.5, size = 1) +
-  geom_line(data = subset(combined_results_sub, type == "Fitted"), lwd = 1) #+
-  labs(#title = "Empirical and Fitted Variogram", 
-    x = "Distance [km]", y = "Semivariance"
-  ) +
-    scale_color_manual(values = c("red"= 'red', "grey"='grey')) +
- # scale_color_brewer(palette = "Spectral") +
-  theme_minimal(base_size = 10) +
-  theme(aspect.ratio = 1, 
-        legend.position = 'right',
-        legend.title =element_blank()  ,
-        panel.border = element_rect(color = "black", fill = "white")) +
-  facet_wrap(variable~., scales = 'free')
+# test variogram: correlation climate vs beetles  -------------------------------------------
 
-ggsave(filename = 'outFigs/variograms_red_grey.png', plot = p_vario_red_grey, width = 7, height = 7, dpi = 300, bg = 'white')
+# Combine all variogram results into one data frame
+variogram_results <- bind_rows(variogram_results_ls, .id = "list_id")
 
 
+# Filter relevant years and variables
+drought_2018 <- variogram_results %>%
+  dplyr::filter(year == 2018, variable == "spei12") %>% 
+  mutate(n = 1:15)
 
+beetles_2019 <- variogram_results %>%
+  dplyr::filter(year == 2019, variable %in% c("log_sum_ips", "tr_agg_doy", "tr_peak_doy", "log_peak_diff")) %>% 
+  mutate(n = rep(1:15, 4))
+
+
+# Filter relevant years and variables
+# Filter relevant columns and rename
+drought_2018_filtered <- drought_2018 %>%
+  dplyr::select(n, gamma) %>%
+  dplyr::rename(gamma_spei12 = gamma)
+
+beetles_2019_filtered <- beetles_2019 %>%
+  dplyr::select(n,variable,  gamma) %>%
+  dplyr::rename(gamma_beetle = gamma)
+
+# Merge drought (2018) and beetles (2019) by distance
+# Merge on 'dist' (common distance column)
+combined_data <- beetles_2019_filtered %>% 
+  left_join(drought_2018_filtered, by = join_by(n)) 
+
+print(combined_data)
+
+# Correlation analysis grouped by beetle variable
+cor_results <- combined_data %>%
+  dplyr::filter(variable == 'tr_peak_doy') %>% 
+  group_by(variable) %>%
+  summarise(
+    gamma_corr = cor(gamma_spei12, gamma_beetle, use = "complete.obs", method = 'spearman'),
+    .groups = "drop"
+  )
+
+
+# Initialize a data frame to store results
+cor_results_table <- data.frame(
+  variable = character(),
+  pearson_corr = numeric(),
+  spearman_corr = numeric(),
+  stringsAsFactors = FALSE
+)
+
+# Unique variables
+unique_variables <- unique(combined_data$variable)
+
+# Loop over variables
+for (var in unique_variables) {
+  # Filter data for the current variable
+  filtered_data <- combined_data %>%
+    dplyr::filter(variable == var)
+  
+  # Compute Pearson and Spearman correlations
+  pearson_corr <- cor(filtered_data$gamma_spei12, filtered_data$gamma_beetle, 
+                      use = "complete.obs", method = "pearson")
+  spearman_corr <- cor(filtered_data$gamma_spei12, filtered_data$gamma_beetle, 
+                       use = "complete.obs", method = "spearman")
+  
+  # Append results to the table
+  cor_results_table <- rbind(
+    cor_results_table,
+    data.frame(
+      variable = var,
+      pearson_corr = pearson_corr,
+      spearman_corr = spearman_corr,
+      stringsAsFactors = FALSE
+    )
+  )
+}
+
+# Print the results
+print(cor_results_table)
+
+
+
+
+print(cor_results)
+
+# Scatterplot for each beetle variable
+ggplot(combined_data, aes(x = gamma_spei12, y = gamma_beetle)) +
+  geom_point(alpha = 0.6) +
+  geom_smooth(method = "lm", se = FALSE, color = "blue") +
+  facet_wrap(~variable, scales = "free") +
+  labs(
+    title = "Correlation Between SPEI12 (2018) and Beetle Synchronization (2019)",
+    x = "Empirical Gamma (SPEI12 2018)",
+    y = "Empirical Gamma (Beetle Variables 2019)"
+  )
 
 
 

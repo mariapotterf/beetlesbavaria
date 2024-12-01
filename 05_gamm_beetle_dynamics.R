@@ -459,11 +459,7 @@ avg_data <- dat_spei_lags %>%
             tmp_lag0         = mean(tmp_lag0, na.rm = T),
             #tmp_lag1    = mean(tmp_lag1, na.rm = TRUE),
             #tmp_lag2    = mean(tmp_lag2, na.rm = TRUE),  # for agg_doy
-            # TMP_z
-            # tmp_z_lag0       = mean(tmp_z, na.rm = TRUE),
-            # tmp_z_lag1  = mean(tmp_z_lag1, na.rm = TRUE),
-            # tmp_z_lag2  = mean(tmp_z_lag2, na.rm = TRUE),  # for agg_doy
-            # 
+            
             x           = mean(x, na.rm = TRUE),
             y           = mean(y, na.rm = TRUE)
             ) %>%
@@ -738,6 +734,10 @@ fin.m.peak.diff.previous.tw <- m.peak.diff.previous.tmp_0_spei12_1
 fin.m.agg.doy.gamma         <- m.agg.previous_tmp0_spei12_1
 fin.m.peak.doy.gamma        <- m.peak.doy.previous_tmp0_spei12_1
 
+summary(fin.m.counts.previous.tw)   
+summary(fin.m.peak.diff.previous.tw)
+summary(fin.m.agg.doy.gamma)         
+summary(fin.m.peak.doy.gamma)        
 
 
 # Calculate partial deviance -----------------------------------------------------------
@@ -968,14 +968,14 @@ sjPlot::tab_df(model_metrics_moran,
 m.morans.previous <- gam(Morans_I_log ~ 
                            #tmp_lag0 +
                            #spei12_lag1 + 
-                            #s(tmp_lag0, k = 3) +
-                            #s(spei12_lag1, k = 3) + 
-                            te(tmp_lag0, spei12_lag1, k = 3) #+ 
-                           #s(sum_ips, k =7, bs = 'tp') + # Added term for  beetle counts
-                          # s(sum_ips_lag1, k = 5) + # Added term for previous beetle counts
-                           # s(Morans_I_log_lag1, k = 5),# + # Added term for previous MOrans I 
-                           # s(pairID, bs = 're') +
-                           # s(f_year, bs = 're')
+                            #s(tmp_lag0, k = 5) +
+                            s(spei12_lag1, k = 7) + 
+                            #te(tmp_lag0, spei12_lag1, k = 3) + 
+                           s(sum_ips, k =7, bs = 'tp') + # Added term for  beetle counts
+                          # s(sum_ips_lag1, k = 5),# + # Added term for previous beetle counts
+                            s(Morans_I_log_lag1, k = 5) + # Added term for previous MOrans I 
+                            s(pairID, bs = 're') +
+                            s(f_year, bs = 're')
                          ,
                           data = lisa_merged_df_avg, 
                           family = gaussian())
@@ -985,7 +985,6 @@ summary(m.morans.previous)
 k.check(m.morans.previous)
 gam.check(m.morans.previous)
 appraise(m.morans.previous)
-draw(m.morans.previous)
 
 # check correlations betwen sum ips nad Morans I?
 
@@ -1014,6 +1013,95 @@ plot(predict_data)
 
 predict_data <- ggpredict(m, terms = c('tmp_lag0', 'spei12_lag1[-1.5,1]'))
 plot(predict_data)
+
+# instead : test variaogram : 
+
+# START
+df_variogram <- fread('outTable/variogram.csv')
+
+# Load required packages
+library(data.table)
+library(dplyr)
+
+# Assuming df_variogram is already loaded into your environment
+# Filter data for relevant years and variables
+df_spei12_2018 <- df_variogram %>%
+  dplyr::filter(year == 2018, variable == "spei12", type == "Empirical") %>%
+  dplyr::select(variable, fitted_nugget, fitted_sill, fitted_range)
+
+df_beetles_2019 <- df_variogram %>%
+  dplyr::filter(year == 2019, variable %in% c("tr_agg_doy"), type == "Empirical") %>% # , "tr_agg_doy", "tr_peak_doy", "log_peak_diff"
+  dplyr::select(variable, fitted_nugget, fitted_sill, fitted_range)
+
+# Combine data frames column-wise
+combined_data_cbind <- cbind(
+  df_spei12_2018 %>% rename_with(~paste0(., "_spei12")),
+  df_beetles_2019 %>% rename_with(~paste0(., "_beetle"))
+)
+
+
+combined_data_cbind <- combined_data_cbind %>%
+  dplyr::filter(
+    var(fitted_nugget_spei12, na.rm = TRUE) > 0,
+    var(fitted_nugget_beetle, na.rm = TRUE) > 0,
+    var(fitted_sill_spei12, na.rm = TRUE) > 0,
+    var(fitted_sill_beetle, na.rm = TRUE) > 0,
+    var(fitted_range_spei12, na.rm = TRUE) > 0,
+    var(fitted_range_beetle, na.rm = TRUE) > 0
+  )
+
+# Correlation analysis between SPEI12 (2018) and beetle variables (2019)
+cor_results <- combined_data_cbind %>%
+  summarise(
+    nugget_corr = cor(fitted_nugget_spei12, fitted_nugget_beetle, use = "complete.obs"),
+    sill_corr = cor(fitted_sill_spei12, fitted_sill_beetle, use = "complete.obs"),
+    range_corr = cor(fitted_range_spei12, fitted_range_beetle, use = "complete.obs")
+  )
+
+# Print correlation results
+print("Correlation between drought (2018) and beetle synchronization (2019):")
+print(cor_results)
+
+# Visualization: Scatter plots for each variogram parameter
+library(ggplot2)
+
+# Plot nugget correlation
+ggplot(combined_data, aes(x = fitted_nugget_spei12, y = fitted_nugget_beetle)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE, color = "blue") +
+  labs(title = "Nugget Correlation (SPEI12 2018 vs Beetles 2019)",
+       x = "SPEI12 Nugget (2018)",
+       y = "Beetle Nugget (2019)")
+
+# Plot sill correlation
+ggplot(combined_data, aes(x = fitted_sill_spei12, y = fitted_sill_beetle)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE, color = "blue") +
+  labs(title = "Sill Correlation (SPEI12 2018 vs Beetles 2019)",
+       x = "SPEI12 Sill (2018)",
+       y = "Beetle Sill (2019)")
+
+# Plot range correlation
+ggplot(combined_data, aes(x = fitted_range_spei12, y = fitted_range_beetle)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE, color = "blue") +
+  labs(title = "Range Correlation (SPEI12 2018 vs Beetles 2019)",
+       x = "SPEI12 Range (2018)",
+       y = "Beetle Range (2019)")
+
+# Regression analysis: Predicting beetle synchronization in 2019
+model_range <- lm(fitted_range_beetle ~ fitted_range_spei12, data = combined_data)
+summary(model_range)
+
+# Output regression summary
+print("Regression analysis for range:")
+print(summary(model_range))
+
+
+
+
+# END
+
 
 
 
@@ -1612,7 +1700,7 @@ p3.peak.diff <- plot_effect_interactions(p3,
 ggarrange(p0.peak.diff,p1.peak.diff,p2.peak.diff,p3.peak.diff)
 
 
-### put in the same figure: tmp, spei, interaction, previous years on teh bottom -----
+### Aggregeate plots  -----
 
 p_spagett_ips       <- plot_data_with_average(avg_data_filt_lagged_plotting, "sum_ips", lab_popul_level,   
                                               my_title = paste( 'Pop. level', '[#*1000]'))
@@ -1694,44 +1782,17 @@ ggsave(filename = 'outFigs/Fig_full_eff3.png', plot = full_preds,
 
 #### PLOT Moran's I -------------------------------
 summary(fin.m.moran)
+m <- fin.m.moran
+p_val_int           <- format_p_value_label(summary(m), "ti(tmp_lag0,spei12_lag1)")
+p_val_moran           <- format_p_value_label(summary(m), "s(Morans_I_log_lag1)")
+p_val_sum_ips           <- format_p_value_label(summary(m), "s(sum_ips)")
 
 # Assuming 'model' is your glm.nb model
-p1 <- ggpredict(fin.m.moran , terms = "tmp_z  [all]", allow.new.levels = TRUE)
-p2 <- ggpredict(fin.m.moran, terms = "spei_lag1  [all]", allow.new.levels = TRUE)
 p3 <- ggpredict(fin.m.moran, terms = "sum_ips [all]", allow.new.levels = TRUE)
 p5 <- ggpredict(fin.m.moran, terms = "Morans_I_log_lag1 [all]", allow.new.levels = TRUE)
 
-p4 <- ggpredict(fin.m.moran, terms = c("tmp_z", "spei_lag1 [-1,0,1]"), allow.new.levels = TRUE) 
+p4 <- ggpredict(fin.m.moran, terms = c("tmp_lag0", "spei12_lag1 [-1.5,1]"), allow.new.levels = TRUE) 
 
-
-p1.moran <- create_effect_plot(p1,
-                               avg_data =  filter(lisa_merged_df_avg, Morans_I_log  > -1 & Morans_I_log  < 2), 
-                               x_col = "tmp_z", 
-                               y_col = "Morans_I_log", 
-                               line_color = "#A50026", 
-                               x_title = "Temp. lag0 [z-score]", 
-                               y_title = "Local Moran's I", 
-                               x_annotate = 15,
-                               lab_annotate = "**"
-                               #y_lim = c(0,1)
-                               ) +
-  theme(axis.title.y = element_text("Local Moran's I", angle = 90))
-
-p1.moran
-p2.moran <- create_effect_plot(p2,
-                               avg_data =  filter(lisa_merged_df_avg, Morans_I_log  > -1 & Morans_I_log  < 2), 
-                               x_col = "spei_lag1", 
-                               y_col = "Morans_I_log", 
-                               line_color = "#FDAE61", 
-                               x_title = "SPEI lag1 [dim.]", 
-                               y_title = "Local Moran's I",  
-                               #y_lim = c(0,1)
-                               x_annotate = -0.5,
-                               lab_annotate = "*"
-                                                         ) +
-  theme(axis.title.y = element_text("Local Moran's I", angle = 90))
-
-p2.moran
 
 lisa_merged_df_avg$sum_ips_scaled <- lisa_merged_df_avg$sum_ips / 1000
 p3$x <- p3$x/1000 
@@ -1743,7 +1804,7 @@ p3.moran <- create_effect_plot(p3,
                                x_title = "Pop. level [#*1000]", 
                                y_title = "Local Moran's I", # y_lim = c(0,1),
                                x_annotate = 50,
-                               lab_annotate = "***") +
+                               lab_annotate = p_val_sum_ips) +
   theme(axis.title.y = element_text("Local Moran's I", angle = 90))
 p3.moran
 p5.prev.Morans <- create_effect_previous_year(data = p5, 
@@ -1753,7 +1814,7 @@ p5.prev.Morans <- create_effect_previous_year(data = p5,
                                             line_color = "darkgrey", 
                                             x_title = "Local Moran's I lag1 [dim.]", 
                                             y_title =  "Local Moran's I [dim.]",
-                                            x_annotate = 0, lab_annotate = "***") +
+                                            x_annotate = 0, lab_annotate = p_val_moran) +
   theme(axis.title.y = element_text("Local Moran's I", angle = 90))
 
 (p5.prev.Morans)
@@ -1762,18 +1823,21 @@ p5.prev.Morans <- create_effect_previous_year(data = p5,
 p4.moran <- plot_effect_interactions(p4,
                                      avg_data = filter(lisa_merged_df_avg, Morans_I_log  > -1 & Morans_I_log  < 2),
                                      
-                                     x_col = "tmp_z", 
+                                     x_col = "tmp_lag0", 
                                      y_col = "Morans_I_log", 
-                                     temp_label = "Temp. lag0 [z-score]", 
+                                     temp_label = temp_label, 
                                      y_title = "Local Moran's I",
-                                     x_annotate = 0.3,
-                                     lab_annotate = "***") +
+                                     x_annotate = 16,
+                                     lab_annotate = p_val_int) +  
+  scale_color_manual(values = my_colors_interaction) +
+  scale_fill_manual(values = my_colors_interaction) +
   theme(legend.position = c(0.6, 0.8),
         legend.title = element_text(hjust = 0.5),       # Align the legend title with the legend items (centered)
         #legend.title = "SPEI levels" 
         legend.background = element_rect(fill = "white", color = NA)  # White background with alpha
         ) +
-  guides(color = guide_legend(ncol = 1)) +
+
+  #guides(color = guide_legend(ncol = 1)) +
   theme(axis.title.y = element_text("Local Moran's I", angle = 90))
 
  
