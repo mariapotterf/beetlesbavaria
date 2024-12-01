@@ -748,67 +748,6 @@ ips_damage_clean_no_outliers <- df_traps_RS_damage %>%
 
 
 # DAMAGE VOLUME model: play with model diagnostics ---------------------------------------
-# only sum ips
-m1 <- gamm(damage_vol ~ #s(year,k = 4) + 
-             s(log_sum_ips,k = 5)+ 
-             #s(pairID, bs = 're') +
-             s(x, y, bs = 'gp', k = 30),
-           family = tw, #Gamma(link = "log"), # nb,
-           method = 'REML',  
-           data = fin_dat_damage,
-           correlation = corAR1(form = ~ year | pairID))
-
-# only years
-m1.1 <- gamm(damage_vol ~ s(year,k = 4) + 
-            # s(log_sum_ips,k = 5)+ 
-             #s(pairID, bs = 're') +
-             s(x, y, bs = 'gp', k = 30),
-           family = tw, #Gamma(link = "log"), # nb,
-           method = 'REML',  
-           data = fin_dat_damage,
-           correlation = corAR1(form = ~ year | pairID))
-
-
-AIC(m1$lme, m1.1$lme)
-
-# both years and years sums
-m2 <- gamm(damage_vol ~ s(year,k = 4) + 
-             s(log_sum_ips,k = 5)+ 
-             #s(pairID, bs = 're') +
-             s(x, y, bs = 'gp', k = 30),
-           family = tw, #Gamma(link = "log"), # nb,
-           method = 'REML',  
-           data = fin_dat_damage,
-           correlation = corAR1(form = ~ year | pairID))
-
-
-# add year as factor to allow relatioship to change over years
-m3 <- gamm(damage_vol ~ s(year,k = 5) + 
-             s(log_sum_ips, by = f_year, k = 8)+ 
-             #s(pairID, bs = 're') +
-             s(x, y, bs = 'gp', k = 20),
-           family = tw, #Gamma(link = "log"), # nb,
-           method = 'REML',  
-           data = fin_dat_damage,
-           correlation = corAR1(form = ~ year | pairID))
-
-
-# including both is teh best
-AIC(m1$lme, m1.1$lme, m2$lme, m3$lme)
-
-#fin.m.damage <- m3$gam
-
-
-
-AIC(m1$lme, m2$lme, m3$lme)
-appraise(m3$gam)
-summary(m3$gam)
-plot(m3$gam, page = 1)
-gam.check(m3$gam)
-k.check(m3$gam)
-
-
-### PREVIOUS DAMAGE ---------------------------------------------------------
 # increase the number of iterations to converge the model
 control <- list(niterPQL = 50)
 
