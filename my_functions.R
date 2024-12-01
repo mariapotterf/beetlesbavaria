@@ -20,19 +20,18 @@ format_p_value_label <- function(model_summary, term) {
     p_value <- model_summary$s.table[term, "p-value"]
   } else {
     # Term not found
-    return(paste(term, ": Not found in model"))
+    return("Not found")
   }
   
   # Format the p-value
   if (p_value < 0.001) {
     formatted_p <- "< 0.001"
   } else {
-    formatted_p <- signif(p_value, 3)
+    formatted_p <- sprintf("%.3f", p_value)  # Round to 3 decimal places
   }
   
-  # Return formatted text
-  #paste(term, "(p =", formatted_p, ")")
-  paste(formatted_p)
+  # Return formatted p-value
+  return(formatted_p)
 }
 
 
@@ -72,11 +71,11 @@ create_effect_previous_year <- function(data, avg_data, line_color = "grey40",
   y_col <- ensym(y_col)
   
   p <- ggplot() + 
-    geom_point(data = avg_data, aes(x = !!x_col, y = !!y_col, group = pairID), 
-               col = "gray80", alpha = 0.3, size = 0.3) +
+    geom_jitter(data = avg_data, aes(x = !!x_col, y = !!y_col, group = pairID), 
+                size = 1, alpha = 0.2, color = 'grey') +
     
     geom_ribbon(data = data, aes(x = x, ymin = conf.low, ymax = conf.high), alpha = 0.25, fill = line_color) +
-    geom_line(data = data, aes(x = x, y = predicted), color = line_color) +
+    geom_line(data = data, aes(x = x, y = predicted), color = line_color,linewidth = 1) +
     
     labs(x = x_title,
          title = my_title,
@@ -102,8 +101,9 @@ create_effect_plot <- function(data,
   y_col <- ensym(y_col)
   
   p <- ggplot() +
-    geom_point(data = avg_data, aes(x = !!x_col, y = !!y_col), col = "gray80", alpha = 0.3,size = 0.3) +
-    geom_line(data = data, aes(x = x, y = predicted), color = line_color) +
+    geom_jitter(data = avg_data, aes(x = !!x_col, y = !!y_col, group = pairID), 
+                size = 1, alpha = 0.2, color = 'grey') +
+    geom_line(data = data, aes(x = x, y = predicted), color = line_color,linewidth = 1) +
     geom_ribbon(data = data, aes(x = x, ymin = conf.low, ymax = conf.high), alpha = 0.25, fill = line_color) +
     labs(x = x_title,
          title = my_title,
@@ -130,14 +130,15 @@ plot_effect_interactions <- function(data,
   y_col <- ensym(y_col)
   
   p<- ggplot() +
-    geom_point(data = avg_data, aes(x = !!x_col, y = !!y_col), col = "gray80", alpha = 0.4, size = 0.3) +
+    geom_jitter(data = avg_data, aes(x = !!x_col, y = !!y_col, group = pairID), 
+                size = 1, alpha = 0.2, color = 'grey') +
     geom_ribbon(data=data, aes(x = x,
                                ymin = conf.low, 
                                ymax = conf.high, 
                                fill = group), alpha = 0.25) +
     geom_line(data = data, 
               aes(x = x, y = predicted,
-                  color = group, linetype = group), linewidth = 1) +
+                  color = group), linewidth = 1) +#, linetype = group
     labs(x = temp_label,
          y = y_title,
          fill = "SPEI levels",
