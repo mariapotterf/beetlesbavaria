@@ -49,12 +49,8 @@ library(tidyr)
 
 
 # Stats
-#library('here')
-#library('gamair')
 library('purrr')
-#library('mvnfast')
 library("tibble")
-library('cowplot')
 library('tidyr')
 library("knitr")
 
@@ -88,7 +84,7 @@ library(lme4)
 library(gratia)
 #library(knitr)   # for table outputs
 
-library(forcats)  # reorder by factor
+
 
 library(stringr) 
 
@@ -430,16 +426,17 @@ sjPlot::tab_df(observation_mortality_year,
 # Final table: for RS and for damaged volume ----------------------------------
 
 ### Tab for spagetti plot -----------------
+#library(dplyr)
 
 df_full_years_to_spagetti_plot <-  
   ips_damage_merge %>%  
   left_join(df_all,
             by = c("forstrev_1" =   "ID",
                    "year"       = "year",
-                   "damaged_volume_total_m3" = "damaged_volume_total_m3") ) %>% 
+                   "damaged_volume_total_m3" = "damaged_volume_total_m3") )  %>% 
   mutate(trapID = as.factor(trapID)) %>% 
   group_by(pairID, year) %>% 
-  summarise(sum_ips    = mean(sum_ips, na.rm = T),
+  dplyr::summarise(sum_ips    = mean(sum_ips, na.rm = T),
             agg_doy    = mean(agg_doy, na.rm = T),
             peak_doy   = mean(peak_doy, na.rm = T),
             peak_diff  = mean(peak_diff, na.rm = T),
@@ -449,9 +446,8 @@ df_full_years_to_spagetti_plot <-
   ungroup(.) %>% 
   mutate(#log_sum_ips = log(sum_ips),
          RS_wind_beetle_ha = RS_wind_beetle*0.09,  # update values for plotting
-         damage_vol_k = damage_vol/1000) %>% 
-#  mutate(f_year = as.factor(year)) %>% 
-  dplyr::filter(!pairID %in% c('Peiting', "Eschenbach_idOPf"))
+         damage_vol_k = damage_vol/1000) #%>% 
+#  dplyr::filter(!pairID %in% c('Peiting', "Eschenbach_idOPf"))
 
 # Replace or filter out zero values before plotting
 df_full_years_to_spagetti_plot$damage_vol_k <- ifelse(df_full_years_to_spagetti_plot$damage_vol_k <= 0.01, 
@@ -466,7 +462,7 @@ df_full_years_to_spagetti_plot$damage_vol_k <- ifelse(df_full_years_to_spagetti_
 # trap vs damaged volume
 df_all_lag1 <- df_all %>% 
   group_by(ID) %>% 
-  arrange(year, .by_group = TRUE) %>%
+  dplyr::arrange(year, .by_group = TRUE) %>%
   mutate(lag1_RS_wind_beetle  = lag(RS_wind_beetle , n = 1, default = NA)) #%>% 
   
 
@@ -822,45 +818,46 @@ fin_dat_damage_no_extremes <- fin_dat_damage %>%
 
 
 #### test effect of previuos year damage ----------------------------------------------
-m.damage.previous <- gamm(damage_vol ~ 
-                            s(sum_ips, k = 3) +
-                            s(lag1_damage_vol, k = 15), # + # Added term for previous beetle counts
-                           # s(pairID, bs = 're') +
-                            #s(f_year, bs = 're'),
-                          data = fin_dat_damage_no_extremes, 
-                          family = tw,
-                          control = control)
-
-m.damage.previous2 <- gamm(damage_vol ~ 
-                            s(sum_ips, k = 3) +
-                            s(lag1_damage_vol, k = 15) + # Added term for previous beetle counts
-                           s(pairID, bs = 're'),# +
-                          #s(f_year, bs = 're'),
-                          data = fin_dat_damage_no_extremes, 
-                          family = tw,
-                          control = control)
-
-m.damage.previous3 <- gamm(damage_vol ~ 
-                             s(sum_ips, k = 3) +
-                             s(lag1_damage_vol, k = 4) + # Added term for previous beetle counts
-                             s(pairID, bs = 're') +
+m.damage.simpl <- gam(damage_vol ~ 
+                        sum_ips +
+                        #lag1_damage_vol +
+                            # s(sum_ips, k = 3) +
+                             s(lag1_damage_vol, k = 3)# + # Added term for previous beetle counts
+                             #s(pairID, bs = 're', k = 5) +
                              #s(x, y, bs = 'tp', k = 5),
-                           s(f_year, bs = 're'),
-                           data = fin_dat_damage_no_extremes, 
+                      #       s(f_year, bs = 're')
+                      ,
+                           data = fin_dat_damage_no_extremes,#  fin_dat_damage, 
                            family = tw,
-                           control = control)
+                      select = TRUE)
+
+fin_dat_damage %>% 
+  ggplot(aes(x = lag1_damage_vol, y = damage_vol)) +
+  geom_point() + 
+  geom_smooth()
+
+m <- m.damage.simpl
+summary(m)
+
+
+k.check(m)
+predict_data <- ggpredict(m, terms = c('sum_ips'))
+plot(predict_data)
+
+predict_data <- ggpredict(m, terms = c('lag1_damage_vol'))
+plot(predict_data)
+
 
 
 AIC(m.damage.previous2, m.damage.previous, m.damage.previous3)
 
-fin.m.damage <- m.damage.previous3$gam
+fin.m.damage <- m.damage.simpl
 
-appraise(m.damage.previous3$gam)
-summary(m.damage.previous$gam)
-plot(m.damage.previous3$gam, page = 1)
+appraise(fin.m.damage)
+summary(fin.m.damage)
+plot(fin.m.damage, page = 1)
 gam.check(m.damage.previous3$gam)
 k.check(m.damage.previous3$gam)
-draw(m.damage.previous3$gam)
 
 # check for autocorrelation
 # Extract residuals from the model
@@ -902,9 +899,25 @@ fin_dat_damage %>%
   scale_x_log10()
 
 
+
 fin_dat_RS_clean <- fin_dat_RS %>% 
   dplyr::filter(RS_wind_beetle <1700) %>% 
   dplyr::filter(lag1_RS_wind_beetle <1700)
+
+
+# Calculate correlation
+cor_results <- fin_dat_RS %>%
+  summarise(
+    pearson_sum_ips = cor(sum_ips, RS_wind_beetle, use = "complete.obs", method = "pearson"),
+    spearman_sum_ips = cor(sum_ips, RS_wind_beetle, use = "complete.obs", method = "spearman"),
+    pearson_sum_ips_lag1 = cor(sum_ips_lag1, RS_wind_beetle, use = "complete.obs", method = "pearson"),
+    spearman_sum_ips_lag1 = cor(sum_ips_lag1, RS_wind_beetle, use = "complete.obs", method = "spearman")
+  )
+
+# Print results
+print(cor_results)
+
+
 
 
 # PREVIOUS RS --------------------------------------
@@ -917,6 +930,48 @@ mRS.previous <- gamm(RS_wind_beetle ~ #s(year,k = 4) +
            family = tw, 
            method = 'REML',  
            data = fin_dat_RS_clean)
+
+
+mRS.simpl <- gam(RS_wind_beetle ~ 
+                       # sum_ips +
+                        #lag1_damage_vol +
+                         s(sum_ips, k = 3) +
+                        s(lag1_RS_wind_beetle, k = 3) + # Added term for previous beetle counts
+                      #s(pairID, bs = 're', k = 5) +
+                      s(x, y, bs = 'tp', k = 5)
+                      #       s(f_year, bs = 're')
+                      ,
+                      data = fin_dat_RS_clean,#  fin_dat_damage, 
+                      family = tw,
+                 method = 'REML',  
+                      select = TRUE)
+
+
+mRS.simpl2 <- gam(RS_wind_beetle ~ 
+                    #sum_ips_lag1 +
+                   #lag1_damage_vol +
+                   s(sum_ips_lag1, k = 3) +
+                   s(lag1_RS_wind_beetle, k = 3) + # Added term for previous beetle counts
+                 #s(pairID, bs = 're', k = 5) +
+                 s(x, y, bs = 'tp', k = 5) #,
+                 #       s(f_year, bs = 're')
+                 ,
+                 data = fin_dat_RS_clean,#  fin_dat_damage, 
+                 family = tw,
+                 method = 'REML',  
+                 select = TRUE)
+
+AIC(mRS.simpl, mRS.simpl2)
+
+m<-mRS.simpl
+summary(m)
+k.check(m)
+predict_data <- ggpredict(m, terms = c('sum_ips')) #_lag1
+plot(predict_data)
+
+predict_data <- ggpredict(m, terms = c('lag1_RS_wind_beetle'))
+plot(predict_data)
+
 
 
 mRS.previous1 <- gamm(RS_wind_beetle ~ #s(year,k = 4) + 
