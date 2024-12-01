@@ -76,7 +76,6 @@ lab_peak_growth       = "Peak swarming intensity [#]"
 
 ##### read data ----------------------------------------------------------------
 load(file=   "outData/final_table.Rdata")
-load(file =  "outData/buffers.Rdata")  # df_RS_out
 load(file =  "outData/lisa.Rdata")     # read LISA Moran's I stats
 load(file =  "outData/spatial.Rdata")  # read xy coordinates
 
@@ -97,17 +96,10 @@ xy_df <- distinct(xy_df)
 
 
 # check data: length 1106 or more!
-nrow(df_RS_out)
+
 nrow(lisa_merged_df)
 nrow(dat_fin)
 nrow(xy_df)
-
-# prepare data RS --------------------------------------------
-df_RS_out <- df_RS_out %>% 
-  dplyr::select(-c(globalid, id,  "all_dist_sum",     
-                   "cum_removed",      "ref_all_dist",     "anom_all_dist" ,   "ref_wind_beetle", 
-                   "anom_wind_beetle", "ref_harvest",      "anom_harvest")) %>% 
-  dplyr::rename(trapID = falsto_name)
 
 # change column names
 lisa_merged_df <- lisa_merged_df %>% 
@@ -130,10 +122,7 @@ dat_fin$tr_agg_doy  <- pmin(pmax(dat_fin$tr_agg_doy, 1e-4),  1 - 1e-4)
 dat_fin$tr_peak_doy <- pmin(pmax(dat_fin$tr_peak_doy, 1e-4), 1 - 1e-4)
 
 
-dat_fin <-   dat_fin %>% 
-  left_join(df_RS_out, 
-            by = join_by(trapID, year, sum_ips)) 
-  
+
 # add previous year lag
 dat_fin <- dat_fin %>% 
   group_by(trapID) %>%
