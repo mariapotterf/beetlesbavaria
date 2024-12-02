@@ -168,7 +168,7 @@ plot_data_with_average <- function(data, y_var, y_label, my_title) {
     labs(x = 'Year', 
          y = y_label, 
          title = my_title) +
-    geom_line(alpha = 0.1) +  
+    geom_line(alpha = 0.2, linewidth = 0.2, color = 'grey70') +  
     stat_summary(
       aes(x = year, y = !!y_var_sym, group = 1), 
       fun = mean,  # Calculate the mean for each year
