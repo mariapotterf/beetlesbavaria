@@ -743,10 +743,6 @@ ips_damage_clean_no_outliers <- df_traps_RS_damage %>%
   
 
 
-
-
-
-
 # DAMAGE VOLUME model: play with model diagnostics ---------------------------------------
 # increase the number of iterations to converge the model
 control <- list(niterPQL = 50)
@@ -761,14 +757,30 @@ m.damage.simpl <- gam(damage_vol ~
                         sum_ips +
                         #lag1_damage_vol +
                             # s(sum_ips, k = 3) +
-                             s(lag1_damage_vol, k = 3)# + # Added term for previous beetle counts
-                             #s(pairID, bs = 're', k = 5) +
-                             #s(x, y, bs = 'tp', k = 5),
-                      #       s(f_year, bs = 're')
+                             s(lag1_damage_vol, k = 3) + # Added term for previous beetle counts
+                             s(pairID, bs = 're', k = 5) +
+                             s(x, y, bs = 'tp', k = 5) +#,
+                            s(f_year, bs = 're')
                       ,
                            data = fin_dat_damage_no_extremes,#  fin_dat_damage, 
                            family = tw,
                       select = TRUE)
+
+m.damage.simpl.lag1 <- gam(damage_vol ~ 
+                        # sum_ips +
+                        sum_ips_lag1 +
+                        #lag1_damage_vol +
+                        # s(sum_ips, k = 3) +
+                        s(lag1_damage_vol, k = 3) + # Added term for previous beetle counts
+                        s(pairID, bs = 're', k = 5) +
+                        s(x, y, bs = 'tp', k = 5) +#,
+                        s(f_year, bs = 're')
+                      ,
+                      data = fin_dat_damage_no_extremes,#  fin_dat_damage, 
+                      family = tw,
+                      select = TRUE)
+
+AIC(m.damage.simpl, m.damage.simpl.lag1)
 
 fin_dat_damage %>% 
   ggplot(aes(x = lag1_damage_vol, y = damage_vol)) +
@@ -787,8 +799,6 @@ predict_data <- ggpredict(m, terms = c('lag1_damage_vol'))
 plot(predict_data)
 
 
-
-AIC(m.damage.previous2, m.damage.previous, m.damage.previous3)
 
 fin.m.damage <- m.damage.simpl
 
@@ -872,13 +882,13 @@ mRS.previous <- gamm(RS_wind_beetle ~ #s(year,k = 4) +
 
 
 mRS.simpl <- gam(RS_wind_beetle ~ 
-                       # sum_ips +
+                        #sum_ips +
                         #lag1_damage_vol +
                          s(sum_ips, k = 3) +
                         s(lag1_RS_wind_beetle, k = 3) + # Added term for previous beetle counts
-                      #s(pairID, bs = 're', k = 5) +
-                      s(x, y, bs = 'tp', k = 5)
-                      #       s(f_year, bs = 're')
+                      s(pairID, bs = 're', k = 5) +
+                      s(x, y, bs = 'tp', k = 5) +
+                            s(f_year, bs = 're')
                       ,
                       data = fin_dat_RS_clean,#  fin_dat_damage, 
                       family = tw,
@@ -886,61 +896,39 @@ mRS.simpl <- gam(RS_wind_beetle ~
                       select = TRUE)
 
 
-mRS.simpl2 <- gam(RS_wind_beetle ~ 
-                    #sum_ips_lag1 +
+mRS.simpl.lag1 <- gam(RS_wind_beetle ~ 
+                   # sum_ips_lag1 +
                    #lag1_damage_vol +
                    s(sum_ips_lag1, k = 3) +
                    s(lag1_RS_wind_beetle, k = 3) + # Added term for previous beetle counts
-                 #s(pairID, bs = 're', k = 5) +
-                 s(x, y, bs = 'tp', k = 5) #,
-                 #       s(f_year, bs = 're')
+                 s(pairID, bs = 're', k = 5) +
+                 s(x, y, bs = 'tp', k = 5) +
+                       s(f_year, bs = 're')
                  ,
                  data = fin_dat_RS_clean,#  fin_dat_damage, 
                  family = tw,
                  method = 'REML',  
                  select = TRUE)
 
-AIC(mRS.simpl, mRS.simpl2)
+AIC(mRS.simpl, mRS.simpl.lag1)
 
+summary(mRS.simpl)
+summary(mRS.simpl.lag1)
+
+
+
+m<-mRS.simpl.lag1
 m<-mRS.simpl
+
 summary(m)
 k.check(m)
 predict_data <- ggpredict(m, terms = c('sum_ips')) #_lag1
+predict_data <- ggpredict(m, terms = c('sum_ips_lag1')) #_lag1
+
 plot(predict_data)
 
 predict_data <- ggpredict(m, terms = c('lag1_RS_wind_beetle'))
 plot(predict_data)
-
-
-
-mRS.previous1 <- gamm(RS_wind_beetle ~ #s(year,k = 4) + 
-                       s(lag1_RS_wind_beetle, k = 6) + 
-                       s(sum_ips_lag1 , k=5)+ 
-                       s(pairID, bs = 're'),# +
-                     #s(x, y, bs = 'tp', k = 50),
-                     family = tw, 
-                     method = 'REML',  
-                     data = fin_dat_RS_clean)
-
-
-mRS.previous2 <- gamm(RS_wind_beetle ~ #s(year,k = 4) + 
-                        s(lag1_RS_wind_beetle, k = 6) + 
-                        s(sum_ips_lag1 , k=5)+ 
-                        s(pairID, bs = 're') +
-                       s(x, y, bs = 'tp', k = 5),
-                      family = tw, 
-                      method = 'REML',  
-                      data = fin_dat_RS_clean)
-
-
-AIC(mRS.previous1, mRS.previous, mRS.previous2)
-
-appraise(mRS.previous1$gam)
-summary(mRS.previous1$gam)
-plot(mRS.previous1$gam, page = 1)
-gam.check(mRS.previous1$gam)
-k.check(mRS.previous1$gam)
-draw(mRS.previous1$gam)
 
 # check for autocorrelation
 # Extract residuals from the model
@@ -951,15 +939,8 @@ acf(residuals, main="ACF of Model Residuals")
 pacf(residuals, main="ACF of Model Residuals")
 
 
-
-
-
-
-
-
-
 # the best model!
-fin.m.RS <- mRS.previous1$gam
+fin.m.RS <- mRS.simpl
 
 sjPlot::tab_model(fin.m.RS,     file = "outTable/model_trap_RS.doc")
 sjPlot::tab_model(fin.m.damage, file = "outTable/model_trap_damage.doc")
@@ -1020,6 +1001,11 @@ p_spagett_RS<- plot_data_with_average(df_full_years_to_spagetti_plot, "RS_wind_b
 
 # Assuming 'model' is your glm.nb model
 summary(fin.m.damage)
+m <- fin.m.damage
+p_val_damage           <- format_p_value_label(summary(m), "s(lag1_damage_vol)")
+p_val_ips          <- format_p_value_label(summary(m), "sum_ips")
+
+
 p0 <- ggpredict(fin.m.damage, terms = "lag1_damage_vol [all]", allow.new.levels = TRUE)
 p1 <- ggpredict(fin.m.damage, terms = "sum_ips [all]", allow.new.levels = TRUE)
 
@@ -1039,12 +1025,12 @@ p0.damage <-
                      avg_data = fin_dat_damage_plot, 
                      x_col = "lag1_damage_vol", 
                      y_col = "damage_vol", 
-                     line_color = "darkgreen", 
+                     line_color = "darkgrey", 
                      x_title = expression('Tree mortality lag1' ~ "[" * m^3 * " * 1000]"), 
                      #y_title = paste(lab_popul_level, '*1000'), 
                      #my_title = "Effect of Year on Sum IPS", 
                      x_annotate = 50, 
-                     lab_annotate = "***")
+                     lab_annotate = p_val_damage)
 
 (p0.damage)
 
@@ -1056,12 +1042,12 @@ p1.damage <-
                      avg_data = fin_dat_damage_plot, 
                      x_col = "sum_ips", 
                      y_col = "damage_vol", 
-                     line_color = "grey30", 
+                     line_color = "#A50026", 
                      x_title = 'Population level [#*1000]' , 
                      y_title = paste(lab_popul_level, '*1000'), 
                      #my_title = "Effect of Year on Sum IPS", 
                      x_annotate = 50, 
-                     lab_annotate = "***")
+                     lab_annotate = p_val_ips)
 
 (p1.damage)
 
@@ -1069,8 +1055,13 @@ p1.damage <-
 
 # Assuming 'model' is your glm.nb model
 summary(fin.m.RS)
+
+m <- fin.m.RS
+p_val_RS       <- format_p_value_label(summary(m), "s(lag1_RS_wind_beetle)")
+p_val_ips          <- format_p_value_label(summary(m), "s(sum_ips)")
+
 p0 <- ggpredict(fin.m.RS, terms = "lag1_RS_wind_beetle [all]", allow.new.levels = TRUE)
-p1 <- ggpredict(fin.m.RS, terms = "sum_ips_lag1 [all]", allow.new.levels = TRUE)
+p1 <- ggpredict(fin.m.RS, terms = "sum_ips [all]", allow.new.levels = TRUE)
 
 p0$x <- p0$x*0.09 # convert piel counts to hectares
 p0$predicted <- p0$predicted*0.09 #/100
@@ -1088,12 +1079,12 @@ p0.RS <-
                      avg_data = fin_dat_RS_clean_plot, 
                      x_col = "lag1_RS_wind_beetle_ha", 
                      y_col = "RS_wind_beetle_ha", 
-                     line_color = "darkgreen", 
-                     x_title = 'RS Tree mortality lag1 [ha]' , 
+                     line_color = "darkgrey", 
+                     x_title = 'Tree mortality lag1 [ha]' , 
                      #y_title = paste(lab_popul_level, '*1000'), 
                      #my_title = "Effect of Year on Sum IPS", 
                      x_annotate = 75, 
-                     lab_annotate = "***")
+                     lab_annotate = p_val_RS)
 
 (p0.RS)
 
@@ -1105,12 +1096,12 @@ p1.RS <-
                      avg_data = fin_dat_RS_clean_plot, 
                      x_col = "sum_ips_lag1", 
                      y_col = "RS_wind_beetle_ha", 
-                     line_color = "grey30", 
+                     line_color = "#A50026", 
                      x_title = 'Population level lag1 [#*1000]' , 
                      #y_title = paste(lab_popul_level, '*1000'), 
                      #my_title = "Effect of Year on Sum IPS", 
                      x_annotate = 40, 
-                     lab_annotate = "0.08")
+                     lab_annotate = p_val_ips)
 
 (p1.RS)
 
