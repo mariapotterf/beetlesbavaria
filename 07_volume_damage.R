@@ -754,9 +754,9 @@ fin_dat_damage_no_extremes <- fin_dat_damage %>%
 
 #### test effect of previuos year damage ----------------------------------------------
 m.damage.simpl <- gam(damage_vol ~ 
-                        sum_ips +
+                       # sum_ips +
                         #lag1_damage_vol +
-                            # s(sum_ips, k = 3) +
+                            s(sum_ips, k = 3) +
                              s(lag1_damage_vol, k = 3) + # Added term for previous beetle counts
                              s(pairID, bs = 're', k = 5) +
                              s(x, y, bs = 'tp', k = 5) +#,
@@ -870,16 +870,6 @@ print(cor_results)
 
 
 # PREVIOUS RS --------------------------------------
-
-mRS.previous <- gamm(RS_wind_beetle ~ #s(year,k = 4) + 
-             s(lag1_RS_wind_beetle, k = 9) + 
-             s(sum_ips_lag1 , k=10), #+ 
-             # #s(pairID, bs = 're') +
-             #s(x, y, bs = 'tp', k = 50),
-           family = tw, 
-           method = 'REML',  
-           data = fin_dat_RS_clean)
-
 
 mRS.simpl <- gam(RS_wind_beetle ~ 
                         #sum_ips +
