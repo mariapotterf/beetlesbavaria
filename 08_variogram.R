@@ -433,7 +433,7 @@ ggsave(filename = 'outFigs/variogram_range.png', plot = p_range, width = 6, heig
 # Test variogram for groupped years: drought vs no drought -----------------------------------------
 # Group data by drought period and aggregate
 dat_dynamics_xy_grouped <- dat_dynamics_xy %>%
-  mutate(drought_status = ifelse(year %in% 2018:2020, "Drought", "No Drought")) %>%
+  mutate(drought_status = ifelse(year %in% c(2015, 2018:2020), "Drought", "No Drought")) %>%
   group_by(x, y, drought_status) %>%
   #summarise(across(c(log_sum_ips, tr_agg_doy, tr_peak_doy, log_peak_diff), median, na.rm = TRUE)) %>%
   summarise(across(c(log_sum_ips, sum_ips, tr_agg_doy, tr_peak_doy, peak_diff, log_peak_diff), median, na.rm = TRUE)) %>%
@@ -504,73 +504,6 @@ plot(variogram_data,fitted_variogram, cutoff = cutoff )#169068.9   )
 
 
 
-# scale variances ---------------------------------------------------------
-# Define the fit_variogram function with scaling
-fit_variogram_scaled <- function(variogram_data, model = "Mat") {
-  year = unique(variogram_data$year)
-  variable = unique(variogram_data$variable)
-  
-  # Scale semivariance and distance
-  variogram_data$gamma_scaled <- (variogram_data$gamma - mean(variogram_data$gamma)) / sd(variogram_data$gamma)
-  variogram_data$dist_scaled <- (variogram_data$dist - mean(variogram_data$dist)) / sd(variogram_data$dist)
-  
-  # Initial guesses for Nugget, Sill, and Range
-  nugget <- mean(variogram_data$gamma_scaled[1:min(2, nrow(variogram_data))])
-  sill <- mean(tail(variogram_data$gamma_scaled, 3))
-  range <- approx(x = variogram_data$gamma_scaled, y = variogram_data$dist_scaled, xout = sill * 0.95)$y
-  
-  # Specify the initial variogram model
-  initial_model <- vgm(psill = sill - nugget, model = model, range = range, nugget = nugget)
-  
-  # Fit the variogram model to the empirical data
-  fitted_variogram <- fit.variogram(variogram_data, model = initial_model)
-  plot(variogram_data, fitted_variogram)
-  
-  # Extract the parameters
-  fitted_nugget <- fitted_variogram$psill[1]
-  fitted_sill <- sum(fitted_variogram$psill)
-  fitted_range <- fitted_variogram$range[2]
-  
-  # Generate a sequence of distances for prediction
-  dist_seq <- seq(min(variogram_data$dist), max(variogram_data$dist), length.out = 100)
-  
-  # Predict the semivariance values using the fitted model
-  predicted_gamma <- variogramLine(fitted_variogram, dist_vector = dist_seq)$gamma
-  
-  # Create a data frame for plotting
-  df <- data.frame(
-    year = year,
-    variable = variable,
-    dist = c(variogram_data$dist, dist_seq),
-    gamma = c(variogram_data$gamma_scaled, predicted_gamma),
-    type = rep(c("Empirical", "Fitted"), c(nrow(variogram_data), length(dist_seq))),
-    fitted_nugget = fitted_nugget,
-    fitted_sill = fitted_sill,
-    fitted_range = fitted_range
-  )
-  
-  return(df)
-}
-
-# fit variograms -----------------------------------------------------------------
-results_drought_scaled_ls <- lapply(variogram_results_ls_grouped, fit_variogram_scaled)
-
-
-# Combine the results into a single data frame
-results_drought <- do.call(rbind, results_drought_ls)
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 
@@ -596,7 +529,7 @@ sjPlot::tab_df(out_tab_variograms_drought,
                #col.header = c(as.character(qntils), 'mean'),
                show.rownames = F,
                file="outTable/variogram_drought.doc",
-               digits = 3) 
+               digits = 3)
 
 
 
@@ -659,83 +592,10 @@ print(p_drought_variogram)
 
 
 
-# test over all of teh groups and identify the best fit by SSE  -------------
-fit_variogram_full <- function(variogram_data, cutoff = 300000, models = c("Mat", "Sph", "Exp", "Pow")) {
-  year <- unique(variogram_data$year)
-  variable <- unique(variogram_data$variable)
-  
-  # Calculate Nugget
-  nugget <- mean(variogram_data$gamma[1:min(3, nrow(variogram_data))])
-  
-  # Estimate Sill
-  sill <- mean(tail(variogram_data$gamma, 5))
-  
-  # Estimate Range
-  range <- approx(x = variogram_data$gamma, 
-                  y = variogram_data$dist, 
-                  xout = sill * 0.95)$y
-  
-  # Initialize a list to store models and their fits
-  fitted_variograms <- list()
-  SSE_list <- c()
-  
-  # Loop over models and fit variograms
-  for (model in models) {
-    initial_model <- vgm(psill = sill - nugget, model = model, range = range, nugget = nugget)
-    fitted_variogram <- tryCatch({
-      fit.variogram(variogram_data, model = initial_model)
-    }, error = function(e) NULL)
-    if (!is.null(fitted_variogram)) {
-      # Calculate SSE
-      predicted_gamma <- variogramLine(fitted_variogram, dist_vector = variogram_data$dist)$gamma
-      SSE <- sum((variogram_data$gamma - predicted_gamma)^2)
-      fitted_variograms[[model]] <- list(fitted_variogram = fitted_variogram, SSE = SSE)
-      SSE_list <- c(SSE_list, SSE)
-    }
-  }
-  
-  # Select the best model based on SSE
-  best_model <- names(fitted_variograms)[which.min(SSE_list)]
-  best_fitted_variogram <- fitted_variograms[[best_model]]$fitted_variogram
-  
-  # Generate predictions
-  dist_seq <- seq(0, cutoff, length.out = 100)
-  predicted_gamma <- variogramLine(best_fitted_variogram, dist_vector = dist_seq)$gamma
-  
-  # Create a data frame for plotting
-  df <- data.frame(
-    dist = c(variogram_data$dist, dist_seq),
-    gamma = c(variogram_data$gamma, predicted_gamma),
-    type = rep(c("Empirical", "Fitted"), c(nrow(variogram_data), length(dist_seq))),
-    year = year,
-    variable = variable,
-    model = best_model
-  )
-  
-  return(df)
-}
-
-
-plot_variogram <- function(df) {
-  ggplot(df, aes(x = dist / 1000, y = gamma, color = type)) +
-    geom_line(data = subset(df, type == "Fitted"), size = 1.2) +
-    geom_point(data = subset(df, type == "Empirical"), size = 1.5, alpha = 0.7) +
-    labs(
-      title = paste("Variable:", unique(df$variable), "| Year:", unique(df$year), "| Model:", unique(df$model)),
-      x = "Distance [km]",
-      y = "Semivariance"
-    ) +
-    theme_minimal(base_size = 14)
-}
-
-# Example usage
-variogram_df <- fit_variogram_full(variogram_results_ls_grouped[[2]])
-plot_variogram(variogram_df)
 
 
 
-
-# try to detrend data first? 
+# try to detrend data first? ================
 library(gstat)
 library(sp)
 library(mgcv)
