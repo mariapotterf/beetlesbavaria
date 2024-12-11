@@ -144,7 +144,7 @@ nrow(dat_fin)
 
 
 
-# Specify predictors and lags ----------------------------
+## Preprocesss table: get lags ----------------------------
 # dopes not remove the number of larg = annd number of observations constant
 #lags <- 0:3
   
@@ -187,6 +187,12 @@ nrow(dat_spei_lags)
 head(dat_spei_lags)
 
 
+# remove the NAs for analysis----------------------------------------------------------------- 
+dat_spei_lags_clean <- dat_spei_lags %>% 
+  na.omit(dat_spei_lags)
+
+
+
 # list predictors to test
 selected_predictors_beetle <- c('sum_ips', 'sum_ips_lag1','sum_ips_lag2',
                          #'log_sum_ips', 'log_sum_ips_lag1','sum_ips_lag2',
@@ -199,7 +205,7 @@ selected_predictors_climate <- c("spei12_lag0","spei12_lag1" ,"spei12_lag2",
                                  "tmp_lag0" , "tmp_lag1", "tmp_lag2" )   
 
 
-# check correlation between tmp and spei ---------------------------------------
+### check correlation between tmp and spei ---------------------------------------
 # Calculate pairwise correlations for numeric columns
 numeric_cols <- dat_spei_lags %>%
   dplyr::select_if(is.numeric)  %>% # Select only numeric columns
@@ -232,13 +238,50 @@ dat_dynamics <- dat_fin %>%
 fwrite(dat_dynamics, 'outTable/beetle_dynamic_indicators.csv')
 
 
+# Calculate average counts for each trap pair ------------------------------------
+avg_data <- dat_spei_lags %>%
+  group_by(pairID, year) %>%
+  summarise(#Morans_I_log  = mean(Morans_I_log , na.rm = TRUE),
+            
+            # dependents
+            sum_ips     = mean(sum_ips, na.rm = TRUE),
+            peak_diff   = mean(peak_diff, na.rm = TRUE),
+            tr_agg_doy  = mean(tr_agg_doy, na.rm = TRUE),
+            tr_peak_doy = mean(tr_peak_doy, na.rm = TRUE), 
+            agg_doy     = mean(agg_doy, na.rm = TRUE),
+            peak_doy    = mean(peak_doy, na.rm = TRUE),
+            # SPEIS - spei3
+            spei_lag0   = mean(spei, na.rm = TRUE),
+           # spei_lag1   = mean(spei_lag1, na.rm = TRUE), # for agg_doy
+           # spei_lag2   = mean(spei_lag2, na.rm = TRUE),
+            # # SPEI 12
+            #spei24_lag0        = mean(spei24, na.rm = TRUE),
+            spei12_lag0        = mean(spei12_lag0, na.rm = TRUE),
+            spei12_lag1   = mean(spei12_lag1, na.rm = TRUE), # for agg_doy
+            #spei12_lag2   = mean(spei12_lag2, na.rm = TRUE),
+            # TMP
+            tmp_lag0         = mean(tmp_lag0, na.rm = T),
+            #tmp_lag1    = mean(tmp_lag1, na.rm = TRUE),
+            #tmp_lag2    = mean(tmp_lag2, na.rm = TRUE),  # for agg_doy
+            
+            x           = mean(x, na.rm = TRUE),
+            y           = mean(y, na.rm = TRUE)
+  ) %>%
+  ungroup(.) %>% 
+  na.omit() %>% 
+  mutate(f_year = as.factor(year)) %>% 
+  dplyr::filter(!pairID %in% c('Eschenbach_idOPf', 'Peiting') ) # remove two traps with always having too low trap counts
+
+fwrite(avg_data, 'outTable/fin_tab_avg.csv')
+
+
 
 
 hist(dat_dynamics$veg_tmp)
 hist(dat_dynamics$spei12)
 
-
-# get summary statistics for mean and sd for weather condistions: --------------------------
+# Summary stats ---------------------------------------------------
+## get summary statistics for mean and sd for weather condistions: --------------------------
 desc_stat_climate_summary <- dat_dynamics %>%
   mutate(class = ifelse(year %in% c(2018:2020), "2018-2020", "Other Years")) %>%
   group_by(class) %>%
@@ -343,46 +386,10 @@ ggsave(filename = 'outFigs/vegetation_weather_summary3.png',
 
 
 
-# Calculate average counts for each trap pair ------------------------------------
-avg_data <- dat_spei_lags %>%
-  group_by(pairID, year) %>%
-  summarise(Morans_I_log  = mean(Morans_I_log , na.rm = TRUE),
-            
-            # dependents
-            sum_ips     = mean(sum_ips, na.rm = TRUE),
-            peak_diff   = mean(peak_diff, na.rm = TRUE),
-            tr_agg_doy  = mean(tr_agg_doy, na.rm = TRUE),
-            tr_peak_doy = mean(tr_peak_doy, na.rm = TRUE), 
-            agg_doy     = mean(agg_doy, na.rm = TRUE),
-            peak_doy    = mean(peak_doy, na.rm = TRUE),
-            # SPEIS - spei3
-            # spei_lag0        = mean(spei, na.rm = TRUE),
-            # spei_lag1   = mean(spei_lag1, na.rm = TRUE), # for agg_doy
-            # spei_lag2   = mean(spei_lag2, na.rm = TRUE),
-            # # SPEI 12
-            spei24_lag0        = mean(spei24, na.rm = TRUE),
-            spei12_lag0        = mean(spei12, na.rm = TRUE),
-            spei12_lag1   = mean(spei12_lag1, na.rm = TRUE), # for agg_doy
-            #spei12_lag2   = mean(spei12_lag2, na.rm = TRUE),
-            # TMP
-            tmp_lag0         = mean(tmp_lag0, na.rm = T),
-            #tmp_lag1    = mean(tmp_lag1, na.rm = TRUE),
-            #tmp_lag2    = mean(tmp_lag2, na.rm = TRUE),  # for agg_doy
-            
-            x           = mean(x, na.rm = TRUE),
-            y           = mean(y, na.rm = TRUE)
-            ) %>%
-  ungroup(.) %>% 
-  na.omit() %>% 
-  mutate(f_year = as.factor(year)) %>% 
-  dplyr::filter(!pairID %in% c('Eschenbach_idOPf', 'Peiting') ) # remove two traps with always having too low trap counts
-
-fwrite(avg_data, 'outTable/fin_tab_avg.csv')
 
 
 
-
-# gamme is better then quasi and betar!
+#Filter data for plottming --------------------------------------------------------
 # filter extreme values: occuring too late in a year ()
 avg_data_agg <- avg_data %>% 
   dplyr::filter(tr_agg_doy < 0.54)
@@ -392,9 +399,9 @@ avg_data_peak_diff <- avg_data %>%
   dplyr::filter(!pairID %in% c('Piding', 'Gangkofen'))
 
 # filetr data ----------------------------------------------------------------------
-avg_data_filt <- avg_data %>% 
+avg_data_filt <- avg_data #%>% 
   #mutate(f_year = as.factor(year)) %>% 
-  dplyr::filter(!pairID %in% pair_outliers )
+  #dplyr::filter(!pairID %in% pair_outliers )
 
 
 avg_data_lagged <- avg_data %>% 
@@ -432,34 +439,13 @@ avg_data_filt_lagged$f_year <- droplevels(avg_data_filt_lagged$f_year)
 
 # Final predictors: current year tmp_lag0 & spei12_lag1 best predictors ------------------
 # 
-
 cor(avg_data$spei12_lag1, avg_data$tmp_lag0)
-cor(avg_data$spei24_lag0, avg_data$tmp_lag0)
+#cor(avg_data$spei24_lag0, avg_data$tmp_lag0)
 
 # makde models with diffr autocorrelation structur (direct vs values from previous years) and compare their performacce 
 
 
-# try on trap level data: 
-dat_spei_lags_clean <- dat_spei_lags %>% 
-  na.omit(dat_spei_lags)
 #### IPS_SUM ---------------------------------------------------------------------- 
-
-# model on traps:
-
-m2_full <- gam(sum_ips ~ 
-                 #tmp_lag0 +
-                 #s(tmp_lag0, k = 5) +
-                 #s(spei12_lag1, k = 5) + 
-                 te(tmp_lag0, spei12_lag1, k = 3) + 
-                 s(sum_ips_lag1, k = 5) + # Added term for previous beetle counts
-                 s(x,y) +
-                 s(pairID, bs = 're') +
-                 s(f_year, bs = 're')
-               ,
-               data = dat_spei_lags_clean, #avg_data_filt_lagged, 
-               family = tw,
-               method = "REML",
-               select = TRUE)
 
 m2_full_ti <- gam(sum_ips ~ 
                  tmp_lag0 +
@@ -478,36 +464,6 @@ m2_full_ti <- gam(sum_ips ~
 
 AIC(m2_full_ti, m2_full)
 summary(m2_full_ti)
-
-#### model on paired level: averaged ------------------------------------------------
-# => now it works well on the trap level
-m2 <- gam(sum_ips ~ 
-            #tmp_lag0 +
-            #s(tmp_lag0, k = 5) +
-            #s(spei12_lag1, k = 5) + 
-            te(tmp_lag0, spei12_lag1, k = 3) + 
-            s(sum_ips_lag1, k = 5) + # Added term for previous beetle counts
-            s(x,y) +
-            #s(pairID, bs = 're')# +
-          s(f_year, bs = 're')
-          ,
-          data = avg_data_lagged, #avg_data_filt_lagged, 
-          family = tw,
-          method = "REML",
-          select = TRUE)
-
-AIC(m1, m2)
-m<-m2_full_ti
-summary(m)
-k.check(m)
-predict_data <- ggpredict(m, terms = c('tmp_lag0'))
-plot(predict_data)
-
-predict_data <- ggpredict(m, terms = c('spei12_lag1'))
-plot(predict_data)
-
-predict_data <- ggpredict(m, terms = c('tmp_lag0', 'spei12_lag1[-1.5,0]'))
-plot(predict_data)
 
 fin.m.counts.previous.tw <- m2_full_ti
 
@@ -544,18 +500,10 @@ predict_data <- ggpredict(m, terms = c('tmp_lag0', 'spei12_lag1[-1.5,0]'))
 plot(predict_data)
 
 
-#### previuous AGG DOY ----------------------------------------------------------
+#### AGG DOY ----------------------------------------------------------
 
 
 ###### agg dy previous - test which model alternative is more stable - the specific one ------
-avg_data_agg_no_out <- avg_data_filt_lagged %>% 
-  dplyr::filter(tr_agg_doy < 0.54)
-
-
-avg_data_lagged_noNA <- avg_data_lagged[complete.cases(avg_data_lagged), ]
-
-anyNA(avg_data_lagged_noNA)
-
 m.agg.previous_tmp0_spei12_1 <- gam(tr_agg_doy ~
                                                s(tmp_lag0, k = 3) +
                                                s(spei12_lag1, k = 3) +
@@ -594,16 +542,6 @@ plot(predict_data)
 
 
 ###### Previous PEak DoY ----------------------------------------------------
-
-
-avg_data_peak_no_out <- avg_data_filt_lagged %>% 
-  dplyr::filter(tr_peak_doy < 0.72) %>% 
-  dplyr::filter(tr_peak_doy_lag1 < 0.72)
-
-# Plot the variables to look for outliers
-plot(avg_data_peak_no_out$tmp_lag0, avg_data_peak_no_out$tr_peak_doy)
-plot(avg_data_peak_no_out$spei12_lag1, avg_data_peak_no_out$tr_peak_doy)
-
 
 m.peak.doy.previous_tmp0_spei12_1 <- gam(tr_peak_doy ~ 
                                               s(tmp_lag0, k = 5) +
@@ -647,80 +585,6 @@ summary(fin.m.counts.previous.tw)
 summary(fin.m.peak.diff.previous.tw)
 summary(fin.m.agg.doy.gamma)         
 summary(fin.m.peak.doy.gamma)        
-
-
-# Calculate partial deviance -----------------------------------------------------------
-# TEST
-
-library(mgcv)
-
-calculate_partial_deviance <- function(model, terms, data, family) {
-  full_deviance <- deviance(model)  # Deviance of the full model
-  
-  # Loop over terms to calculate partial deviances
-  partial_deviances <- sapply(terms, function(term) {
-    # Update formula by removing the term
-    reduced_formula <- update.formula(formula(model), paste(". ~ . -", term))
-    
-    # Fit reduced model
-    reduced_model <- gam(reduced_formula, data = data, family = family, method = "REML")
-    
-    # Calculate partial deviance for the term
-    full_deviance - deviance(reduced_model)
-  })
-  
-  # Normalize partial deviances as percentages
-  partial_deviance_percentage <- partial_deviances / full_deviance * 100
-  
-  # Return a named list with raw and percentage deviances
-  list(
-    raw = partial_deviances,
-    percentage = partial_deviance_percentage
-  )
-}
-
-# Terms of interest
-terms <- c("s(spei12_lag1)", "tmp_lag0", "ti(tmp_lag0, spei12_lag1)")
-
-# List of models
-models <- list(
-  fin.m.counts.previous.tw = fin.m.counts.previous.tw,
-  fin.m.peak.diff.previous.tw = fin.m.peak.diff.previous.tw,
-  fin.m.agg.doy.gamma = fin.m.agg.doy.gamma,
-  fin.m.peak.doy.gamma = fin.m.peak.doy.gamma
-)
-
-# Corresponding datasets (replace 'your_data' with actual datasets)
-datasets <- list(
-  fin.m.counts.previous.tw      = dat_spei_lags_clean,
-  fin.m.peak.diff.previous.tw   = dat_spei_lags_clean,
-  fin.m.agg.doy.gamma           = dat_spei_lags_clean,
-  fin.m.peak.doy.gamma          = dat_spei_lags_clean
-)
-
-# Family (Tweedie in your case)
-family <- Tweedie(p = 1.505)
-
-results <- lapply(names(models), function(model_name) {
-  model <- models[[model_name]]
-  data <- datasets[[model_name]]
-  
-  # Calculate partial deviance for the model
-  calculate_partial_deviance(model, terms, data, family)
-})
-
-# Name the results for clarity
-names(results) <- names(models)
-
-results$fin.m.counts.previous.tw$raw          # Raw partial deviances
-results$fin.m.counts.previous.tw$percentage   # Partial deviances as percentages
-
-
-
-
-# END
-
-
 
 
 # check for spatial and tmp autocorrelaton ----------------------------------
