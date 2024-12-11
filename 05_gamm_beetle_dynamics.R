@@ -148,8 +148,6 @@ nrow(dat_fin)
 # dopes not remove the number of larg = annd number of observations constant
 #lags <- 0:3
   
-
-# dat_fin: calculate climate lags --------------
 dat_spei_lags <-  dat_fin %>% 
   dplyr::select(c(year, pairID, trapID, tmp, 
                   spei,  # spei3
@@ -280,6 +278,67 @@ fwrite(avg_data, 'outTable/fin_tab_avg.csv')
 hist(dat_dynamics$veg_tmp)
 hist(dat_dynamics$spei12)
 
+
+### make a plot for each variable per year ------------------------------------------
+# Melt the data to long format for easier plotting with facets
+# Rename columns for clarity
+dat_dynamics2 <- dat_dynamics %>%
+  dplyr::rename(temperature = veg_tmp, 
+                precipitation = veg_prcp, 
+                SPEI = spei1)
+
+# Prepare the data for plotting by pivoting it longer
+plot_data <- dat_dynamics2 %>%
+  dplyr::select(year, temperature, precipitation, SPEI) %>%
+  pivot_longer(cols = c(temperature, precipitation, SPEI), names_to = "variable", values_to = "value")
+
+# Set the order of facets
+plot_data$variable <- factor(plot_data$variable, levels = c("temperature", "precipitation", "SPEI"))
+
+# Calculate the mean value for each variable for horizontal lines
+mean_values <- plot_data %>%
+  group_by(variable) %>%
+  summarise(mean_value = mean(value, na.rm = TRUE))
+
+# Create the plot with violin plots, jittered points, mean with error bars, and horizontal mean lines
+weather_summary_plot <- ggplot(plot_data, aes(x = year, 
+                                              y = value#, 
+                                              #color = variable, 
+                                              #fill = variable
+)) +
+  geom_rect(
+    aes(xmin = 2017.9, xmax = 2020.1, ymin = -Inf, ymax = Inf),
+    fill = "grey90", alpha = 0.5, inherit.aes = FALSE
+  ) +  # Add grey rectangle for 2018-2020
+  geom_violin(aes(group = as.factor(year)), alpha = 0.5, fill = 'grey60', color = 'grey60') +  # Violin plot to show distribution
+  geom_jitter(width = 0.2, size = 0.2, alpha = 0.5, color = 'grey20') +  # Jitter points for individual data
+  stat_summary(fun.data = mean_sdl, fun.args = list(mult = 1), geom = "pointrange", size = 0.3,
+               position = position_dodge(width = 0.9), color = "red") +  # Mean and standard error bars
+  facet_wrap(variable ~ ., scales = "free_y") +  # Facet by variable
+  labs(x = "Year", y = "Value", title = "") +  # Labels and title
+  theme_classic() +  # Use a classic theme for better visualization
+  theme(
+    legend.position = "none",  # Remove legend for cleaner appearance
+    text = element_text(size = 8),  # Set all font sizes to 8 points
+    axis.title = element_text(size = 8),  # Axis title font size
+    axis.text = element_text(size = 8),  # Axis text font size
+    axis.text.x = element_text(angle = 45, hjust = 1),  # Axis text font size
+    strip.text = element_text(size = 8)  # Facet strip text font size
+  ) +
+  # Add horizontal dashed line for the mean of each facet
+  geom_hline(data = mean_values, aes(yintercept = mean_value), linetype = "dashed", color = "grey30")
+
+# Display the plot
+print(weather_summary_plot)
+
+
+ggsave(filename = 'outFigs/vegetation_weather_summary3.png', 
+       plot = weather_summary_plot, width = 7, height = 3, dpi = 300, bg = 'white')
+
+
+
+
+
 # Summary stats ---------------------------------------------------
 ## get summary statistics for mean and sd for weather condistions: --------------------------
 desc_stat_climate_summary <- dat_dynamics %>%
@@ -326,61 +385,121 @@ desc_stat_climate_summary_year <- dat_dynamics %>%
 (desc_stat_climate_summary_year)
 
 
-# make a plot for each variable per year 
-# Melt the data to long format for easier plotting with facets
-# Rename columns for clarity
-dat_dynamics2 <- dat_dynamics %>%
-  dplyr::rename(temperature = veg_tmp, 
-                precipitation = veg_prcp, 
-                SPEI = spei1)
 
-# Prepare the data for plotting by pivoting it longer
-plot_data <- dat_dynamics2 %>%
-  dplyr::select(year, temperature, precipitation, SPEI) %>%
-  pivot_longer(cols = c(temperature, precipitation, SPEI), names_to = "variable", values_to = "value")
+## for beetle population dynamics ------------------------------------
 
-# Set the order of facets
-plot_data$variable <- factor(plot_data$variable, levels = c("temperature", "precipitation", "SPEI"))
+### Summary table  ----------------------------------------------------------
 
-# Calculate the mean value for each variable for horizontal lines
-mean_values <- plot_data %>%
-  group_by(variable) %>%
-  summarise(mean_value = mean(value, na.rm = TRUE))
+# Represent results using quantiles, as they are skewed?
+qntils = c(0, 0.25, 0.5, 0.75, 1)
 
-# Create the plot with violin plots, jittered points, mean with error bars, and horizontal mean lines
-weather_summary_plot <- ggplot(plot_data, aes(x = year, 
-                                              y = value#, 
-                                              #color = variable, 
-                                              #fill = variable
-                                              )) +
-  geom_rect(
-    aes(xmin = 2017.9, xmax = 2020.1, ymin = -Inf, ymax = Inf),
-    fill = "grey90", alpha = 0.5, inherit.aes = FALSE
-  ) +  # Add grey rectangle for 2018-2020
-  geom_violin(aes(group = as.factor(year)), alpha = 0.5, fill = 'grey60', color = 'grey60') +  # Violin plot to show distribution
-  geom_jitter(width = 0.2, size = 0.2, alpha = 0.5, color = 'grey20') +  # Jitter points for individual data
-  stat_summary(fun.data = mean_sdl, fun.args = list(mult = 1), geom = "pointrange", size = 0.3,
-               position = position_dodge(width = 0.9), color = "red") +  # Mean and standard error bars
-  facet_wrap(variable ~ ., scales = "free_y") +  # Facet by variable
-  labs(x = "Year", y = "Value", title = "") +  # Labels and title
-  theme_classic() +  # Use a classic theme for better visualization
-  theme(
-    legend.position = "none",  # Remove legend for cleaner appearance
-    text = element_text(size = 8),  # Set all font sizes to 8 points
-    axis.title = element_text(size = 8),  # Axis title font size
-    axis.text = element_text(size = 8),  # Axis text font size
-    axis.text.x = element_text(angle = 45, hjust = 1),  # Axis text font size
-    strip.text = element_text(size = 8)  # Facet strip text font size
-  ) +
-  # Add horizontal dashed line for the mean of each facet
-  geom_hline(data = mean_values, aes(yintercept = mean_value), linetype = "dashed", color = "grey30")
+qs_dat_fin <- 
+  dat_fin %>% 
+  ungroup(.) %>% 
+  filter(year %in% 2015:2021) %>% 
+  dplyr::reframe(sum_ips   = quantile(sum_ips, qntils, na.rm = T ),
+                 peak_doy  = quantile(peak_doy, qntils, na.rm = T ),
+                 agg_doy   = quantile(agg_doy, qntils, na.rm = T ),
+                 peak_diff = quantile(peak_diff, qntils, na.rm = T )) %>% 
+  t() %>%
+  round(1) %>% 
+  as.data.frame()
 
-# Display the plot
-print(weather_summary_plot)
+(qs_dat_fin)  
 
 
-ggsave(filename = 'outFigs/vegetation_weather_summary3.png', 
-       plot = weather_summary_plot, width = 7, height = 3, dpi = 300, bg = 'white')
+means_dat_fin <- 
+  dat_fin %>% 
+  ungroup(.) %>% 
+  filter(year %in% 2015:2021) %>% 
+  dplyr::reframe(sum_ips   = mean(sum_ips, na.rm = T),
+                 peak_doy  = mean(peak_doy, na.rm = T),
+                 agg_doy   = mean(agg_doy, na.rm = T),
+                 peak_diff = mean(peak_diff, na.rm = T)) %>% 
+  t() %>%
+  round(1) %>% 
+  as.data.frame() 
+
+
+str(means_dat_fin)
+
+# merge qs and mean tables
+summary_out <- cbind(qs_dat_fin, means_dat_fin)# %>%
+
+# Export as a nice table in word:
+sjPlot::tab_df(summary_out,
+               col.header = c(as.character(qntils), 'mean'),
+               show.rownames = TRUE,
+               file="outTable/summary_out.doc",
+               digits = 1) 
+
+
+
+### summary table per year: -------------------------------------------------------
+
+
+means_dat_fin_year <- 
+  dat_fin %>% 
+  ungroup(.) %>% 
+  filter(year %in% 2015:2021) %>% 
+  group_by(year) %>% 
+  dplyr::reframe(mean_sum_ips   = mean(sum_ips, na.rm = T),
+                 mean_agg_doy   = mean(agg_doy, na.rm = T),
+                 mean_peak_doy  = mean(peak_doy, na.rm = T),
+                 mean_peak_diff = mean(peak_diff, na.rm = T),
+                 sd_sum_ips     = sd(sum_ips, na.rm = T),
+                 sd_agg_doy     = sd(agg_doy, na.rm = T),
+                 sd_peak_doy    = sd(peak_doy, na.rm = T),
+                 sd_peak_diff   = sd(peak_diff, na.rm = T)) %>% 
+  mutate(Population_level       = stringr::str_glue("{round(mean_sum_ips,0)}±{round(sd_sum_ips,0)}"),
+         Aggregation_timing       = stringr::str_glue("{round(mean_agg_doy,0)}±{round(sd_agg_doy,0)}"),
+         Peak_swarming_timing     = stringr::str_glue("{round(mean_peak_doy,0)}±{round(sd_peak_doy,0)}"),
+         Peak_swarming_intensity  = stringr::str_glue("{round(mean_peak_diff,0)}±{round(sd_peak_diff,0)}")) %>% 
+  dplyr::select(year, Population_level, Aggregation_timing, Peak_swarming_timing,Peak_swarming_intensity) 
+
+
+(means_dat_fin_year)
+
+
+# Export as a nice table in word:
+sjPlot::tab_df(means_dat_fin_year,
+               #               col.header = c(as.character(qntils), 'mean'),
+               show.rownames = TRUE,
+               file="outTable/summary_out_year.doc",
+               digits = 0) 
+
+# summary per hotter vs rest of teh years ----------------------------------------
+
+means_dat_fin_drought <- 
+  dat_fin %>% 
+  mutate(drought_status = ifelse(year %in% 2018:2020, "Hotter drought", "Other")) %>% 
+  ungroup(.) %>% 
+  filter(year %in% 2015:2021) %>% 
+  group_by(drought_status) %>% 
+  dplyr::reframe(mean_sum_ips   = mean(sum_ips, na.rm = T),
+                 mean_agg_doy   = mean(agg_doy, na.rm = T),
+                 mean_peak_doy  = mean(peak_doy, na.rm = T),
+                 mean_peak_diff = mean(peak_diff, na.rm = T),
+                 sd_sum_ips     = sd(sum_ips, na.rm = T),
+                 sd_agg_doy     = sd(agg_doy, na.rm = T),
+                 sd_peak_doy    = sd(peak_doy, na.rm = T),
+                 sd_peak_diff   = sd(peak_diff, na.rm = T)) %>% 
+  mutate(Population_level       = stringr::str_glue("{round(mean_sum_ips,0)}±{round(sd_sum_ips,0)}"),
+         Aggregation_timing       = stringr::str_glue("{round(mean_agg_doy,0)}±{round(sd_agg_doy,0)}"),
+         Peak_swarming_timing     = stringr::str_glue("{round(mean_peak_doy,0)}±{round(sd_peak_doy,0)}"),
+         Peak_swarming_intensity  = stringr::str_glue("{round(mean_peak_diff,0)}±{round(sd_peak_diff,0)}")) %>% 
+  dplyr::select(drought_status, Population_level, Aggregation_timing, Peak_swarming_timing,Peak_swarming_intensity) 
+
+
+(means_dat_fin_drought)
+
+
+# Export as a nice table in word:
+sjPlot::tab_df(means_dat_fin_drought,
+               show.rownames = TRUE,
+               file="outTable/summary_out_drought.doc",
+               digits = 0) 
+
 
 
 
@@ -617,88 +736,6 @@ save(fin.m.counts.previous.tw,
 
 
 
-
-
-
-# Summary table  ----------------------------------------------------------
-
-# Represent results using quantiles, as they are skewed?
-qntils = c(0, 0.25, 0.5, 0.75, 1)
-
-qs_dat_fin <- 
-  dat_fin %>% 
-    ungroup(.) %>% 
-    filter(year %in% 2015:2021) %>% 
-  dplyr::reframe(sum_ips   = quantile(sum_ips, qntils, na.rm = T ),
-            peak_doy  = quantile(peak_doy, qntils, na.rm = T ),
-            agg_doy   = quantile(agg_doy, qntils, na.rm = T ),
-            peak_diff = quantile(peak_diff, qntils, na.rm = T )) %>% 
-  t() %>%
-  round(1) %>% 
-  as.data.frame()
-
-(qs_dat_fin)  
-
-
-means_dat_fin <- 
-  dat_fin %>% 
-  ungroup(.) %>% 
-  filter(year %in% 2015:2021) %>% 
-  dplyr::reframe(sum_ips   = mean(sum_ips, na.rm = T),
-                 peak_doy  = mean(peak_doy, na.rm = T),
-                 agg_doy   = mean(agg_doy, na.rm = T),
-                 peak_diff = mean(peak_diff, na.rm = T)) %>% 
-  t() %>%
-  round(1) %>% 
-  as.data.frame() 
-
-
-str(means_dat_fin)
-
-# merge qs and mean tables
-summary_out <- cbind(qs_dat_fin, means_dat_fin)# %>%
-
-# Export as a nice table in word:
-sjPlot::tab_df(summary_out,
-               col.header = c(as.character(qntils), 'mean'),
-               show.rownames = TRUE,
-               file="outTable/summary_out.doc",
-               digits = 1) 
-
-
-
-### summary table per year: -------------------------------------------------------
-
-
-means_dat_fin_year <- 
-  dat_fin %>% 
-  ungroup(.) %>% 
-  filter(year %in% 2015:2021) %>% 
-  group_by(year) %>% 
-  dplyr::reframe(mean_sum_ips   = mean(sum_ips, na.rm = T),
-                 mean_agg_doy   = mean(agg_doy, na.rm = T),
-                 mean_peak_doy  = mean(peak_doy, na.rm = T),
-                 mean_peak_diff = mean(peak_diff, na.rm = T),
-                 sd_sum_ips     = sd(sum_ips, na.rm = T),
-                 sd_agg_doy     = sd(agg_doy, na.rm = T),
-                 sd_peak_doy    = sd(peak_doy, na.rm = T),
-                 sd_peak_diff   = sd(peak_diff, na.rm = T)) %>% 
-  mutate(Population_level       = stringr::str_glue("{round(mean_sum_ips,1)}±{round(sd_sum_ips,1)}"),
-         Aggregation_timing       = stringr::str_glue("{round(mean_agg_doy,1)}±{round(sd_agg_doy,1)}"),
-         Peak_swarming_timing     = stringr::str_glue("{round(mean_peak_doy,1)}±{round(sd_peak_doy,1)}"),
-         Peak_swarming_intensity  = stringr::str_glue("{round(mean_peak_diff,1)}±{round(sd_peak_diff,1)}")) %>% 
-  dplyr::select(year, Population_level, Aggregation_timing, Peak_swarming_timing,Peak_swarming_intensity) 
-
-
-(means_dat_fin_year)
-
-
-# Export as a nice table in word:
-sjPlot::tab_df(means_dat_fin_year,
-#               col.header = c(as.character(qntils), 'mean'),
-               show.rownames = TRUE,
-               file="outTable/summary_out_year.doc",
-               digits = 0) 
 
 
 
