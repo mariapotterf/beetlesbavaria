@@ -299,6 +299,10 @@ p.time.series.spei <- df_anom_all %>%
              y = spei,
              col = cat)) + 
   scale_color_manual(values = c('black', 'red')) +
+  geom_rect(
+    aes(xmin = 2018, xmax = 2020, ymin = -Inf, ymax = Inf),
+    fill = "grey90", alpha = 0.5, inherit.aes = FALSE
+  ) +
   geom_hline(yintercept = spei_ref, lty = 'dashed', col = 'grey50' ) +
   stat_summary(fun.data = "mean_sdl") +
   theme_classic() +
@@ -313,6 +317,10 @@ p.time.series.tmp <- df_anom_all %>%
   ggplot(aes(x = year,
              y = tmp,
              col = cat)) + 
+  geom_rect(
+    aes(xmin = 2018, xmax = 2020, ymin = -Inf, ymax = Inf),
+    fill = "grey90", alpha = 0.5, inherit.aes = FALSE
+  ) +
   stat_summary(fun.data = "mean_sdl") +
   geom_hline(yintercept = tmp_ref, lty = 'dashed', col = 'grey50' ) +
   scale_color_manual(values = c('black', 'red')) +
