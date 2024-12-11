@@ -217,11 +217,17 @@ print(correlations)
 # export table to merge it with the spatial data: for variograms:
 dat_dynamics <- dat_fin %>% 
   dplyr::select(c(year, trapID, pairID, spring_tmp, veg_tmp, veg_prcp,   
-                  #spei3, 
+                  spei1,
+                  spei3, 
                   spei12, # spei for veg season
-                  #tmp, prcp,# spei_z, # z score fr veg season, sd from teh mean reference conditions
-                sum_ips,  peak_doy, peak_diff, tr_agg_doy, tr_peak_doy, agg_doy, peak_doy,
-                x,y
+                  #tmp, prcp,
+                sum_ips,  
+                agg_doy,
+                peak_doy, 
+                peak_diff, 
+                tr_agg_doy, 
+                tr_peak_doy, 
+                                x,y
                 ))
 fwrite(dat_dynamics, 'outTable/beetle_dynamic_indicators.csv')
 
@@ -229,20 +235,24 @@ fwrite(dat_dynamics, 'outTable/beetle_dynamic_indicators.csv')
 
 
 hist(dat_dynamics$veg_tmp)
-hist(dat_dynamics$spei)
+hist(dat_dynamics$spei12)
 
 
 # get summary statistics for mean and sd for weather condistions: --------------------------
 desc_stat_climate_summary <- dat_dynamics %>%
-  mutate(class = ifelse(year %in% c(2018), "2018", "Other Years")) %>%
+  mutate(class = ifelse(year %in% c(2018:2020), "2018-2020", "Other Years")) %>%
   group_by(class) %>%
   summarise(
     mean_veg_tmp = mean(veg_tmp, na.rm = TRUE),
     med_veg_tmp = median(veg_tmp, na.rm = TRUE),
     sd_veg_tmp = sd(veg_tmp, na.rm = TRUE),
-    mean_spei = mean(spei, na.rm = TRUE),
-    med_spei_tmp = median(spei, na.rm = TRUE),
-    sd_spei = sd(spei, na.rm = TRUE),
+    mean_spei1 = mean(spei1, na.rm = TRUE),
+    med_spei1 = median(spei1, na.rm = TRUE),
+    sd_spei1 = sd(spei1, na.rm = TRUE),
+    mean_spei12 = mean(spei12, na.rm = TRUE),
+    med_spei12 = median(spei12, na.rm = TRUE),
+    sd_spei12 = sd(spei12, na.rm = TRUE),
+    
     mean_veg_prcp = mean(veg_prcp, na.rm = TRUE),
     med_veg_prcp = median(veg_prcp, na.rm = TRUE),
     sd_veg_prcp = sd(veg_prcp, na.rm = TRUE)
@@ -256,9 +266,15 @@ desc_stat_climate_summary_year <- dat_dynamics %>%
     mean_veg_tmp = mean(veg_tmp, na.rm = TRUE),
     med_veg_tmp = median(veg_tmp, na.rm = TRUE),
     sd_veg_tmp = sd(veg_tmp, na.rm = TRUE),
-    mean_spei = mean(spei, na.rm = TRUE),
-    med_spei_tmp = median(spei, na.rm = TRUE),
-    sd_spei = sd(spei, na.rm = TRUE),
+   
+     mean_spei1 = mean(spei1, na.rm = TRUE),
+    med_spei1 = median(spei1, na.rm = TRUE),
+    sd_spei1 = sd(spei1, na.rm = TRUE),
+    
+    mean_spei12 = mean(spei12, na.rm = TRUE),
+    med_spei12 = median(spei12, na.rm = TRUE),
+    sd_spei12 = sd(spei12, na.rm = TRUE),
+    
     mean_veg_prcp = mean(veg_prcp, na.rm = TRUE),
     med_veg_prcp = median(veg_prcp, na.rm = TRUE),
     sd_veg_prcp = sd(veg_prcp, na.rm = TRUE)
@@ -271,8 +287,9 @@ desc_stat_climate_summary_year <- dat_dynamics %>%
 # Melt the data to long format for easier plotting with facets
 # Rename columns for clarity
 dat_dynamics2 <- dat_dynamics %>%
-  dplyr::rename(temperature = veg_tmp, precipitation = veg_prcp, 
-                SPEI = spei)
+  dplyr::rename(temperature = veg_tmp, 
+                precipitation = veg_prcp, 
+                SPEI = spei1)
 
 # Prepare the data for plotting by pivoting it longer
 plot_data <- dat_dynamics2 %>%
@@ -288,15 +305,19 @@ mean_values <- plot_data %>%
   summarise(mean_value = mean(value, na.rm = TRUE))
 
 # Create the plot with violin plots, jittered points, mean with error bars, and horizontal mean lines
-weather_summary_plot <- ggplot(plot_data, aes(x = as.factor(year), 
+weather_summary_plot <- ggplot(plot_data, aes(x = year, 
                                               y = value#, 
                                               #color = variable, 
                                               #fill = variable
                                               )) +
-  geom_violin(alpha = 0.5, fill = 'grey60', color = 'grey60') +  # Violin plot to show distribution
+  geom_rect(
+    aes(xmin = 2017.9, xmax = 2020.1, ymin = -Inf, ymax = Inf),
+    fill = "grey90", alpha = 0.5, inherit.aes = FALSE
+  ) +  # Add grey rectangle for 2018-2020
+  geom_violin(aes(group = as.factor(year)), alpha = 0.5, fill = 'grey60', color = 'grey60') +  # Violin plot to show distribution
   geom_jitter(width = 0.2, size = 0.2, alpha = 0.5, color = 'grey20') +  # Jitter points for individual data
   stat_summary(fun.data = mean_sdl, fun.args = list(mult = 1), geom = "pointrange", size = 0.3,
-               position = position_dodge(width = 0.9), color = "#A50026") +  # Mean and standard error bars
+               position = position_dodge(width = 0.9), color = "red") +  # Mean and standard error bars
   facet_wrap(variable ~ ., scales = "free_y") +  # Facet by variable
   labs(x = "Year", y = "Value", title = "") +  # Labels and title
   theme_classic() +  # Use a classic theme for better visualization
