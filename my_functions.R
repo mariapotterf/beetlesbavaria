@@ -41,14 +41,15 @@ format_p_value_label <- function(model_summary, term) {
 # Create effects plots and scatter points below
 
 my_theme_square <- function() {
-  theme_minimal(base_size = 8) +
+  theme_classic(base_size = 8) +
     theme(
       #aspect.ratio = 1, 
       axis.ticks.y = element_line(),
       axis.ticks.x = element_line(),
       panel.grid.major = element_blank(), 
-      panel.grid.minor = element_blank(), 
-      panel.background = element_rect(fill = "white", colour = "black"),
+      panel.grid.minor = element_blank(),
+      #panel.background = element_rect(fill = NA, colour = "black"),
+      #panel.background = element_rect(fill = "white", colour = "black"),
       legend.position = "bottom",
       axis.title.y = element_blank()
     ) 
@@ -165,9 +166,11 @@ plot_data_with_average <- function(data, y_var, y_label, my_title) {
     ungroup() %>%
     filter(year %in% 2015:2021) %>%
     ggplot(aes(x = year, y = !!y_var_sym, group = pairID)) +
-    labs(x = 'Year', 
-         y = y_label, 
-         title = my_title) +
+  
+    geom_rect(
+      aes(xmin = 2018, xmax = 2020, ymin = -Inf, ymax = Inf), 
+      fill = "grey90", alpha = 0.5, inherit.aes = FALSE
+    ) +
     geom_line(alpha = 0.2, linewidth = 0.2, color = 'grey70') +  
     stat_summary(
       aes(x = year, y = !!y_var_sym, group = 1), 
@@ -175,6 +178,47 @@ plot_data_with_average <- function(data, y_var, y_label, my_title) {
       geom = "line", 
       color = "#E69F00",  # Ensure the average line is also red
       linewidth = 1  # Make the average line slightly thicker than individual lines
-    ) + my_theme_square()
+    ) +   
+    labs(x = 'Year', 
+         y = y_label, 
+         title = my_title) +
+    my_theme_square()
   
 }
+
+
+
+
+
+# Get formatted label for tmp_lag0
+
+# TMP and SPEI labs
+temp_label <- expression(paste("Temp. [", degree, "C]", sep = ""))#expression(paste("Temperature [", degree, "C]", sep=""))
+spei_label <- 'SPEI lag1 [dim.]'
+
+# Define the transformation function
+adjust_predictions_counts <- function(df, divisor) {
+  df <- as.data.frame(df)
+  #df$x <- df$x  / divisor
+  df$predicted <- df$predicted  / divisor
+  df$conf.low <- df$conf.low / divisor
+  df$conf.high <- df$conf.high / divisor
+  return(df)
+}
+
+
+transform_predictions_DOY <- function(predictions, doy.start, doy.end) {
+  scale_factor <- doy.end - doy.start
+  predictions$predicted <- (predictions$predicted * scale_factor) + doy.start
+  predictions$conf.low  <- (predictions$conf.low * scale_factor) + doy.start
+  predictions$conf.high <- (predictions$conf.high * scale_factor) + doy.start
+  return(predictions)
+}
+
+
+transform_single_prediction_DOY <- function(predicted_value, doy.start, doy.end) {
+  scale_factor <- doy.end - doy.start
+  transformed_value <- (predicted_value * scale_factor) + doy.start
+  return(transformed_value)
+}
+
