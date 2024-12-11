@@ -76,7 +76,7 @@ lab_peak_growth       = "Peak swarming intensity [#]"
 
 ##### read data ----------------------------------------------------------------
 load(file=   "outData/final_table.Rdata")
-load(file =  "outData/lisa.Rdata")     # read LISA Moran's I stats
+#load(file =  "outData/lisa.Rdata")     # read LISA Moran's I stats
 load(file =  "outData/spatial.Rdata")  # read xy coordinates
 
 
@@ -97,23 +97,23 @@ xy_df <- distinct(xy_df)
 
 # check data: length 1106 or more!
 
-nrow(lisa_merged_df)
+#nrow(lisa_merged_df)
 nrow(dat_fin)
 nrow(xy_df)
 
 # change column names
-lisa_merged_df <- lisa_merged_df %>% 
-  dplyr::select(year,      falsto_name,          sum_beetle,     log_sum_beetle,      Morans_I,              clust,      Morans_I_log) %>% 
-  dplyr::rename(trapID = falsto_name,
-                sum_ips = sum_beetle) %>% 
-  dplyr::select(c(year, trapID, sum_ips, 
-                  Morans_I, # calculated from beetles sums 
-                  Morans_I_log)) # calculated from log(beetles sum)
+#lisa_merged_df <- lisa_merged_df %>% 
+#  dplyr::select(year,      falsto_name,          sum_beetle,     log_sum_beetle,      Morans_I,              clust,      Morans_I_log) %>% 
+#  dplyr::rename(trapID = falsto_name,
+  #               sum_ips = sum_beetle) %>% 
+  # dplyr::select(c(year, trapID, sum_ips, 
+  #                 Morans_I, # calculated from beetles sums 
+  #                 Morans_I_log)) # calculated from log(beetles sum)
 
 # add MOran's I values, transform the agg doy and peak doy between 0-1
 dat_fin <-   dat_fin %>% 
-  left_join(lisa_merged_df, 
-            by = join_by(trapID, year, sum_ips)) %>%
+#  left_join(lisa_merged_df, 
+#            by = join_by(trapID, year, sum_ips)) %>%
   mutate(tr_agg_doy   = (agg_doy - doy.start) / (doy.end - doy.start),
          tr_peak_doy  = (peak_doy - doy.start) / (doy.end - doy.start))
 
@@ -146,11 +146,7 @@ nrow(dat_fin)
 
 # Specify predictors and lags ----------------------------
 # dopes not remove the number of larg = annd number of observations constant
-# List of predictors
-predictors_spei       <- c("spei1", "spei3","spei6", "spei12", "spei24")
-predictors_beetle_dyn <- c("spring_tmp", "veg_tmp",  "spei3", "spei12")
-predictors_Morans     <- c("spring_tmp", "veg_tmp",  "spei3", "spei12", "spei24", "sum_ips", "peak_doy", "peak_diff", "agg_doy")
-lags <- 0:3
+#lags <- 0:3
   
 
 # dat_fin: calculate climate lags --------------
@@ -159,11 +155,14 @@ dat_spei_lags <-  dat_fin %>%
                   spei,  # spei3
                   spei12,
                   spei24,
-                  tmp_z, 
+                  #tmp_z, 
                   sum_ips, 
                   #sum_ips_lag1, 
                   tr_agg_doy, tr_peak_doy,peak_diff,
-                  agg_doy, peak_doy, x, y, Morans_I_log )) %>% 
+                  agg_doy, peak_doy, 
+                  x, y #,
+                  #Morans_I_log 
+                  )) %>% 
   group_by(trapID) %>%
   mutate(trapID = as.factor(trapID),
          pairID = as.factor(pairID),
@@ -181,7 +180,8 @@ dat_spei_lags <-  dat_fin %>%
   ungroup(.) %>% 
   mutate(log_sum_ips = log(sum_ips+1),
          log_peak_diff = log(peak_diff + 1)) %>% 
-  rename(tmp_lag0 = tmp)
+  rename(tmp_lag0 = tmp,
+         spei12_lag0 = spei12)
 
 nrow(dat_spei_lags)
 head(dat_spei_lags)
@@ -203,116 +203,15 @@ selected_predictors_climate <- c("spei12_lag0","spei12_lag1" ,"spei12_lag2",
 # Calculate pairwise correlations for numeric columns
 numeric_cols <- dat_spei_lags %>%
   dplyr::select_if(is.numeric)  %>% # Select only numeric columns
-  dplyr::select(tmp, tmp_lag1,tmp_lag2,tmp_lag3, spei,spei_lag1, spei_lag2, spei_lag3)
+  dplyr::select(tmp_lag0,# tmp_lag1,tmp_lag2, 
+                spei12_lag0,  spei12_lag1 #, spei12_lag2
+                )
 
 
 correlations <- cor(numeric_cols, use = "complete.obs")  # Calculate correlations, excluding missing values
 
 # Display the correlation matrix
 print(correlations)
-
-
-dat_spei_lags %>% 
-  dplyr::filter(trapID == "Anzinger_Forst_1") %>% 
-  dplyr::select(trapID, year, tmp_z, tmp_z_lag1,tmp_z_lag2 ) # sum_ips, sum_ips_lag1
-
-# check lags if correct. YES!
-
-# Outliers handling: is it erroneours?? ------------------------------------------------------------------------------
-
-# outliers can be cause by probelsm in the trap (low pheromones,,..) or by external effect - local windthrow
-# investigate outliers for 4 dependent variables
-# current observations: igf I have outliers present, i need higher k to converge the model
-# also, maybe i can olny remove erroneous trap, not the whole trap pair
-
-# Define the columns to check for outliers
-outlier_columns <- c("log_sum_ips", "tr_agg_doy", "tr_peak_doy", "log_peak_diff")
-
-# Function to detect outliers based on IQR
-detect_outliers <- function(data, column) {
-  Q1 <- quantile(data[[column]], 0.25, na.rm = TRUE)
-  Q3 <- quantile(data[[column]], 0.75, na.rm = TRUE)
-  IQR <- Q3 - Q1
-  lower_bound <- Q1 - 1.5 * IQR
-  upper_bound <- Q3 + 1.5 * IQR
-  
-  # Filter the rows where the column value is an outlier
-  outlier_data <- data %>%
-    filter(!is.na(data[[column]]) & (data[[column]] < lower_bound | data[[column]] > upper_bound))
-  
-  if (nrow(outlier_data) == 0) {
-    return(tibble(year = integer(), pairID = factor(), trapID = factor(), 
-                  outlier_column = character(), outlier_value = numeric()))
-  }
-  
-  outlier_data %>%
-    mutate(outlier_column = column, outlier_value = .data[[column]]) %>%
-    dplyr::select(year, pairID, trapID, outlier_column, outlier_value)
-}
-
-# Apply the outlier detection function to each column and combine the results
-df_outliers <- lapply(outlier_columns, function(col) detect_outliers(dat_spei_lags, col)) %>%
-  bind_rows()
-
-# View the outliers
-print(df_outliers)
-
-# Count unique trapIDs and keep them in long format
-outlier_details_long <- df_outliers %>%
-  group_by(outlier_column, trapID, pairID) %>%
-  summarise(outlier_count = n(), .groups = "drop") %>%
-  group_by(outlier_column) %>%
-  summarise(trap_count = n(), trapID = list(trapID), pairID = list(pairID)) %>%
-  unnest_longer(c(trapID, pairID))
-
-# View the detailed counts and individual trapIDs
-print(outlier_details_long)
-
-# Extract distinct pairIDs for each outlier column
-pairID_outliers <- outliers %>%
-  group_by(outlier_column, pairID) %>%
-  summarise(.groups = "drop") %>%
-  distinct()
-
-# View the result
-print(pairID_outliers)
-
-
-# remove too low values: peiting and Eschenbach_idOPf: identify loutlier from log_sum_ips
-df_outliers <- dat_spei_lags %>% 
-  group_by(year) %>% 
-  mutate(sum_ips_log = log(sum_ips)) %>% 
-  mutate(is_outlier = ifelse(sum_ips_log > quantile(sum_ips_log, 0.75,na.rm=T) + 1.5 * IQR(sum_ips_log,na.rm=T) |
-                               sum_ips_log < quantile(sum_ips_log, 0.25,na.rm=T) - 1.5 * IQR(sum_ips_log,na.rm=T), TRUE, FALSE)) # %>% 
-
-# count how many outliers i have?
-df_outliers %>% 
-  dplyr::filter(is_outlier == TRUE) %>% 
-  ungroup() %>% 
-  summarise(n = n()) #%>%
-
-# 73 are outliers, from 1106, which is 6.6%
-
-# check which ones are outliers and how often?
-df_outliers %>% 
-  dplyr::filter(is_outlier == TRUE) %>% 
-  ungroup() %>% 
-  distinct(pairID)
-
-
-pair_outliers <- df_outliers %>%
-  dplyr::filter(is_outlier) %>%
-  group_by(trapID, pairID) %>%
-  summarise(n = n()) %>%
-  ungroup() %>%
-  arrange(desc(n)) %>%
-  dplyr::filter(n > 3) %>% 
-  pull(pairID)
-
-unique(pair_outliers)
-
-# if outlier > 4 time, remove the whole pair; keep the correct traps
-# otherwise i need to remove 35 pairs, which is too much
 
 
 # export table to merge it with the spatial data: for variograms:
