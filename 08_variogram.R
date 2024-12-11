@@ -87,7 +87,7 @@ combinations_years <- expand.grid(year = years,
 
 
 # Update get_raw_variogram call to include the data and group column
-variogram_results_ls <- lapply(1:nrow(combinations_years), function(i) {
+variogram_results_ls_years <- lapply(1:nrow(combinations_years), function(i) {
   get_raw_variogram(
     data = dat_dynamics_xy,                     # Pass your data table
     group_value = combinations_years$year[i],         # Use the year from combinations
@@ -98,15 +98,15 @@ variogram_results_ls <- lapply(1:nrow(combinations_years), function(i) {
 })
 
 # Combine all results into a single data frame
-combined_variogram_results <- do.call(rbind, variogram_results_ls)
+combined_variogram_results_years <- do.call(rbind, variogram_results_ls_years)
 
 # Preview the results
-head(combined_variogram_results)
+head(combined_variogram_results_years)
 
-combined_variogram_results$drought_status <- ifelse(combined_variogram_results$year %in% 2018:2020, "Drought", "No Drought")
+combined_variogram_results_years$drought_status <- ifelse(combined_variogram_results_years$year %in% 2018:2020, "Hotter drought", "No drought")
 
 # plot years with smooths --------------------
-ggplot(combined_variogram_results, aes(x = dist, y = gamma, 
+ggplot(combined_variogram_results_years, aes(x = dist, y = gamma, 
                                        group = factor(year), 
                                        color = factor(year))) + 
   geom_point(alpha = 0.5) + 
@@ -114,7 +114,7 @@ ggplot(combined_variogram_results, aes(x = dist, y = gamma,
   facet_wrap(.~variable, scales = 'free')
 
 # test plot over drought period
-ggplot(combined_variogram_results, aes(x = dist, y = gamma, 
+ggplot(combined_variogram_results_years, aes(x = dist, y = gamma, 
                                        group = factor(drought_status), 
                                        color = factor(drought_status))) + 
   geom_point(alpha = 0.5) + 
@@ -188,10 +188,10 @@ fit_variogram <- function(variogram_data, model = "Mat") {
 
 
 
-# fit variogram per years ------------------
+# fit variogram for every year  ------------------
 
 # Apply the function to each variogram dataset in the list
-results_years_ls <- lapply(variogram_results_ls, fit_variogram)
+results_years_ls <- lapply(variogram_results_ls_years, fit_variogram)
 
 # Combine the results into a single data frame
 results_years <- do.call(rbind, results_years_ls)
@@ -213,7 +213,7 @@ sjPlot::tab_df(out_tab_variograms_years,
                digits = 3) 
 
 ## Plot years ------------------
-combined_results_sub <- combined_variogram_results %>% 
+combined_results_sub <- combined_variogram_results_years %>% 
   # mutate(year_color = ifelse(year %in% 2018:2020, "red", "grey")) %>% 
   dplyr::filter(dist <300000) %>% 
   mutate(variable = factor(variable, 
@@ -294,9 +294,10 @@ fwrite(combined_results, 'outTable/variogram.csv')
 
 
 # Variogram per drought -----------------------------------------------
+
 # get raw variogram estimation for year, then average teh semivarinace values per istance 
 # averagte per distance and drought 
-raw_variogram_drough <- combined_variogram_results %>% 
+raw_variogram_drough_median <- combined_variogram_results_years %>% 
   group_by(drought_status, dist_ID, variable) %>% 
   summarize(
     np = median(np),
@@ -308,16 +309,16 @@ raw_variogram_drough <- combined_variogram_results %>%
   mutate(id = factor(c("var1")))
 
 # split into list
-raw_variogram_drough_ls <- raw_variogram_drough %>%
+raw_variogram_drough_ls <- raw_variogram_drough_median %>%
   rename(year = drought_status) %>% 
   group_by(variable, year) %>%
   group_split()
 
 # identify if teh class is correct
-class(variogram_results_ls[[1]])
+class(variogram_results_ls_years[[1]])
 class(raw_variogram_drough_ls[[1]])
 
-head(variogram_results_ls[[1]])
+head(variogram_results_ls_years[[1]])
 head(raw_variogram_drough_ls[[1]])
 
 # convert averaged varianced pser distance and year to variogram class format
@@ -333,15 +334,14 @@ raw_variogram_drough_ls <- lapply(raw_variogram_drough_ls, function(raw_variogra
 })
 
 # Apply the function to each variogram dataset in the list
-fitted_var_drought <- lapply(raw_variogram_drough_ls, fit_variogram)
+fitted_var_drought_ls <- lapply(raw_variogram_drough_ls, fit_variogram)
 
 # Combine the results into a single data frame
-fitted_var_drought_df <- do.call(rbind, fitted_var_drought)
+fitted_var_drought_df <- do.call(rbind, fitted_var_drought_ls)
 
 
 fitted_var_drought_df <- 
   fitted_var_drought_df %>% 
-  # mutate(year_color = ifelse(year %in% 2018:2020, "red", "grey")) %>% 
   dplyr::filter(dist <cutoff) %>% 
   mutate(variable = factor(variable, 
                            levels = c('log_sum_ips', 'tr_agg_doy', 'veg_tmp', 
@@ -350,26 +350,15 @@ fitted_var_drought_df <-
                                       'Peak swarming\ntiming [DOY]', "Peak swarming\nintensity [#]",
                                       'SPEI [dim.]'))) 
 
-# Reverse the color palette and map to the species in the desired order
-my_colors <- c(
-  "grey90",  # Light gray (2015)
-  "grey75",  # Medium gray (2016)
-  "grey60",  # Dark gray (2017)
-  "#A50026",  # Bright yellow-green (2018, emphasized)
-  "#FDBE6E",  # Bright green (2019, emphasized)
-  "#3366CC",  # Turquoise-green (2020, emphasized)
-  "grey50"   # Charcoal gray (2021)
-)
-
-
-
+# select two cololors
 my_colors2 <- c( "#A50026",  #
                   "grey75")
 
 p_vario_drought_grupped <- fitted_var_drought_df %>% 
   ggplot(aes(x = dist/1000, 
              y = gamma, 
-             color = year
+             color = year#,
+            # linetype = year
   )) +
   geom_point(data = subset(fitted_var_drought_df, type == "Empirical"), 
              alpha = 0.9, size = 0.5) +
@@ -379,7 +368,8 @@ p_vario_drought_grupped <- fitted_var_drought_df %>%
   labs(#title = "Empirical and Fitted Variogram", 
     x = "Distance [km]", 
     y = "Semivariance",
-    color = ""
+    color = "",
+    linetype = ""
   ) +
   facet_wrap(variable~., scales = 'free') +
   # theme_classic()+
@@ -405,36 +395,52 @@ ggsave(filename = 'outFigs/p_vario_drought_grupped.png',
 
 
 
+# export the variogram characteristics table 
+out_tab_variograms_drought <- fitted_var_drought_df %>% 
+  dplyr::select(c(year, variable , fitted_nugget, fitted_sill, fitted_range)) %>% 
+  distinct() %>% 
+  mutate(fitted_range = case_when(fitted_range > cutoff ~ cutoff,
+                                  TRUE~fitted_range)) %>% 
+  dplyr::rename(nugget = fitted_nugget,
+                sill = fitted_sill,
+                range = fitted_range)
+
+sjPlot::tab_df(out_tab_variograms_drought,
+               show.rownames = F,
+               file="outTable/variogram_drought.doc",
+               digits = 2) 
+
+
 
 ### Test manually ------------------------------------------------------
-variogram_data <- raw_variogram_drough_ls[[1]]
-variogram_data
-
-# Calculate the Nugget (gamma at the smallest distance)
-nugget <- mean(variogram_data$gamma[1:3])
-
-# Estimate the Sill (average gamma at the highest distances, e.g., last 3-5 points)
-sill <- mean(variogram_data$gamma[(nrow(variogram_data)-5):nrow(variogram_data)])
-# Estimate the Range (distance where the variogram levels off, e.g., 
-# first row where gamma is near the sill)
-range <- variogram_data$dist[which.max(variogram_data$gamma >= sill * 0.90)]
-
-
-# Specify the initial variogram model
-initial_model <- vgm(psill = sill - nugget, model = "Mat", range = range, nugget = nugget)
-
-# Fit the variogram model to the empirical data
-fitted_variogram <- fit.variogram(variogram_data, model = initial_model) #   initial_model_peak_diff
-plot(variogram_data,fitted_variogram, cutoff = cutoff )#169068.9   )
-
-
+# variogram_data <- raw_variogram_drough_ls[[1]]
+# variogram_data
+# 
+# # Calculate the Nugget (gamma at the smallest distance)
+# nugget <- mean(variogram_data$gamma[1:3])
+# 
+# # Estimate the Sill (average gamma at the highest distances, e.g., last 3-5 points)
+# sill <- mean(variogram_data$gamma[(nrow(variogram_data)-5):nrow(variogram_data)])
+# # Estimate the Range (distance where the variogram levels off, e.g., 
+# # first row where gamma is near the sill)
+# range <- variogram_data$dist[which.max(variogram_data$gamma >= sill * 0.90)]
+# 
+# 
+# # Specify the initial variogram model
+# initial_model <- vgm(psill = sill - nugget, model = "Mat", range = range, nugget = nugget)
+# 
+# # Fit the variogram model to the empirical data
+# fitted_variogram <- fit.variogram(variogram_data, model = initial_model) #   initial_model_peak_diff
+# plot(variogram_data,fitted_variogram, cutoff = cutoff )#169068.9   )
 
 
 
 
 
 
-## test variogram years: correlation climate vs beetles  -------------------------------------------
+
+
+## correlation climate vs beetles  -------------------------------------------
 
 # Combine all variogram results into one data frame
 variogram_results <- bind_rows(variogram_results_ls, .id = "list_id")
@@ -558,13 +564,6 @@ p_range <- combined_results_sub %>%
   
 
 ggsave(filename = 'outFigs/variogram_range.png', plot = p_range, width = 6, height = 6, dpi = 300, bg = 'white')
-
-
-
-
-
-
-
 
 
 
