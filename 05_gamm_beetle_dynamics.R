@@ -1111,15 +1111,19 @@ ggarrange(p0.peak.diff,p1.peak.diff,p2.peak.diff,p3.peak.diff)
 
 
 ### Aggregeate plots  -----
+dat_fin_plot <- dat_fin 
 
-p_spagett_ips       <- plot_data_with_average(avg_data_filt_lagged_plotting, "sum_ips", lab_popul_level,   
+dat_fin_plot$sum_ips <- dat_fin$sum_ips/1000  
+dat_fin_plot$peak_diff <- dat_fin$peak_diff/10 
+
+p_spagett_ips       <- plot_data_with_average(dat_fin_plot, "sum_ips", lab_popul_level,   
                                               my_title = paste( 'Pop. level', '[#*1000]'))
 p_spagett_ips
-p_spagett_agg_doy   <- plot_data_with_average(avg_data_filt_lagged_plotting, "agg_doy", lab_colonization_time, 
+p_spagett_agg_doy   <- plot_data_with_average(dat_fin_plot, "agg_doy", lab_colonization_time, 
                                               my_title = paste('Aggregation timing', '[DOY]'))
-p_spagett_peak_doy  <- plot_data_with_average(avg_data_filt_lagged_plotting, "peak_doy", lab_peak_time, 
+p_spagett_peak_doy  <- plot_data_with_average(dat_fin_plot, "peak_doy", lab_peak_time, 
                                               my_title = paste('Peak sw. timing', '[DOY]'))
-p_spagett_peak_diff <- plot_data_with_average(avg_data_filt_lagged_plotting, "peak_diff", lab_peak_growth, 
+p_spagett_peak_diff <- plot_data_with_average(dat_fin_plot, "peak_diff", lab_peak_growth, 
                                               my_title = paste('Peak sw. intensity', '[#*10]'))
 
 
@@ -1173,19 +1177,20 @@ p.int <- ggarrange(p3.count,  p3.agg, p3.peak, p3.peak.diff,
                    label.y = 0.9, # Adjust y-position (1 is top, 0 is bottom)
                    ncol=4, nrow = 1 , align = 'hv',common.legend = TRUE, legend = 'bottom',
                    font.label = list(size = 8, color = "black", face = "plain", family = NULL))
-windows(7,10)
 full_preds <- ggarrange(p_spagetti,
                         #p.previous,
                         p.temp, 
                         p.spei,  
                         p.int,
-                        ncol = 1, nrow= 5, 
+                        ncol = 1, nrow= 4, 
                         align = 'hv', heights = c(1, 1, 1,  1.1),
                         widths = c(1, 1, 1, 1))
 #"#009E73" 
+windows(7,9)
+
 (full_preds)
 ggsave(filename = 'outFigs/Fig_full_main_effects.png', plot = full_preds, 
-       width = 7.5, height = 8.5, dpi = 300, bg = 'white')
+       width = 7.5, height = 9, dpi = 300, bg = 'white')
 
 
 
@@ -1194,84 +1199,9 @@ ggsave(filename = 'outFigs/Fig_full_main_effects.png', plot = full_preds,
 
 
 
-#### PLOT Moran's I -------------------------------
-summary(fin.m.moran)
-m <- fin.m.moran
-p_val_int           <- format_p_value_label(summary(m), "ti(tmp_lag0,spei12_lag1)")
-p_val_moran           <- format_p_value_label(summary(m), "s(Morans_I_log_lag1)")
-p_val_sum_ips           <- format_p_value_label(summary(m), "s(sum_ips)")
-
-# Assuming 'model' is your glm.nb model
-p3 <- ggpredict(fin.m.moran, terms = "sum_ips [all]", allow.new.levels = TRUE)
-p5 <- ggpredict(fin.m.moran, terms = "Morans_I_log_lag1 [all]", allow.new.levels = TRUE)
-
-p4 <- ggpredict(fin.m.moran, terms = c("tmp_lag0", "spei12_lag1 [-1.5,1]"), allow.new.levels = TRUE) 
 
 
-lisa_merged_df_avg$sum_ips_scaled <- lisa_merged_df_avg$sum_ips / 1000
-p3$x <- p3$x/1000 
-p3.moran <- create_effect_plot(p3, 
-                               avg_data =  filter(lisa_merged_df_avg, Morans_I_log  > -1 & Morans_I_log  < 2), 
-                               x_col = "sum_ips_scaled", 
-                               y_col = "Morans_I_log", 
-                               line_color = "grey50", 
-                               x_title = "Pop. level [#*1000]", 
-                               y_title = "Local Moran's I", # y_lim = c(0,1),
-                               x_annotate = 50,
-                               lab_annotate = p_val_sum_ips) +
-  theme(axis.title.y = element_text("Local Moran's I", angle = 90))
-p3.moran
-p5.prev.Morans <- create_effect_previous_year(data = p5, 
-                                            avg_data = filter(lisa_merged_df_avg, Morans_I_log  > -1 & Morans_I_log  < 2),
-                                            x_col = "Morans_I_log_lag1",
-                                            y_col = "Morans_I_log",
-                                            line_color = "darkgrey", 
-                                            x_title = "Local Moran's I lag1 [dim.]", 
-                                            y_title =  "Local Moran's I [dim.]",
-                                            x_annotate = 0, lab_annotate = p_val_moran) +
-  theme(axis.title.y = element_text("Local Moran's I", angle = 90))
-
-(p5.prev.Morans)
-
-
-p4.moran <- plot_effect_interactions(p4,
-                                     avg_data = filter(lisa_merged_df_avg, Morans_I_log  > -1 & Morans_I_log  < 2),
-                                     
-                                     x_col = "tmp_lag0", 
-                                     y_col = "Morans_I_log", 
-                                     temp_label = temp_label, 
-                                     y_title = "Local Moran's I",
-                                     x_annotate = 16,
-                                     lab_annotate = p_val_int) +  
-  scale_color_manual(values = my_colors_interaction) +
-  scale_fill_manual(values = my_colors_interaction) +
-  theme(legend.position = c(0.6, 0.8),
-        legend.title = element_text(hjust = 0.5),       # Align the legend title with the legend items (centered)
-        #legend.title = "SPEI levels" 
-        legend.background = element_rect(fill = "white", color = NA)  # White background with alpha
-        ) +
-
-  #guides(color = guide_legend(ncol = 1)) +
-  theme(axis.title.y = element_text("Local Moran's I", angle = 90))
-
- 
-p4.moran
-  #geom_point(data = avg_data_moran_sub, aes(x = tmp_z_lag1, y = Morans_I_log))
-p4.moran.no.leg <- p4.moran + theme(legend.position = 'none')
-
-p4.moran.no.leg
-# Step 2: Extract the legend as its own plot
-get_legend <- function(a.gplot){
-  tmp <- ggplot_gtable(ggplot_build(a.gplot))
-  leg <- which(sapply(tmp$grobs, function(x) x$name) == "guide-box")
-  legend <- tmp$grobs[[leg]]
-  return(legend)
-}
-
-my_legend <- get_legend(p4.moran)
-
-
-##### test statistical differences and add to plot --------------- 
+##### test Morans I (from logged beetles numbers) for differences between years --------------- 
 kruskal.test(Morans_I_log ~ year,dat_fin )
 
 library(dunn.test)

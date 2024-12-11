@@ -51,7 +51,8 @@ my_theme_square <- function() {
       #panel.background = element_rect(fill = NA, colour = "black"),
       #panel.background = element_rect(fill = "white", colour = "black"),
       legend.position = "bottom",
-      axis.title.y = element_blank()
+      axis.title.y = element_blank(),
+      plot.title = element_text(size = 10) # Set the plot title size to 10
     ) 
 }
 
@@ -165,7 +166,7 @@ plot_data_with_average <- function(data, y_var, y_label, my_title) {
   data %>%
     ungroup() %>%
     filter(year %in% 2015:2021) %>%
-    ggplot(aes(x = year, y = !!y_var_sym, group = pairID)) +
+    ggplot(aes(x = year, y = !!y_var_sym, group = trapID)) +
   
     geom_rect(
       aes(xmin = 2018, xmax = 2020, ymin = -Inf, ymax = Inf), 
@@ -182,7 +183,8 @@ plot_data_with_average <- function(data, y_var, y_label, my_title) {
     labs(x = 'Year', 
          y = y_label, 
          title = my_title) +
-    my_theme_square()
+    my_theme_square() +
+    theme( plot.title = element_text(size = 8)) # Set the plot title size to 10)
   
 }
 
