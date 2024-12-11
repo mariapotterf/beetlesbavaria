@@ -562,58 +562,6 @@ ggsave(filename = 'outFigs/variogram_range.png', plot = p_range, width = 6, heig
 
 
 
-# Test variogram for groupped years: drought vs no drought -----------------------------------------
-# Group data by drought period and aggregate
-dat_dynamics_xy_grouped <- dat_dynamics_xy %>%
-  mutate(drought_status = ifelse(year %in% c(2018:2020), "Drought", "No Drought")) %>%
-  group_by(x, y, drought_status) %>%
-  #summarise(across(c(log_sum_ips, tr_agg_doy, tr_peak_doy, log_peak_diff), median, na.rm = TRUE)) %>%
-  summarise(across(c(log_sum_ips, 
-                     sum_ips, 
-                     tr_agg_doy, 
-                     tr_peak_doy, 
-                     peak_diff, 
-                     log_peak_diff), mean, na.rm = TRUE)) %>%
-  
-  ungroup() %>% 
-  rename(year = drought_status) # for consistenncy with functions
-
-# , spei12, veg_tmp
-
-
-# List of drought groups
-drought_groups <- c("Drought", "No Drought")
-
-dependent_vars_beetle <- c("log_sum_ips",
-                           "tr_agg_doy",    "tr_peak_doy",   "log_peak_diff" )
-
-
-# Create a data frame of all combinations of years and variables;
-# to run lapply afterwards
-combinations_drought <- expand.grid(year = drought_groups, 
-                            variable = dependent_vars_beetle, 
-                            stringsAsFactors = FALSE)
-
-# Update get_raw_variogram call to include the data and group column
-variogram_results_ls_grouped <- lapply(1:nrow(combinations_drought), function(i) {
-  get_raw_variogram(
-    data = dat_dynamics_xy_grouped,                     # Pass your data table
-    group_value = combinations_drought$year[i],         # Use the year from combinations
-    group_column = "year",                      # Specify the group column
-    var_name = combinations_drought$variable[i],        # Use the variable from combinations
-    cutoff = cutoff                             # Set the cutoff distance
-  )
-})
-
-# Combine all results into a single data frame
-combined_variogram_results_grouped <- do.call(rbind, variogram_results_ls_grouped)
-
-# Preview the results
-head(combined_variogram_results_grouped)
-
-
-
-
 
 
 
