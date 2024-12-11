@@ -185,7 +185,7 @@ nrow(dat_spei_lags)
 head(dat_spei_lags)
 
 
-# remove the NAs for analysis----------------------------------------------------------------- 
+### remove the NAs for analysis 
 dat_spei_lags_clean <- dat_spei_lags %>% 
   na.omit(dat_spei_lags)
 
@@ -193,7 +193,6 @@ dat_spei_lags_clean <- dat_spei_lags %>%
 
 # list predictors to test
 selected_predictors_beetle <- c('sum_ips', 'sum_ips_lag1','sum_ips_lag2',
-                         #'log_sum_ips', 'log_sum_ips_lag1','sum_ips_lag2',
                          'tr_agg_doy'   , 'tr_agg_doy_lag1', 'tr_agg_doy_lag2' ,
                          'tr_peak_doy', 'tr_peak_doy_lag1','tr_peak_doy_lag2',
                          'peak_diff', 'peak_diff_lag1',  'peak_diff_lag2'
@@ -236,7 +235,7 @@ dat_dynamics <- dat_fin %>%
 fwrite(dat_dynamics, 'outTable/beetle_dynamic_indicators.csv')
 
 
-# Calculate average counts for each trap pair ------------------------------------
+## Calculate average counts for each trap pair ------------------------------------
 avg_data <- dat_spei_lags %>%
   group_by(pairID, year) %>%
   summarise(#Morans_I_log  = mean(Morans_I_log , na.rm = TRUE),
@@ -340,7 +339,7 @@ ggsave(filename = 'outFigs/vegetation_weather_summary3.png',
 
 
 # Summary stats ---------------------------------------------------
-## get summary statistics for mean and sd for weather condistions: --------------------------
+## weather condistions: --------------------------
 desc_stat_climate_summary <- dat_dynamics %>%
   mutate(class = ifelse(year %in% c(2018:2020), "2018-2020", "Other Years")) %>%
   group_by(class) %>%
@@ -386,9 +385,9 @@ desc_stat_climate_summary_year <- dat_dynamics %>%
 
 
 
-## for beetle population dynamics ------------------------------------
+## for beetle population indicators ------------------------------------
 
-### Summary table  ----------------------------------------------------------
+### quantils  ----------------------------------------------------------
 
 # Represent results using quantiles, as they are skewed?
 qntils = c(0, 0.25, 0.5, 0.75, 1)
@@ -435,7 +434,7 @@ sjPlot::tab_df(summary_out,
 
 
 
-### summary table per year: -------------------------------------------------------
+### Beetle indcators per year: -------------------------------------------------------
 
 
 means_dat_fin_year <- 
@@ -468,11 +467,11 @@ sjPlot::tab_df(means_dat_fin_year,
                file="outTable/summary_out_year.doc",
                digits = 0) 
 
-# summary per hotter vs rest of teh years ----------------------------------------
+### Beetle indicators per drought/no drought ----------------------------------------
 
 means_dat_fin_drought <- 
   dat_fin %>% 
-  mutate(drought_status = ifelse(year %in% 2018:2020, "Hotter drought", "Other")) %>% 
+  mutate(drought_status = ifelse(year %in% 2018:2020, "Hotter drought", "No drought")) %>% 
   ungroup(.) %>% 
   filter(year %in% 2015:2021) %>% 
   group_by(drought_status) %>% 
@@ -501,14 +500,48 @@ sjPlot::tab_df(means_dat_fin_drought,
                digits = 0) 
 
 
+# get medians and IQR
+medians_dat_fin_drought <- 
+  dat_fin %>% 
+  mutate(drought_status = ifelse(year %in% 2018:2020, "Hotter drought", "No drought")) %>% 
+  ungroup() %>% 
+  dplyr::filter(year %in% 2015:2021) %>% 
+  group_by(drought_status) %>% 
+  dplyr::reframe(
+    median_sum_ips   = median(sum_ips, na.rm = TRUE),
+    iqr_sum_ips      = IQR(sum_ips, na.rm = TRUE),
+    median_agg_doy   = median(agg_doy, na.rm = TRUE),
+    iqr_agg_doy      = IQR(agg_doy, na.rm = TRUE),
+    median_peak_doy  = median(peak_doy, na.rm = TRUE),
+    iqr_peak_doy     = IQR(peak_doy, na.rm = TRUE),
+    median_peak_diff = median(peak_diff, na.rm = TRUE),
+    iqr_peak_diff    = IQR(peak_diff, na.rm = TRUE)
+  ) %>% 
+  mutate(
+    Population_level       = stringr::str_glue("{round(median_sum_ips, 0)} ({round(iqr_sum_ips, 0)})"),
+    Aggregation_timing      = stringr::str_glue("{round(median_agg_doy, 0)} ({round(iqr_agg_doy, 0)})"),
+    Peak_swarming_timing    = stringr::str_glue("{round(median_peak_doy, 0)} ({round(iqr_peak_doy, 0)})"),
+    Peak_swarming_intensity = stringr::str_glue("{round(median_peak_diff, 0)} ({round(iqr_peak_diff, 0)})")
+  ) %>% 
+  dplyr::select(drought_status, Population_level, Aggregation_timing, Peak_swarming_timing, Peak_swarming_intensity)
+
+# Preview the table
+print(medians_dat_fin_drought)
+
+# Export as a nice table in Word
+sjPlot::tab_df(
+  medians_dat_fin_drought,
+  show.rownames = TRUE,
+  file = "outTable/summary_out_drought_medians.doc",
+  digits = 0
+)
 
 
 
 
 
 
-
-#Filter data for plottming --------------------------------------------------------
+#Filter data for plotting --------------------------------------------------------
 # filter extreme values: occuring too late in a year ()
 avg_data_agg <- avg_data %>% 
   dplyr::filter(tr_agg_doy < 0.54)
@@ -517,7 +550,6 @@ avg_data_agg <- avg_data %>%
 avg_data_peak_diff <- avg_data %>% 
   dplyr::filter(!pairID %in% c('Piding', 'Gangkofen'))
 
-# filetr data ----------------------------------------------------------------------
 avg_data_filt <- avg_data #%>% 
   #mutate(f_year = as.factor(year)) %>% 
   #dplyr::filter(!pairID %in% pair_outliers )
@@ -556,15 +588,15 @@ avg_data_filt_lagged$f_year <- droplevels(avg_data_filt_lagged$f_year)
 
 
 
-# Final predictors: current year tmp_lag0 & spei12_lag1 best predictors ------------------
+# makde models with diffr autocorrelation structur (direct vs values from previous years) and compare their performacce 
+
+# Drivers -----------------------------------------------------------------------
+# Final predictors: current year tmp_lag0 & spei12_lag1 best predictors
 # 
 cor(avg_data$spei12_lag1, avg_data$tmp_lag0)
 #cor(avg_data$spei24_lag0, avg_data$tmp_lag0)
 
-# makde models with diffr autocorrelation structur (direct vs values from previous years) and compare their performacce 
-
-
-#### IPS_SUM ---------------------------------------------------------------------- 
+## IPS_SUM ---------------------------------------------------------------------- 
 
 m2_full_ti <- gam(sum_ips ~ 
                  tmp_lag0 +
@@ -586,7 +618,7 @@ summary(m2_full_ti)
 
 fin.m.counts.previous.tw <- m2_full_ti
 
-#### previous peak_diff  ------------------------------------------------------
+## previous peak_diff  ------------------------------------------------------
 
 m.peak.diff.previous.tmp_0_spei12_1 <- gam(peak_diff ~ 
                                              tmp_lag0 +
@@ -619,10 +651,9 @@ predict_data <- ggpredict(m, terms = c('tmp_lag0', 'spei12_lag1[-1.5,0]'))
 plot(predict_data)
 
 
-#### AGG DOY ----------------------------------------------------------
+## AGG DOY ----------------------------------------------------------
 
 
-###### agg dy previous - test which model alternative is more stable - the specific one ------
 m.agg.previous_tmp0_spei12_1 <- gam(tr_agg_doy ~
                                                s(tmp_lag0, k = 3) +
                                                s(spei12_lag1, k = 3) +
@@ -660,7 +691,7 @@ plot(predict_data)
 
 
 
-###### Previous PEak DoY ----------------------------------------------------
+## Previous PEak DoY ----------------------------------------------------
 
 m.peak.doy.previous_tmp0_spei12_1 <- gam(tr_peak_doy ~ 
                                               s(tmp_lag0, k = 5) +
@@ -733,18 +764,7 @@ save(fin.m.counts.previous.tw,
 
 
 
-
-
-
-
-
-
-
-
 # Effect plots ------------------------------------------------------------
-
-
-##### Spagetting plot: development over time -----------------------------------------
 
 
 # get update table for the line an pint plotting
@@ -766,44 +786,9 @@ avg_data_filt_lagged_plotting <- avg_data_filt_lagged %>%
 
 
 
-##### PLOT: IPS SUM counts -----------------------------------------------------------
+## PLOT: IPS SUM counts -----------------------------------------------------------
 
-## Get labels --------------------------------------------------------------
-# Get formatted label for tmp_lag0
-
-# TMP and SPEI labs
-temp_label <- expression(paste("Temp. [", degree, "C]", sep = ""))#expression(paste("Temperature [", degree, "C]", sep=""))
-spei_label <- 'SPEI lag1 [dim.]'
-
-# Define the transformation function
-adjust_predictions_counts <- function(df, divisor) {
-  df <- as.data.frame(df)
-  #df$x <- df$x  / divisor
-  df$predicted <- df$predicted  / divisor
-  df$conf.low <- df$conf.low / divisor
-  df$conf.high <- df$conf.high / divisor
-  return(df)
-}
-
-
-transform_predictions_DOY <- function(predictions, doy.start, doy.end) {
-  scale_factor <- doy.end - doy.start
-  predictions$predicted <- (predictions$predicted * scale_factor) + doy.start
-  predictions$conf.low  <- (predictions$conf.low * scale_factor) + doy.start
-  predictions$conf.high <- (predictions$conf.high * scale_factor) + doy.start
-  return(predictions)
-}
-
-
-transform_single_prediction_DOY <- function(predicted_value, doy.start, doy.end) {
-  scale_factor <- doy.end - doy.start
-  transformed_value <- (predicted_value * scale_factor) + doy.start
-  return(transformed_value)
-}
-
-
-# Transform a single value
-transform_single_prediction_DOY(0.43, doy.start, doy.end)
+### Get labels --------------------------------------------------------------
 
 
 # Assuming 'model' is your glm.nb model
@@ -1129,6 +1114,7 @@ ggarrange(p0.peak.diff,p1.peak.diff,p2.peak.diff,p3.peak.diff)
 
 p_spagett_ips       <- plot_data_with_average(avg_data_filt_lagged_plotting, "sum_ips", lab_popul_level,   
                                               my_title = paste( 'Pop. level', '[#*1000]'))
+p_spagett_ips
 p_spagett_agg_doy   <- plot_data_with_average(avg_data_filt_lagged_plotting, "agg_doy", lab_colonization_time, 
                                               my_title = paste('Aggregation timing', '[DOY]'))
 p_spagett_peak_doy  <- plot_data_with_average(avg_data_filt_lagged_plotting, "peak_doy", lab_peak_time, 
@@ -1166,7 +1152,8 @@ p.temp <-  ggarrange(p1.count, p1.agg, p1.peak, p1.peak.diff,
                      ncol=4, nrow = 1 , align = 'hv',
                      label.x = 0.15, # Adjust x-position (0 is left, 1 is right)
                      label.y = 0.85, # Adjust y-position (1 is top, 0 is bottom)
-                     labels = c("[i]", "[j]", "[k]", "[l]"),
+                     labels = c("[e]", "[f]", "[g]", "[h]"), # Custom labels
+                     
                      font.label = list(size = 8, color = "black", face = "plain", family = NULL))
 
 
@@ -1174,29 +1161,31 @@ p.spei <-  ggarrange(p2.count, p2.agg, p2.peak, p2.peak.diff,
                      ncol=4, nrow = 1 , align = 'hv', 
                      label.x = 0.15, # Adjust x-position (0 is left, 1 is right)
                      label.y = 0.85, # Adjust y-position (1 is top, 0 is bottom)
-                     labels = c("[m]", "[n]", "[o]", "[p]"),
+                     labels = c("[i]", "[j]", "[k]", "[l]"),
+                   
                      font.label = list(size = 8, color = "black", face = "plain", family = NULL))
 
 
 p.int <- ggarrange(p3.count,  p3.agg, p3.peak, p3.peak.diff,
-                   labels = c("[q]", "[r]", "[s]", "[t]"),
+                   labels = c("[m]", "[n]", "[o]", "[p]"),
+                   #labels = c("[q]", "[r]", "[s]", "[t]"),
                    label.x = 0.15, # Adjust x-position (0 is left, 1 is right)
                    label.y = 0.9, # Adjust y-position (1 is top, 0 is bottom)
                    ncol=4, nrow = 1 , align = 'hv',common.legend = TRUE, legend = 'bottom',
                    font.label = list(size = 8, color = "black", face = "plain", family = NULL))
 windows(7,10)
 full_preds <- ggarrange(p_spagetti,
-                        p.previous,
+                        #p.previous,
                         p.temp, 
                         p.spei,  
                         p.int,
                         ncol = 1, nrow= 5, 
-                        align = 'hv', heights = c(1, 1, 1, 1, 1.1),
-                        widths = c(1, 1, 1, 1, 1))
+                        align = 'hv', heights = c(1, 1, 1,  1.1),
+                        widths = c(1, 1, 1, 1))
 #"#009E73" 
 (full_preds)
-ggsave(filename = 'outFigs/Fig_full_eff3.png', plot = full_preds, 
-       width = 7.5, height = 10.5, dpi = 300, bg = 'white')
+ggsave(filename = 'outFigs/Fig_full_main_effects.png', plot = full_preds, 
+       width = 7.5, height = 8.5, dpi = 300, bg = 'white')
 
 
 
