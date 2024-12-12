@@ -101,19 +101,8 @@ xy_df <- distinct(xy_df)
 nrow(dat_fin)
 nrow(xy_df)
 
-# change column names
-#lisa_merged_df <- lisa_merged_df %>% 
-#  dplyr::select(year,      falsto_name,          sum_beetle,     log_sum_beetle,      Morans_I,              clust,      Morans_I_log) %>% 
-#  dplyr::rename(trapID = falsto_name,
-  #               sum_ips = sum_beetle) %>% 
-  # dplyr::select(c(year, trapID, sum_ips, 
-  #                 Morans_I, # calculated from beetles sums 
-  #                 Morans_I_log)) # calculated from log(beetles sum)
-
 # add MOran's I values, transform the agg doy and peak doy between 0-1
 dat_fin <-   dat_fin %>% 
-#  left_join(lisa_merged_df, 
-#            by = join_by(trapID, year, sum_ips)) %>%
   mutate(tr_agg_doy   = (agg_doy - doy.start) / (doy.end - doy.start),
          tr_peak_doy  = (peak_doy - doy.start) / (doy.end - doy.start))
 
@@ -144,10 +133,8 @@ nrow(dat_fin)
 
 
 
-## Preprocesss table: get lags ----------------------------
-# dopes not remove the number of larg = annd number of observations constant
-#lags <- 0:3
-  
+## Pre-processs table: get lags ----------------------------
+
 dat_spei_lags <-  dat_fin %>% 
   dplyr::select(c(year, pairID, trapID, tmp, 
                   spei,  # spei3
