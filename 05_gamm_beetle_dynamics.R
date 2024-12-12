@@ -185,23 +185,23 @@ selected_predictors_beetle <- c('sum_ips', 'sum_ips_lag1','sum_ips_lag2',
                          'peak_diff', 'peak_diff_lag1',  'peak_diff_lag2'
                          
 ) 
-selected_predictors_climate <- c("spei12_lag0","spei12_lag1" ,"spei12_lag2",
-                                 "tmp_lag0" , "tmp_lag1", "tmp_lag2" )   
+selected_predictors_climate <- c("spei12_lag0","spei12_lag1" , #"spei12_lag2",
+                                 "tmp_lag0" , "tmp_lag1"#, "tmp_lag2" 
+                                 )   
 
 
 ### check correlation between tmp and spei ---------------------------------------
 # Calculate pairwise correlations for numeric columns
 numeric_cols <- dat_spei_lags %>%
   dplyr::select_if(is.numeric)  %>% # Select only numeric columns
-  dplyr::select(tmp_lag0,# tmp_lag1,tmp_lag2, 
-                spei12_lag0,  spei12_lag1 #, spei12_lag2
+  dplyr::select(selected_predictors_climate #tmp_lag0,# tmp_lag1,tmp_lag2, 
+                #spei12_lag0,  spei12_lag1 #, spei12_lag2
                 )
 
-
-correlations <- cor(numeric_cols, use = "complete.obs")  # Calculate correlations, excluding missing values
-
-# Display the correlation matrix
-print(correlations)
+# get correlation matrix between clim preictors
+cor_matrix <- cor(numeric_cols, use = "pairwise.complete.obs", method = "spearman")
+windows()
+corrplot::corrplot(cor_matrix)
 
 
 # export table to merge it with the spatial data: for variograms:
@@ -271,7 +271,7 @@ hist(dat_dynamics$spei12)
 dat_dynamics2 <- dat_dynamics %>%
   dplyr::rename(temperature = veg_tmp, 
                 precipitation = veg_prcp, 
-                SPEI = spei1)
+                SPEI = spei3)
 
 # Prepare the data for plotting by pivoting it longer
 plot_data <- dat_dynamics2 %>%
@@ -580,7 +580,7 @@ avg_data_filt_lagged$f_year <- droplevels(avg_data_filt_lagged$f_year)
 # Drivers -----------------------------------------------------------------------
 # Final predictors: current year tmp_lag0 & spei12_lag1 best predictors
 # 
-cor(avg_data$spei12_lag1, avg_data$tmp_lag0)
+cor(avg_data$spei12_lag1, avg_data$tmp_lag0, method = 'spearman')
 #cor(avg_data$spei24_lag0, avg_data$tmp_lag0)
 
 ## IPS_SUM ---------------------------------------------------------------------- 
@@ -746,6 +746,7 @@ save(fin.m.counts.previous.tw,
      fin.m.agg.doy.gamma,
      fin.m.peak.doy.gamma,
          avg_data,
+     dat_spei_lags_clean,
      file = "outData/fin_models.RData")
 
 
@@ -768,6 +769,138 @@ avg_data_filt_lagged_plotting <- avg_data_filt_lagged %>%
   )
 
 
+# get predictions per one dergee celsius/per change in SPEI  -------------
+
+### IPS COUNT -----------------------
+predictions_tmp_counts <- ggpredict(fin.m.counts.previous.tw, terms = "tmp_lag0[11:18]")
+predictions_spei_counts <- ggpredict(fin.m.counts.previous.tw, terms = "spei12_lag1[-1,0]")
+
+# Calculate the increase per 1°C for TMP
+increase_per_degree_tmp <- (predictions_tmp_counts$predicted[8] - predictions_tmp_counts$predicted[1]) / 7
+total_increase_tmp <- predictions_tmp_counts$predicted[8] - predictions_tmp_counts$predicted[1]
+
+
+# Predictions for SPEI
+predictions_spei_counts <- ggpredict(fin.m.counts.previous.tw, terms = "spei12_lag1[-1,0]")
+
+# Calculate the increase per unit change in SPEI
+increase_per_unit_spei <- (predictions_spei_counts$predicted[2] - predictions_spei_counts$predicted[1]) / 1
+total_increase_spei <- predictions_spei_counts$predicted[2] - predictions_spei_counts$predicted[1]
+increase_per_unit_spei
+total_increase_spei
+
+
+
+### AGG DOY --------------
+
+
+# Generate predictions for temperature range (TMP)
+predictions_tmp_agg_doy <- ggpredict(fin.m.agg.doy.gamma, terms = "tmp_lag0[11:18]")
+
+# Transform predictions to DOY scale
+predictions_tmp_agg_doy_transformed <- transform_predictions_DOY(
+  predictions_tmp_agg_doy,
+  doy.start = 91,
+  doy.end = 273
+)
+
+# Calculate total shift in aggregation timing for TMP
+total_shift_tmp <- predictions_tmp_agg_doy_transformed$predicted[8] - predictions_tmp_agg_doy_transformed$predicted[1]
+
+# Calculate per-degree shift for TMP
+shift_per_degree_tmp <- total_shift_tmp / (18 - 11)
+
+# Print TMP results
+cat("AGG DOY TMP Total shift (11°C to 18°C):", total_shift_tmp, "\n")
+cat("AGG DOY TMP Shift per degree:", shift_per_degree_tmp, "\n")
+
+# Generate predictions for SPEI range (-1 to 0)
+predictions_spei_agg_doy <- ggpredict(fin.m.agg.doy.gamma, terms = "spei12_lag1[-1,0]")
+
+# Transform predictions to DOY scale
+predictions_spei_agg_doy_transformed <- transform_predictions_DOY(
+  predictions_spei_agg_doy,
+  doy.start = 91,
+  doy.end = 273
+)
+
+# Calculate total shift in aggregation timing for SPEI
+total_shift_spei <- predictions_spei_agg_doy_transformed$predicted[2] - predictions_spei_agg_doy_transformed$predicted[1]
+
+# Calculate per-unit shift for SPEI
+shift_per_unit_spei <- total_shift_spei / 1  # Change is between -1 and 0, so divide by 1
+
+# Print SPEI results
+cat("AGG DOY SPEI Total shift (-1 to 0):", total_shift_spei, "\n")
+cat("AGG DOY SPEI Shift per unit SPEI:", shift_per_unit_spei, "\n")
+
+
+# for peak doy ---------------------
+# Generate predictions for temperature range (TMP)
+predictions_tmp_peak_doy <- ggpredict(fin.m.peak.doy.gamma, terms = "tmp_lag0[11:18]")
+
+# Transform predictions to DOY scale
+predictions_tmp_peak_doy_transformed <- transform_predictions_DOY(
+  predictions_tmp_peak_doy,
+  doy.start = 91,
+  doy.end = 273
+)
+
+# Calculate total shift in peak timing for TMP
+total_shift_tmp_peak <- predictions_tmp_peak_doy_transformed$predicted[8] - predictions_tmp_peak_doy_transformed$predicted[1]
+
+# Calculate per-degree shift for TMP
+shift_per_degree_tmp_peak <- total_shift_tmp_peak / (18 - 11)
+
+# Print TMP results
+cat("PEAK DOY TMP Total shift (11°C to 18°C):", total_shift_tmp_peak, "\n")
+cat("PEAK DOY TMP Shift per degree:", shift_per_degree_tmp_peak, "\n")
+
+# Generate predictions for SPEI range (-1 to 0)
+predictions_spei_peak_doy <- ggpredict(fin.m.peak.doy.gamma, terms = "spei12_lag1[-1,0]")
+
+# Transform predictions to DOY scale
+predictions_spei_peak_doy_transformed <- transform_predictions_DOY(
+  predictions_spei_peak_doy,
+  doy.start = 91,
+  doy.end = 273
+)
+
+# Calculate total shift in peak timing for SPEI
+total_shift_spei_peak <- predictions_spei_peak_doy_transformed$predicted[2] - predictions_spei_peak_doy_transformed$predicted[1]
+
+# Calculate per-unit shift for SPEI
+shift_per_unit_spei_peak <- total_shift_spei_peak / 1  # Change is between -1 and 0, so divide by 1
+
+# Print SPEI results
+cat("PEAK DOY SPEI Total shift (-1 to 0):", total_shift_spei_peak, "\n")
+cat("PEAK DOY SPEI Shift per unit SPEI:", shift_per_unit_spei_peak, "\n")
+
+
+# ### PEAK DIFFERENCE -----------------------
+
+# Generate predictions for TMP (temperature) range
+predictions_tmp_diff <- ggpredict(fin.m.peak.diff.previous.tw, terms = "tmp_lag0[11:18]")
+
+# Calculate the increase in difference per 1°C for TMP
+increase_per_degree_tmp_diff <- (predictions_tmp_diff$predicted[8] - predictions_tmp_diff$predicted[1]) / 7
+total_increase_tmp_diff <- predictions_tmp_diff$predicted[8] - predictions_tmp_diff$predicted[1]
+
+# Print TMP results
+cat("PEAK DIFF TMP Increase per degree (11°C to 18°C):", increase_per_degree_tmp_diff, "\n")
+cat("PEAK DIFF TMP Total increase (11°C to 18°C):", total_increase_tmp_diff, "\n")
+
+# Generate predictions for SPEI range (-1 to 0)
+predictions_spei_diff <- ggpredict(fin.m.peak.diff.previous.tw, terms = "spei12_lag1[-1,0]")
+
+# Calculate the increase in difference per unit change in SPEI
+increase_per_unit_spei_diff <- (predictions_spei_diff$predicted[2] - predictions_spei_diff$predicted[1]) / 1
+total_increase_spei_diff <- predictions_spei_diff$predicted[2] - predictions_spei_diff$predicted[1]
+
+# Print SPEI results
+cat("PEAK DIFF SPEI Increase per unit (-1 to 0):", increase_per_unit_spei_diff, "\n")
+cat("PEAK DIFF SPEI Total increase (-1 to 0):", total_increase_spei_diff, "\n")
+
 
 
 
@@ -775,11 +908,13 @@ avg_data_filt_lagged_plotting <- avg_data_filt_lagged %>%
 
 ## PLOT: IPS SUM counts -----------------------------------------------------------
 
-### Get labels --------------------------------------------------------------
-
 
 # Assuming 'model' is your glm.nb model
 summary(fin.m.counts.previous.tw)
+
+
+
+#### plot --------------------------------
 
 m<-fin.m.counts.previous.tw
 
@@ -865,6 +1000,9 @@ ggarrange(p0.count,p1.count,p2.count, p3.count,
 
 ##### PLOT DOY aggregation ---------------------------------------------------------
 summary(fin.m.agg.doy.gamma)
+
+
+
 
 m<-fin.m.agg.doy.gamma
 
