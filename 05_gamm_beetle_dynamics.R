@@ -778,7 +778,8 @@ predictions_spei_counts <- ggpredict(fin.m.counts.previous.tw, terms = "spei12_l
 # Calculate the increase per 1°C for TMP
 increase_per_degree_tmp <- (predictions_tmp_counts$predicted[8] - predictions_tmp_counts$predicted[1]) / 7
 total_increase_tmp <- predictions_tmp_counts$predicted[8] - predictions_tmp_counts$predicted[1]
-
+increase_per_degree_tmp
+total_increase_tmp
 
 # Predictions for SPEI
 predictions_spei_counts <- ggpredict(fin.m.counts.previous.tw, terms = "spei12_lag1[-1,0]")
@@ -789,7 +790,17 @@ total_increase_spei <- predictions_spei_counts$predicted[2] - predictions_spei_c
 increase_per_unit_spei
 total_increase_spei
 
+# int-------------
+# Generate predictions for the interaction effect of tmp_lag0 and spei12_lag1 at SPEI = -1
+predictions_interaction <- ggpredict(fin.m.counts.previous.tw, terms = c("tmp_lag0[11:18]", "spei12_lag1[-1]"))
 
+# Calculate the increase per 1°C for TMP when SPEI = -1
+increase_per_degree_tmp_spei <- (predictions_interaction$predicted[8] - predictions_interaction$predicted[1]) / 7
+total_increase_tmp_spei <- predictions_interaction$predicted[8] - predictions_interaction$predicted[1]
+
+# Print the results
+cat("Increase per 1°C (TMP | SPEI = -1):", increase_per_degree_tmp_spei, "\n")
+cat("Total increase (TMP 11°C to 18°C | SPEI = -1):", total_increase_tmp_spei, "\n")
 
 ### AGG DOY --------------
 
@@ -1396,8 +1407,6 @@ sjPlot::tab_model(fin.m.counts.previous.tw,    file = "outTable/model_counts.doc
 sjPlot::tab_model(fin.m.agg.doy.gamma,         file = "outTable/model_agg.doc")
 sjPlot::tab_model(fin.m.peak.doy.gamma,        file = "outTable/model_peak.doc")
 sjPlot::tab_model(fin.m.peak.diff.previous.tw, file = "outTable/model_peak_diff.doc")
-sjPlot::tab_model(fin.m.moran,                 file = "outTable/model_moran.doc")
-#sjPlot::tab_model(fin.m.RS,        file = "outTable/model_RS_3.doc")
 
 
 
