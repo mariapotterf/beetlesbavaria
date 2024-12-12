@@ -224,7 +224,7 @@ crs(grid_sel_ras)              <- crs(sf_simpled)
 st_crs(sum_ips_sf_trans)       <- crs(sf_simpled)
 
 # Extract CRS again after transformation
-crs_raster <- crs(grid_sel_ras)
+crs_raster <- crs(sf_simpled)
 crs_vector <- st_crs(sum_ips_sf_trans)
 
 # Confirm they are now the same
@@ -402,6 +402,37 @@ sjPlot::tab_df(observation_mortality_year,
                digits = 0) 
 
 
+# per drought years ---------------------------------------------
+observation_mortality_drought <- 
+  df_all %>% 
+  ungroup(.) %>% 
+  filter(year %in% 2015:2021) %>%
+  mutate(drought_status = ifelse(year %in% 2018:2020, "Hotter drought", "Other")) %>% 
+  dplyr::select(ID, drought_status, damaged_volume_total_m3, RS_wind_beetle) %>% 
+  dplyr::mutate(RS_wind_beetle = RS_wind_beetle*0.09) %>% # convert pixels to hectares
+  group_by(drought_status) %>% 
+  dplyr::summarize(mean_dam   = mean(damaged_volume_total_m3  , na.rm = T),
+                   sd_dam     = sd(damaged_volume_total_m3, na.rm = T),
+                   mean_RS   = mean(RS_wind_beetle  , na.rm = T),
+                   sd_RS     = sd(RS_wind_beetle, na.rm = T)) %>% 
+  mutate(Field_volume       = stringr::str_glue("{round(mean_dam,1)}±{round(sd_dam,1)}"),
+         RS_area            = stringr::str_glue("{round(mean_RS,1)}±{round(sd_RS,1)}")) %>% 
+  dplyr::select(drought_status, Field_volume, RS_area) 
+
+
+(observation_mortality_drought)
+
+
+# Export as a nice table in word:
+sjPlot::tab_df(observation_mortality_drought,
+               show.rownames = F,
+               file="outTable/summary_out_observation_mortality_drought.doc",
+               digits = 0) 
+
+
+
+
+
 
 
 
@@ -450,7 +481,8 @@ df_full_years_to_spagetti_plot <-
 #  dplyr::filter(!pairID %in% c('Peiting', "Eschenbach_idOPf"))
 
 # Replace or filter out zero values before plotting
-df_full_years_to_spagetti_plot$damage_vol_k <- ifelse(df_full_years_to_spagetti_plot$damage_vol_k <= 0.01, 
+df_full_years_to_spagetti_plot$damage_vol_k <- ifelse(
+  df_full_years_to_spagetti_plot$damage_vol_k <= 0.01, 
                                                     0.01, 
                                                     df_full_years_to_spagetti_plot$damage_vol_k)
 
@@ -727,10 +759,11 @@ windows()
 corrplot::corrplot(cor_matrix)
 
 # inspect relationships:
-pairs(damage_vol ~  sum_ips + sum_ips_lag1 + sum_ips_lag2 +
-        agg_doy    + agg_doy_lag1 +  agg_doy_lag2  +
-        peak_doy +  peak_doy_lag1 + peak_doy_lag2 +
-        peak_diff +  peak_diff_lag1 +   peak_diff_lag2, data = df_traps_RS_damage)
+pairs(damage_vol ~  sum_ips + sum_ips_lag1 + #sum_ips_lag2 +
+        agg_doy    + agg_doy_lag1 + # agg_doy_lag2  +
+        peak_doy +  peak_doy_lag1 + #peak_doy_lag2 +
+        peak_diff +  peak_diff_lag1, # + #  peak_diff_lag2, 
+      data = df_traps_RS_damage)
 # fin_dat_damage
 
 # check for outliers? -------------------------------------------------------------
@@ -961,27 +994,59 @@ fin_dat_damage_plot <- fin_dat_damage %>%
          lag1_damage_vol  = lag1_damage_vol/1000)
 
 
+# Function to filter data and remove corresponding rows by pairID and year
+filter_top_95_percent <- function(data, damage_var = "damage_vol") {
+  damage_var_sym <- rlang::sym(damage_var)
+  
+  # Calculate the 99th percentile threshold for damage_vol
+  threshold <- quantile(data[[damage_var]], 0.95, na.rm = TRUE)
+  
+  # Identify the pairIDs and years to remove
+  ids_to_remove <- data %>%
+    dplyr::filter(!!damage_var_sym > threshold) %>%
+    dplyr::select(pairID, year)
+  
+  # Filter out all records for these pairIDs and years
+  filtered_data <- data %>%
+    anti_join(ids_to_remove, by = c("pairID", "year"))
+  
+  return(filtered_data)
+}
+
+# Apply the function to your data
+df_full_years_to_spagetti_plot95 <- filter_top_95_percent(df_full_years_to_spagetti_plot)
+
+
 fin_dat_RS_clean_plot <- fin_dat_RS_clean %>% 
   mutate(RS_wind_beetle_ha      = RS_wind_beetle*0.09,
          lag1_RS_wind_beetle_ha = lag1_RS_wind_beetle*0.09,
-         sum_ips_lag1           = sum_ips_lag1/1000)
+         sum_ips_lag1           = sum_ips_lag1/1000,
+         sum_ips                = sum_ips/1000)
 
 
 
 
-p_spagett_damage <- plot_data_with_average(df_full_years_to_spagetti_plot, "damage_vol_k", 'my_lab',   
+p_spagett_damage <- plot_data_with_average(df_full_years_to_spagetti_plot, #df_full_years_to_spagetti_plot95, #, 
+                                           "damage_vol_k", # "damage_vol_k" 
+                                           'my_lab', 
+                                           group_var = 'pairID',
                                               my_title = expression("Ground survey [*1000 m"^3*"]"))+ 
   #scale_y_log10() +
   scale_y_log10(labels = label_number()) +  # Adjust y-axis labels to avoid scientific notation
-  lims(x = c(2015,2021))
+  lims(x = c(2015,2021)) #+
+  #coord_cartesian(ylim = c(0, 40000)) #+
 
 (p_spagett_damage)
 range(df_full_years_to_spagetti_plot$damage_vol_k)
 hist(df_full_years_to_spagetti_plot$damage_vol_k)
 
 
-p_spagett_RS<- plot_data_with_average(df_full_years_to_spagetti_plot, "RS_wind_beetle_ha", 'my_lab',   
+p_spagett_RS<- plot_data_with_average(df_full_years_to_spagetti_plot, 
+                                      "RS_wind_beetle_ha",
+                                      'my_lab',  
+                                      group_var = 'pairID',
                                        my_title = paste('Remote sensing', '[ha]')) +  
+  
                                          scale_y_log10() + 
   lims(x = c(2015,2021))
 
@@ -992,8 +1057,8 @@ p_spagett_RS<- plot_data_with_average(df_full_years_to_spagetti_plot, "RS_wind_b
 # Assuming 'model' is your glm.nb model
 summary(fin.m.damage)
 m <- fin.m.damage
-p_val_damage           <- format_p_value_label(summary(m), "s(lag1_damage_vol)")
-p_val_ips          <- format_p_value_label(summary(m), "sum_ips")
+p_val_damage       <- format_p_value_label(summary(m), "s(lag1_damage_vol)")
+p_val_ips          <- format_p_value_label(summary(m), "s(sum_ips)")
 
 
 p0 <- ggpredict(fin.m.damage, terms = "lag1_damage_vol [all]", allow.new.levels = TRUE)
@@ -1084,10 +1149,10 @@ p0.RS <-
 p1.RS <- 
   create_effect_plot(data = p1, 
                      avg_data = fin_dat_RS_clean_plot, 
-                     x_col = "sum_ips_lag1", 
+                     x_col = "sum_ips", 
                      y_col = "RS_wind_beetle_ha", 
                      line_color = "#A50026", 
-                     x_title = 'Population level lag1 [#*1000]' , 
+                     x_title = 'Population level [#*1000]' , 
                      #y_title = paste(lab_popul_level, '*1000'), 
                      #my_title = "Effect of Year on Sum IPS", 
                      x_annotate = 40, 
@@ -1096,10 +1161,14 @@ p1.RS <-
 (p1.RS)
 
 p.comp2 <- ggarrange(
-  p_spagett_damage, p0.damage, p1.damage, 
-  p_spagett_RS, p0.RS, p1.RS, 
-  ncol = 3, nrow = 2, align = 'hv',
-  labels = c('[a]', '[b]', '[c]', '[d]', '[e]', '[f]'),
+  p_spagett_damage, 
+  #p0.damage, 
+  p1.damage, 
+  p_spagett_RS, 
+  #p0.RS, 
+  p1.RS, 
+  ncol = 2, nrow = 2, align = 'hv',
+  labels = c('[a]', '[b]', '[c]', '[d]'),# , '[e]', '[f]'
   font.label = list(size = 10, face = "plain"),  # Set font to normal (plain) and specify size
   label.x = 0.15,  # Adjust these values to position the labels within the plot
   label.y = 0.85
@@ -1107,13 +1176,11 @@ p.comp2 <- ggarrange(
 (p.comp2)
 
 
-ggsave(filename = 'outFigs/observation_vs_traps.png', 
-       plot = p.comp2, width = 6, height = 4, dpi = 300, bg = 'white')
+ggsave(filename = 'outFigs/observation_vs_traps2.png', 
+       plot = p.comp2, width = 4, height = 4, dpi = 300, bg = 'white')
 
 
 ##### quick plotting -----------------------------------------------
-
-# to exclude  RS wind beetle in Passau 2018??? no!
 
 # create area plots: sum damage per year
 df_sum <- df_all %>% 
