@@ -159,14 +159,15 @@ plot_effect_interactions <- function(data,
 }
 
 
-plot_data_with_average <- function(data, y_var, y_label, my_title) {
+plot_data_with_average <- function(data, y_var, y_label, my_title, group_var = "trapID") {
   # Convert the y_var argument to a symbol to use in aes()
   y_var_sym <- rlang::sym(y_var)
+  group_var_sym <- rlang::sym(group_var)
   
   data %>%
     ungroup() %>%
     filter(year %in% 2015:2021) %>%
-    ggplot(aes(x = year, y = !!y_var_sym, group = trapID)) +
+    ggplot(aes(x = year, y = !!y_var_sym,  group = !!group_var_sym)) +
   
     geom_rect(
       aes(xmin = 2018, xmax = 2020, ymin = -Inf, ymax = Inf), 
