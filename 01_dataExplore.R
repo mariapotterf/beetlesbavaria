@@ -150,7 +150,7 @@ dat %>%
   filter(globalid_count> 1)
   #arrange(-globalid_count) 
 
-# 136 traps from 302 have changed location 2-4 times over 2015-2021
+# 138 traps from 302 have changed location 2-4 times over 2015-2021
 dat %>% 
   filter(falsto_name == "Falkenstein_1") %>% #   'Aldersbach_1') %>% Falkenstein_1 has trap 4x changed
   filter(art == "Buchdrucker") %>% 
