@@ -62,39 +62,14 @@ load(paste(path, 'BoMo_2015_2021_Rohdaten.RData', sep = "/"))
 
 This dataset provides information about bark beetle monitoring through the use of traps. It captures detailed attributes of each trap, its configuration, catch data, and environmental factors that may influence the results. The data is structured into multiple fields, each with specific types and purposes, as outlined below:
 
-## Technical and Identification Fields:
-- **objectid**: An integer field serving as a technical identifier for each record.
-- **globalid**: A character field that uniquely identifies a trap location. Some traps may have multiple `globalid` values due to relocations without renaming.
 
-## Trap and Monitoring Information:
-- **aelf**: Abbreviation for the responsible forest office (Amt für Ernährung, Landwirtschaft und Forsten, AELF).
-- **monsto_name**: The name of the monitoring site, representing pairs of trap locations.
-- **falsto_name**: The name of the specific trap, composed of `monsto_name` and the trap number.
-
-## Catch Data:
-- **art**: The species of bark beetle (e.g., *Ips typographus* or *Pityogenes chalcographus*).
-- **fangmenge**: The number of beetles caught in a trap.
-- **einheit**: The unit of measurement for the catch (typically the number of individuals). Small quantities are directly counted, while large quantities are estimated based on volume:
-  - *Ips typographus*: 1 mL = 40 individuals.
-  - *Pityogenes chalcographus*: 1 mL = 550 individuals.
-
-## Monitoring Details:
-- **kont_dat**: The date the trap was emptied (POSIXct format). The emptying intervals may vary as no fixed day is set.
-- **koederwechsel**: Indicates whether the bait in the trap was changed (`Ja` for yes, `Nein` for no).
-- **representativ**: Notes if the catch result is representative. Results may be non-representative if:
-  - The trap was damaged.
-  - The bait was removed.
-  - Significant environmental disturbances occurred, such as timber harvesting, wood piling, or infestations in the surrounding forest within a 200-meter radius.
-
-This dataset is crucial for monitoring bark beetle populations and analyzing environmental impacts on catch rates, providing insights into forest health and pest management practices.
-
-### CRS: **EPSG:3035** (ETRS89 / LAEA Europe) is a projected coordinate system. It is:
+CRS: **EPSG:3035** (ETRS89 / LAEA Europe) is a projected coordinate system. It is:
 - **Projection Type**: Lambert Azimuthal Equal-Area (LAEA).
 - **Unit**: Meters.
 - **Application**: Often used for statistical mapping and environmental data across Europe.
 
 
-### Trap catch: Detailed information
+*Trap catch: Detailed information*
 
 
 | Column        | Type            | Description                                                                                                                                                                                                                                   |
@@ -112,34 +87,66 @@ This dataset is crucial for monitoring bark beetle populations and analyzing env
 | globalid      | Chr             | ID-number of a trap location. It is possible that some trap names have more than one globalid. That is the case if the trap was relocated without renaming the monitoring location (monsto_name).                                             |
 
 
-```{r, read data}
+```{r, read data, echo = F, warning=F}
 xy_sf <- st_read(paste(out_path, "outSpatial/all_traps_3035.gpkg", sep = '/'))
+bav_sf <- st_read(paste(out_path, "outSpatial/bavaria.gpkg", sep = '/'))
 
-plot(xy_sf["falsto_name"])
+# Reproject bav_sf to the CRS of xy_sf
+bav_sf_repr <- st_transform(bav_sf, st_crs(xy_sf))
+
+st_crs(xy_sf) == st_crs(bav_sf_repr)
+#plot(xy_sf["falsto_name"])
+
+# simplify: keep only one XY per trap
+
+xy_sf_simple <- xy_sf %>%
+  dplyr::select(falsto_name, geom) %>%  # Keep only falsto_name and geometry columns
+  group_by(falsto_name) %>%      # Group by falsto_name
+  slice(1) %>%                   # Retain only one record per group
+  ungroup()                      # Ungroup the data for further operations
+
+
+# Step 1: Add PairID column
+xy_sf_simple <- xy_sf_simple %>%
+  mutate(pairID = substr(falsto_name, 1, nchar(falsto_name) - 2))
+
+# Step 2: Calculate average coordinates for each PairID
+# Extract coordinates as separate columns
+xy_sf_simple <- xy_sf_simple %>%
+  mutate(x = st_coordinates(geom)[, 1],  # X coordinate
+         y = st_coordinates(geom)[, 2]) # Y coordinate
+
+# Group by PairID and calculate mean coordinates
+xy_pair_avg <- xy_sf_simple %>%
+  as.data.frame() %>% 
+  group_by(pairID) %>%
+  summarize(x = mean(x), 
+            y = mean(y)) %>%
+  ungroup() #%>% 
+  #st_as_sf()
+
+# Convert avg_coordinates to sf
+xy_pair_sf <- xy_pair_avg %>%
+  st_as_sf(coords = c("x", "y"), crs = 3035)
+
+
+
 ```
 
 # Beetle Data Processing
 
-This section processes beetle trap data for analysis. The dataset includes over 73,000 records from 302 unique trap locations, capturing information on two primary beetle species (*Ips typographus* - "Buchdrucker" and *Pityogenes chalcographus* - "Kupferstecher"). The data is prepared for further spatial and temporal analyses by cleaning, transforming, and adding key attributes. Below is the detailed breakdown of the processing steps:
+The dataset includes over 73,000 records from 302 unique trap locations, capturing information on two primary beetle species (*Ips typographus* - "Buchdrucker" and *Pityogenes chalcographus* - "Kupferstecher"). 
 
-## Key Steps:
-1. **Data Preparation**:
-   - The original data table (`Daten_B01`) is renamed to `dat`.
-   - The trap emptying dates (`kont_dat`) are converted to the `Date` format.
+Goal: are the trap pairs representative one to another?  Eg do we need trap pairs, or a single trap per location?
 
-2. **Date Decomposition**:
-   - The `kont_dat` field is split into `year`, `month`, `day`, and `day of year (doy)` to analyze temporal variations.
+- are they correlated?
+- what is difference between the two?
+- how often do they cross the 3000 threshold per monitoring day?
 
-3. **Basic Data Insights**:
-   - The dataset contains over 73,000 rows and 302 unique trap locations (`falsto_name`).
+-  compare full records
+-  commpare only "representative  == TRUE"
 
-4. **Data Cleaning**:
-   - Spaces and special characters in `falsto_name` are replaced with underscores or removed.
-   - A new field `trap_pair` is extracted to represent trap pair numbers.
-   - The `globalid` field is cleaned by removing parentheses for better merging with spatial data.
 
-5. **Output**:
-   - The cleaned and transformed dataset (`dat`) is ready for merging with spatial data and further analysis.
 
 ```{r process_input_data, echo = F}
 # Rename the table
@@ -156,8 +163,8 @@ dat <- dat %>%
                 doy   = lubridate::yday(kont_dat) + 1)
 
 # Basic statistics
-nrow(dat) # Total rows >73,000
-length(unique(dat$falsto_name)) # Total traps = 302
+#nrow(dat) # Total rows >73,000
+#length(unique(dat$falsto_name)) # Total traps = 302
 
 # Clean trap names and extract trap pair number
 dat <- dat %>% 
@@ -171,7 +178,7 @@ dat <- dat %>%
   mutate(globalid =  gsub("\\{|\\}", "", globalid))
 ```
 
-### Overview 
+*Quick data summary *
 
 The total number of trap locations is `r length(sort(unique(xy_sf$falsto_name)))`.
 
@@ -181,9 +188,8 @@ Recording dates & years:
 - 2015:2021
 
 
-In total, 138 traps has changed location 2-40 times over 2015-2021 from total of 302 locations
+In total, 138 traps has changed location 2-4 times over 2015-2021 from total of 302 locations
 
-## Median Days Between Recordings
 ```{r median_days_between, echo=F}
 # Get median dates between two recordings
 # Calculate the number of days between recordings per 'falsto_name'
@@ -201,24 +207,37 @@ median_range_recording_days <- range(median_days_between$median_days, na.rm = TR
 mean_range_recording_days <- range(median_days_between$mean_days, na.rm = TRUE)
 ```
 
-The range for the **median days** was (`r median_range_recording_days[1]` to `r median_range_recording_days[2]`), 
-and for the **mean days**, it was (`r round(mean_range_recording_days[1],0)` to `r round(mean_range_recording_days[2],0)`).
+
 
 
 ## Correlation Between Beetle counts and Year
 
-The following analysis calculates the correlation between the number of beetles caught (`counts`) and the year of data collection, grouped by `pairID` and beetle species. This allows us to see how correlations between traps within trap pairs change change over time for each monitoring site. We used Spearman correlation.
+ calculates the correlation between the number of beetles caught (`counts`) per trap pair and year, grouped by `pairID`. We used Spearmann correlation.
 
 
-```{r clean_up_data, echo=F}
+# Maps: over Bavaria
+
+*Process the data:*
+
+- split data into IPS and Pityogenes records
+- remove traps pairs  that have trap_pair = 3, or A,B,C indication, instead of 1 or 2
+- sum up trap counts by trapID, months - to make sure I have the correct number of records
+- keep all records - indicate, if trap is problematic
+- get counts per trap 1 and trap 2
+- run correlations between trap 1 and trap 2
+
+
+
+```{r clean_up_data, echo=F, warning=F}
 
 # Select and rename the desired columns
 dat_cleaned <- dat %>%
-  dplyr::filter(year !=2014) %>% 
+  #dplyr::filter(year !=2014) %>% 
    dplyr::filter(month %in% 4:9) %>%  # filter months during vegetation season: some has record in januay, march ..
   dplyr::select(
     year,
-    month,
+    doy,
+    #month,
     fangmenge,
     art,
     falsto_name,
@@ -238,7 +257,7 @@ print(summary(dat_cleaned))
 
 # sum ups counts per month to ryun correlations
 dat_cleaned_sum_month <-  dat_cleaned %>% 
-  group_by(pairID, trapID, species, year, month, trap_pair) %>%
+  group_by(pairID, trapID, species, year, doy, trap_pair) %>%
   dplyr::summarise(
     count = sum(count, na.rm = TRUE),
     .groups = "drop"
@@ -247,15 +266,7 @@ dat_cleaned_sum_month <-  dat_cleaned %>%
   ungroup(.)
 
 ```
-Sites with very few recording times per year: if revisit is every 2 weeks, each trap should have 7*2 records (at least) = 14 records/year
-
-Process the data:
-- split data into IPS and Pityogenes records
-- remove traps pairs  that have trap_pair = 3, or A,B,C indication, instead of 1 or 2
-- sum up trap counts by trapID, months - to make sure I have the correct number of records
-- remove if there is < 7 records per year & trapID
-- get counts per trap 1 and trap 2
-- run correlations between trap 1 and trap 2
+# Results
 
 ## IPS
 
@@ -268,51 +279,204 @@ ips_data <- dat_cleaned %>% #dat_cleaned_sum_month %>%
 
 # Reshape data into wide format with counts from trap_pair 1 and 2
 ips_wide <- ips_data %>%
-  group_by(pairID, species, year, month) %>% # Group by necessary columns
+  group_by(pairID, species, year, doy) %>% # Group by necessary columns
   summarise(count_1 = sum(count[trap_pair == 1], na.rm = TRUE),  # Sum counts for trap_pair 1
             count_2 = sum(count[trap_pair == 2], na.rm = TRUE),  # Sum counts for trap_pair 2
-            count_3 = sum(count[trap_pair == 3], na.rm = TRUE),  # Sum counts for trap_pair 3 (if applicable)
-            .groups = "drop") # Ungroup the data after summarising
+            #count_3 = sum(count[trap_pair == 3], na.rm = TRUE),  # Sum counts for trap_pair 3 (if applicable)
+            .groups = "drop") %>% # Ungroup the data after summarising
+  mutate(over_3k = case_when(
+    count_1 > 3000 & count_2 > 3000 ~ 'over',       # Both counts > 3000
+    count_1 > 3000 | count_2 > 3000 ~ 'no_fit',    # Only one count > 3000
+    count_1 <= 3000 & count_2 <= 3000 ~ 'less'     # Both counts <= 3000
+  ))
+
+
+# Calculate percentages of each class in `over_3k`
+ips_3k_percentages <- ips_wide %>%
+  group_by(pairID, year, over_3k) %>%  # Group by pairID, year, and over_3k
+  summarize(class_count = n(), .groups = "drop") %>%  # Count occurrences of each class
+  group_by(pairID, year) %>%  # Group again by pairID and year
+  mutate(class_percentage = class_count / sum(class_count) * 100) %>%  # Calculate percentages
+  ungroup()
+
+# keep only higher from teh classes: over and no_fit, remve 'less'
+ips_3k_percentages_sub <- ips_3k_percentages %>% 
+  dplyr::filter(over_3k != 'less') %>% 
+  group_by(pairID, year) %>%
+  slice_max(class_percentage, with_ties = FALSE) %>%
+  ungroup() %>% 
+  dplyr::select(-class_count)
+
 
 
 correlations_ips <- ips_wide %>%
   group_by(pairID, year) %>% # Group by pairID and year
-  mutate(
-    correlation = cor(count_1, count_2, use = "pairwise.complete.obs", method = "spearman"), # Calculate correlation
+  summarize(
+    spearm_cor = cor(count_1, count_2, use = "pairwise.complete.obs", method = "spearman"), # Calculate correlation
     record_count = n(), # Count the number of records in each group
-    .groups = "drop"
-  ) 
+    mean_counts = mean(c(count_1, count_2), na.rm = TRUE),           # Mean of counts
+    sd_counts = sd(c(count_1, count_2), na.rm = TRUE),               # Standard deviation of counts
+    cv_counts = sd_counts / mean_counts * 100                        # Coefficient of Variation (%)
+  ) %>%
+ 
+  ungroup()
 
-# !!! how many sites has very less records???
+correlations_ips <- correlations_ips %>%
+  left_join(ips_3k_percentages_sub)
 
+# add to original table
+# correlations_ips <- correlations_ips %>%
+#   left_join(ips_class_percentages %>% 
+#               select(pairID, year, over_3k, class_percentage),
+#             by = c("pairID", "year"))
 
-# Summarize correlation values per year
-correlation_ips_summary <- correlations_ips %>%
-  group_by(year) %>%
-  summarise(
-    mean_correlation = mean(correlation, na.rm = TRUE),  # Mean correlation
-    sd_correlation = sd(correlation, na.rm = TRUE),      # Standard deviation
-    median_correlation = median(correlation, na.rm = TRUE),  # Median correlation
-    iqr_correlation = IQR(correlation, na.rm = TRUE),    # Interquartile range
-    .groups = "drop"
-  )
-
-# Calculate the 5th percentile of correlations
-correlation_5th_percentile_ips <- quantile(correlations_ips$correlation, probs = 0.05, na.rm = TRUE)
-
-# Filter rows with correlations below or equal to the 5th percentile
-lowest_correlations_ips <- correlations_ips %>%
-  dplyr::filter(correlation <= correlation_5th_percentile_ips) %>% 
-  dplyr::arrange(correlation)
+# merge datao to plot them on teh map
+corr_year <- xy_pair_sf %>% 
+  inner_join(correlations_ips, by = join_by(pairID))
 
 
 ```
 
-Density distribution of correlations between traps, groupped by trapID.
+# Maps
+
+Distribution of the Spearman correlation 
+
+```{r ips_cor_map, include = T, warning = F, echo = F}
+
+# Create the plot
+ggplot() +
+  geom_sf(data = bav_sf_repr, fill = 'grey', color = 'black') +  # Add the bav_sf_repr layer as grey
+  geom_sf(data = corr_year, aes(color = spearm_cor), size = 2) +  # Plot points with color representing Spearman correlationSpearman correlation
+  #scale_color_viridis_c(option = "plasma", name = "Spearman\nCorrelation") +  # Use a continuous color scale
+   scale_color_gradient2(
+    low = "blue",     # Color for low values
+    mid = "white",    # Color for 0 values
+    high = "red",     # Color for high values
+    midpoint = 0,     # The point where 'white' is assigned
+    #limits = c(-0.25, 9),  # Scale limits
+    name = "Spearman\nCorrelation"  # Legend title
+  ) +
+  facet_wrap(~ year) +  # Facet the plot by year
+  theme_void() +  # Minimal theme for better aesthetics
+  labs(
+    title = "Spatial Distribution of Spearman Correlation by Year",
+    x = "Longitude",
+    y = "Latitude"
+  )
+
+```
+Distribution of the coefficient of variation 
+
+
+```{r ips_cv_map, include = T, warning = F, echo = F}
+
+# Create the plot
+ggplot() +
+  geom_sf(data = bav_sf_repr, fill = 'grey', color = 'black') +  # Add the bav_sf_repr layer as grey
+  geom_sf(data = corr_year, aes(color = cv_counts), size = 2) +  # Plot points with color representing Spearman correlationSpearman correlation
+  #scale_color_viridis_c(option = "plasma", name = "Coefficient of variation") +  # Use a continuous color scale
+  scale_color_viridis_c(
+    option = "plasma",
+    name = "Coefficient of variation\n(capped at 150)",
+    limits = c(0, 150),  # Set limits
+    oob = scales::squish  # Values above 200 squish to max (200)
+  ) +
+   facet_wrap(~ year) +  # Facet the plot by year
+  
+  theme_void() +  # Minimal theme for better aesthetics
+  labs(
+    title = "Spatial Distribution of Coefficient of variation by Year",
+    x = "Longitude",
+    y = "Latitude"
+  )
+
+```
+
+Distribution of the Outbreak indicator fit
+
+
+
+
+```{r ips_3k_map, include = T, warning = F, echo = F}
+
+# Create the plot
+ggplot() +
+  geom_sf(data = bav_sf_repr, fill = 'grey', color = 'black') +  # Add the bav_sf_repr layer as grey
+  geom_sf(data = corr_year, aes(color = over_3k ), size = 2) +  # Plot points with color representing Spearman correlationSpearman correlation
+  scale_color_viridis_d(option = "plasma", name = "Outbreak indicator fit") +  # Use a continuous color scale
+   facet_wrap(~ year) +  # Facet the plot by year
+  theme_void() +  # Minimal theme for better aesthetics
+  labs(
+    title = "Spatial Distribution of Oubreak indicator fit by Year",
+    x = "Longitude",
+    y = "Latitude"
+  )
+
+```
+
+
+
+
+```{r ips_summary_old}
+
+# # Summarize correlation values per year
+correlation_ips_summary <- correlations_ips %>%
+  group_by(year) %>%
+  summarise(
+    mean_correlation = mean(spearm_cor, na.rm = TRUE),  # Mean correlation
+    sd_correlation = sd(spearm_cor, na.rm = TRUE),      # Standard deviation
+    median_correlation = median(spearm_cor, na.rm = TRUE),  # Median correlation
+    iqr_correlation = IQR(spearm_cor, na.rm = TRUE),    # Interquartile range
+    .groups = "drop"
+  )
+
+# Calculate the 5th percentile of correlations
+correlation_5th_percentile_ips <- quantile(correlations_ips$spearm_cor, probs = 0.05, na.rm = TRUE)
+
+# Filter rows with correlations below or equal to the 5th percentile
+lowest_correlations_ips <- correlations_ips %>%
+  dplyr::filter(spearm_cor <= correlation_5th_percentile_ips) %>%
+  dplyr::arrange(spearm_cor)
+
+
+```
+
+
+
+
+
+```{r make_plots}
+
+# correlations_ips %>% 
+#   ggplot(aes(x = year, y = cv_counts)) + 
+#   geom_jitter(alpha = 0.5) + 
+#   geom_smooth()
+# 
+# 
+# 
+# correlations_ips %>% 
+#   ggplot(aes(x = year, y = correlation)) + 
+#   geom_jitter(alpha = 0.5) + 
+#   geom_smooth()
+
+# 
+# correlations_ips %>% 
+#   dplyr::filter(correlation > 0) %>% 
+#   ggplot(aes(x = correlation, y = cv_counts)) + 
+#   geom_jitter(alpha = 0.5) + 
+#   geom_smooth()
+
+
+
+```
+
+
+
+Density distribution of correlations between traps, grouped by trapID.
 
 ```{r corr_density, echo  = F,warning = F, fig.cap="Density Distribution of Correlations by Year"}
 # Create the density plot with vertical lines for mean and median
-p_dens_ips <- ggplot(correlations_ips, aes(x = correlation, fill = as.factor(year))) +
+p_dens_ips <- ggplot(correlations_ips, aes(x = spearm_cor, fill = as.factor(year))) +
   geom_density(alpha = 0.5) +  # Density plot with transparency
   facet_wrap(~ year, scales = "free_y") +  # Facet by year for separate density plots
   geom_vline(
@@ -348,11 +512,11 @@ p_dens_ips <- ggplot(correlations_ips, aes(x = correlation, fill = as.factor(yea
 # Cut data into correlation classes
 correlations_ips <- correlations_ips %>%
  mutate(correlation_class = case_when(
-    is.na(correlation) ~ "NA",   
-    correlation >= 0.90 ~ ">90",                      # Strictly greater than 0.90
-    correlation > 0.75 & correlation <= 0.90 ~ "75-90",  # Greater than 0.75 and up to 0.90
-    correlation >= 0 & correlation <= 0.75 ~ "0-75",     # From 0 to 0.75 (inclusive)
-    correlation < 0 ~ "<0"                           # Strictly less than 0
+    is.na(spearm_cor) ~ "NA",   
+    spearm_cor >= 0.90 ~ ">90",                      # Strictly greater than 0.90
+    spearm_cor > 0.75 & spearm_cor <= 0.90 ~ "75-90",  # Greater than 0.75 and up to 0.90
+    spearm_cor >= 0 & spearm_cor <= 0.75 ~ "0-75",     # From 0 to 0.75 (inclusive)
+    spearm_cor < 0 ~ "<0"                           # Strictly less than 0
 ))
 
 # Calculate the total number of records per year
@@ -361,7 +525,7 @@ total_records_per_year <- correlations_ips %>%
   summarise(total_records = n(), .groups = "drop")
 
 # Count the number of records in each correlation class per year
-correlation_ips_summary <- correlations_ips %>%
+correlation_ips_share <- correlations_ips %>%
   group_by(year, correlation_class) %>%
   summarise(record_count = n(), .groups = "drop") %>%
   left_join(total_records_per_year, by = "year") %>%
@@ -373,7 +537,7 @@ correlation_ips_summary <- correlations_ips %>%
 ```{r ips_barplot, echo = F, warning=F, fig.cap = 'Share of traps pairs with correlation > 90 over years'}
 
 # Filter only the class ">90"
-p_corr_share_ips <- correlation_ips_summary %>%
+p_corr_share_ips <- correlation_ips_share %>%
   dplyr::filter(correlation_class == ">90") %>% 
   ggplot(aes(x = factor(year), y = percentage)) +
   geom_bar(stat = "identity", fill = "steelblue") +
@@ -407,8 +571,8 @@ print(less_than_6_ips)
 
 
 # Filter the data to keep only unique pairID and year combinations with insufficient records
-insufficient_records_ips <- less_than_6_ips %>%
-  dplyr::filter(count < 6) %>%       # Ensure the condition for "not enough records"
+insufficient_records_ips <- correlations_ips  %>%
+  dplyr::filter(record_count  < 6) %>%       # Ensure the condition for "not enough records"
   dplyr::select(pairID, year) %>%    # Select only pairID and year columns
   distinct()                  # Keep unique combinations
 
@@ -429,7 +593,7 @@ pityogenes_data <- dat_cleaned %>%
 
 # Reshape data into wide format with counts from trap_pair 1 and 2
 pityogenes_wide <- pityogenes_data %>%
-  group_by(pairID, species, year, month) %>% # Group by necessary columns
+  group_by(pairID, species, year, doy) %>% # Group by necessary columns
   summarise(count_1 = sum(count[trap_pair == 1], na.rm = TRUE),  # Sum counts for trap_pair 1
             count_2 = sum(count[trap_pair == 2], na.rm = TRUE),  # Sum counts for trap_pair 2
             count_3 = sum(count[trap_pair == 3], na.rm = TRUE),  # Sum counts for trap_pair 3 (if applicable)
@@ -439,7 +603,7 @@ pityogenes_wide <- pityogenes_data %>%
 correlations_pityogenes <- pityogenes_wide %>%
   group_by(pairID, year) %>% # Group by pairID and year
   mutate(
-    correlation = cor(count_1, count_2, use = "pairwise.complete.obs", method = "spearman"), # Calculate correlation
+    spearm_cor = cor(count_1, count_2, use = "pairwise.complete.obs", method = "spearman"), # Calculate correlation
     record_count = n(), # Count the number of records in each group
     .groups = "drop"
   ) 
@@ -448,28 +612,54 @@ correlations_pityogenes <- pityogenes_wide %>%
 correlation_pity_summary <- correlations_pityogenes %>%
   group_by(year) %>%
   summarise(
-    mean_correlation = mean(correlation, na.rm = TRUE),  # Mean correlation
-    sd_correlation = sd(correlation, na.rm = TRUE),      # Standard deviation
-    median_correlation = median(correlation, na.rm = TRUE),  # Median correlation
-    iqr_correlation = IQR(correlation, na.rm = TRUE),    # Interquartile range
+    mean_correlation    = mean(spearm_cor, na.rm = TRUE),  # Mean correlation
+    sd_correlation      = sd(spearm_cor, na.rm = TRUE),      # Standard deviation
+    median_correlation  = median(spearm_cor, na.rm = TRUE),  # Median correlation
+    iqr_correlation     = IQR(spearm_cor, na.rm = TRUE),    # Interquartile range
     .groups = "drop"
   )
 
 # Calculate the 5th percentile of correlations
-correlation_5th_percentile_pityogenes <- quantile(correlations_pityogenes$correlation, probs = 0.05, na.rm = TRUE)
+correlation_5th_percentile_pityogenes <- quantile(correlations_pityogenes$spearm_cor, probs = 0.05, na.rm = TRUE)
 
 # Filter rows with correlations below or equal to the 5th percentile
 lowest_correlations_pityogenes <- correlations_pityogenes %>%
-  dplyr::filter(correlation <= correlation_5th_percentile_pityogenes) %>% 
-  dplyr::arrange(correlation)
+  dplyr::filter(spearm_cor <= correlation_5th_percentile_pityogenes) %>% 
+  dplyr::arrange(spearm_cor)
 
 ```
 
 Density distribution
 
+
+```{r get_pity_barplot, echo = F, warning=FALSE}
+# Cut data into correlation classes
+correlations_pityogenes <- correlations_pityogenes %>%
+ mutate(correlation_class = case_when(
+    is.na(spearm_cor) ~ "NA",   
+    spearm_cor >= 0.90 ~ ">90",                      # Strictly greater than 0.90
+    spearm_cor > 0.75 & spearm_cor <= 0.90 ~ "75-90",  # Greater than 0.75 and up to 0.90
+    spearm_cor >= 0 & spearm_cor <= 0.75 ~ "0-75",     # From 0 to 0.75 (inclusive)
+    spearm_cor < 0 ~ "<0"                           # Strictly less than 0
+))
+
+# Calculate the total number of records per year
+total_records_per_year_pityogenes <- correlations_pityogenes %>%
+  group_by(year) %>%
+  summarise(total_records = n(), .groups = "drop")
+
+# Count the number of records in each correlation class per year
+correlation_pity_share <- correlations_pityogenes %>%
+  group_by(year, correlation_class) %>%
+  summarise(record_count = n(), .groups = "drop") %>%
+  left_join(total_records_per_year_pityogenes, by = "year") %>%
+  mutate(percentage = (record_count / total_records) * 100)
+
+```
+
 ```{r corr_density_pityogenes, echo = F, warning = F, fig.cap="Density Distribution of Correlations for Kupferstecher by Year"}
 # Create the density plot with vertical lines for mean and median
-p_dens_pity <- ggplot(correlations_pityogenes, aes(x = correlation, fill = as.factor(year))) +
+p_dens_pity <- ggplot(correlations_pityogenes, aes(x = spearm_cor, fill = as.factor(year))) +
   geom_density(alpha = 0.5) +  # Density plot with transparency
   facet_wrap(~ year, scales = "free_y") +  # Facet by year for separate density plots
   geom_vline(
@@ -495,36 +685,13 @@ p_dens_pity <- ggplot(correlations_pityogenes, aes(x = correlation, fill = as.fa
   theme(legend.position = "bottom")
 ```
 
-```{r get_pity_barplot, echo = F, warning=FALSE}
-# Cut data into correlation classes
-correlations_pityogenes <- correlations_pityogenes %>%
- mutate(correlation_class = case_when(
-    is.na(correlation) ~ "NA",   
-    correlation >= 0.90 ~ ">90",                      # Strictly greater than 0.90
-    correlation > 0.75 & correlation <= 0.90 ~ "75-90",  # Greater than 0.75 and up to 0.90
-    correlation >= 0 & correlation <= 0.75 ~ "0-75",     # From 0 to 0.75 (inclusive)
-    correlation < 0 ~ "<0"                           # Strictly less than 0
-))
 
-# Calculate the total number of records per year
-total_records_per_year_pityogenes <- correlations_pityogenes %>%
-  group_by(year) %>%
-  summarise(total_records = n(), .groups = "drop")
-
-# Count the number of records in each correlation class per year
-correlation_pity_summary <- correlations_pityogenes %>%
-  group_by(year, correlation_class) %>%
-  summarise(record_count = n(), .groups = "drop") %>%
-  left_join(total_records_per_year_pityogenes, by = "year") %>%
-  mutate(percentage = (record_count / total_records) * 100)
-
-```
 
 
 ```{r pity_barplot, echo = F, warning=F, fig.cap = 'Share of traps pairs with correlation > 90 over years'}
 
 # Filter only the class ">90"
-p_corr_share_pity <- correlation_pity_summary %>%
+p_corr_share_pity <- correlation_pity_share %>%
   dplyr::filter(correlation_class == ">90") %>% 
   ggplot(aes(x = factor(year), y = percentage)) +
   geom_bar(stat = "identity", fill = "steelblue") +
@@ -534,6 +701,7 @@ p_corr_share_pity <- correlation_pity_summary %>%
     y = "Percentage (%)"
   ) +
   theme_minimal() +
+  ylim(0,60) +
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
 
 ```
