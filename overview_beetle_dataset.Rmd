@@ -58,18 +58,18 @@ load(paste(path, 'BoMo_2015_2021_Rohdaten.RData', sep = "/"))
 
 ```
 
-# Dataset Overview
+# Data Overview
 
-This dataset provides information about bark beetle monitoring through the use of traps. It captures detailed attributes of each trap, its configuration, catch data, and environmental factors that may influence the results. The data is structured into multiple fields, each with specific types and purposes, as outlined below:
+Information about the bark beetle monitoring  using pheromone traps. 
+
+*CRS*: 
+
+- EPSG:3035 (ETRS89 / LAEA Europe) is a projected coordinate system. 
+- Projection Type: Lambert Azimuthal Equal-Area (LAEA).
+- Unit: Meters
 
 
-CRS: **EPSG:3035** (ETRS89 / LAEA Europe) is a projected coordinate system. It is:
-- **Projection Type**: Lambert Azimuthal Equal-Area (LAEA).
-- **Unit**: Meters.
-- **Application**: Often used for statistical mapping and environmental data across Europe.
-
-
-*Trap catch: Detailed information*
+*Trap catch: Detailed information (from LWF)*
 
 
 | Column        | Type            | Description                                                                                                                                                                                                                                   |
@@ -87,14 +87,14 @@ CRS: **EPSG:3035** (ETRS89 / LAEA Europe) is a projected coordinate system. It i
 | globalid      | Chr             | ID-number of a trap location. It is possible that some trap names have more than one globalid. That is the case if the trap was relocated without renaming the monitoring location (monsto_name).                                             |
 
 
-```{r, read data, echo = F, warning=F}
+```{r, read data, echo = F, warning=F, include =F}
 xy_sf <- st_read(paste(out_path, "outSpatial/all_traps_3035.gpkg", sep = '/'))
 bav_sf <- st_read(paste(out_path, "outSpatial/bavaria.gpkg", sep = '/'))
 
 # Reproject bav_sf to the CRS of xy_sf
 bav_sf_repr <- st_transform(bav_sf, st_crs(xy_sf))
 
-st_crs(xy_sf) == st_crs(bav_sf_repr)
+#st_crs(xy_sf) == st_crs(bav_sf_repr)
 #plot(xy_sf["falsto_name"])
 
 # simplify: keep only one XY per trap
@@ -133,19 +133,13 @@ xy_pair_sf <- xy_pair_avg %>%
 
 ```
 
-# Beetle Data Processing
+# Goal:
 
-The dataset includes over 73,000 records from 302 unique trap locations, capturing information on two primary beetle species (*Ips typographus* - "Buchdrucker" and *Pityogenes chalcographus* - "Kupferstecher"). 
-
-Goal: are the trap pairs representative one to another?  Eg do we need trap pairs, or a single trap per location?
+Are the trap pairs representative one to another?  Eg do we need trap pairs, or a single trap per location?
 
 - are they correlated?
-- what is difference between the two?
-- how often do they cross the 3000 threshold per monitoring day?
-
--  compare full records
--  commpare only "representative  == TRUE"
-
+- what is difference between the two traps (within trap pair)?
+- do they cross the >3000 threshold at the same time? 
 
 
 ```{r process_input_data, echo = F}
@@ -162,6 +156,10 @@ dat <- dat %>%
                 day   = lubridate::day(kont_dat),
                 doy   = lubridate::yday(kont_dat) + 1)
 
+# keep only representatie = Ja
+dat <- dat %>% 
+  dplyr::filter(representativ == "Ja")
+
 # Basic statistics
 #nrow(dat) # Total rows >73,000
 #length(unique(dat$falsto_name)) # Total traps = 302
@@ -175,12 +173,10 @@ dat <- dat %>%
 
 # Clean globalid by removing parentheses
 dat <- dat %>% 
-  mutate(globalid =  gsub("\\{|\\}", "", globalid))
+  mutate(globalid =  gsub("\\{|\\}", "", globalid)) %>% 
+  dplyr::filter(year !=2014)
 ```
 
-*Quick data summary *
-
-The total number of trap locations is `r length(sort(unique(xy_sf$falsto_name)))`.
 
 Recording dates & years: 
 
@@ -190,49 +186,22 @@ Recording dates & years:
 
 In total, 138 traps has changed location 2-4 times over 2015-2021 from total of 302 locations
 
-```{r median_days_between, echo=F}
-# Get median dates between two recordings
-# Calculate the number of days between recordings per 'falsto_name'
-median_days_between <- dat %>%
-  dplyr::filter(art == 'Buchdrucker') %>% 
-  arrange(falsto_name, kont_dat) %>%  # Sort data by 'falsto_name' and 'kont_dat'
-  group_by(falsto_name, year) %>%           # Group by 'falsto_name' and year
-  mutate(days_diff = as.numeric(difftime(kont_dat, lag(kont_dat), units = "days"))) %>%  # Calculate days difference
-  summarise(median_days = median(days_diff, na.rm = TRUE),
-            mean_days = mean(days_diff, na.rm = TRUE),
-            sd_days = sd(days_diff, na.rm = TRUE))  # 
+# Methods
 
-# Calculate ranges for median and mean days
-median_range_recording_days <- range(median_days_between$median_days, na.rm = TRUE)
-mean_range_recording_days <- range(median_days_between$mean_days, na.rm = TRUE)
-```
+**Process the data:**
 
-
-
-
-## Correlation Between Beetle counts and Year
-
- calculates the correlation between the number of beetles caught (`counts`) per trap pair and year, grouped by `pairID`. We used Spearmann correlation.
-
-
-# Maps: over Bavaria
-
-*Process the data:*
-
-- split data into IPS and Pityogenes records
-- remove traps pairs  that have trap_pair = 3, or A,B,C indication, instead of 1 or 2
-- sum up trap counts by trapID, months - to make sure I have the correct number of records
-- keep all records - indicate, if trap is problematic
+- select only IPS data counts
+- remove traps pairs that have trap_pair = 3, or A,B,C indication, instead of 1 or 2
+- keep only 'Representative = Ja' (69.000 records compared to full dataset: 73.000)
 - get counts per trap 1 and trap 2
-- run correlations between trap 1 and trap 2
+- convert data from long to wide format to allow to compare trap counts on pair levels
 
 
-
-```{r clean_up_data, echo=F, warning=F}
+```{r clean_up_data, include = F, warning = F, echo = F}
 
 # Select and rename the desired columns
 dat_cleaned <- dat %>%
-  #dplyr::filter(year !=2014) %>% 
+  dplyr::filter(year !=2014) %>% 
    dplyr::filter(month %in% 4:9) %>%  # filter months during vegetation season: some has record in januay, march ..
   dplyr::select(
     year,
@@ -255,20 +224,51 @@ dat_cleaned <- dat %>%
 #head(dat_cleaned)
 print(summary(dat_cleaned))
 
-# sum ups counts per month to ryun correlations
-dat_cleaned_sum_month <-  dat_cleaned %>% 
-  group_by(pairID, trapID, species, year, doy, trap_pair) %>%
-  dplyr::summarise(
-    count = sum(count, na.rm = TRUE),
-    .groups = "drop"
-  ) %>% 
-  dplyr::filter(trap_pair != 3) %>% 
-  ungroup(.)
 
 ```
-# Results
 
-## IPS
+## Metrics 
+
+- Spearman correlation
+- Coefficient of variation
+- Outbreak indication
+
+### Spearman Correlation coefficient per year
+
+Calculates the correlation between the number of beetles caught (`counts`) per trap pair and year, grouped by `pairID`. We used Spearmann correlation. 
+
+The **Spearman correlation** is a non-parametric measure of the strength and direction of the association between two variables. It assesses how well the relationship between the variables can be described by a monotonic function.
+
+Spearman correlation is calculated based on the ranks of the values, rather than the raw data, making it robust to outliers and suitable for both linear and non-linear relationships.
+
+The correlation coefficient (\(\rho\)) ranges from:
+- **+1**: Perfect positive monotonic relationship
+- **0**: No monotonic relationship
+- **-1**: Perfect negative monotonic relationship
+
+
+### Coefficient of variation per year 
+
+The **Coefficient of Variation (CV)** is a statistical measure of the relative variability of a dataset. It is calculated as the ratio of the **standard deviation (SD)** to the **mean**, expressed as a percentage:
+
+\[
+\text{CV} = \frac{\text{SD}}{\text{Mean}} \times 100
+\]
+
+It shows how much the data (beetle counts per trap) varies in relation to the mean over trap pair. A **low CV** indicates low variability (data tightly clustered around the mean), while a **high CV** indicates high variability (data widely spread out).
+
+### Outbreak indicators fit
+
+Compare if both traps in trap pair overpasses the >3000 beetles/caught/week at the same time (DOY per year). 
+
+- over = both traps have > 3000 beetles
+- no_fit = only one trap has > 3000 beetles, the other has less
+- less = both traps have less then 3000 beetles 
+
+As we have several records per year (1-27), I have calculated how often the three categories occurs from total records times per trap. For map display, I have chosen only 'over' and 'no_fit' categories, where I have chosen the higher share per record. 
+
+
+
 
 ```{r ips_correlation, include = F, warning = F, echo = F}
 
@@ -303,7 +303,7 @@ ips_3k_percentages <- ips_wide %>%
 ips_3k_percentages_sub <- ips_3k_percentages %>% 
   dplyr::filter(over_3k != 'less') %>% 
   group_by(pairID, year) %>%
-  slice_max(class_percentage, with_ties = FALSE) %>%
+  slice_max(class_percentage, with_ties = TRUE) %>%
   ungroup() %>% 
   dplyr::select(-class_count)
 
@@ -331,41 +331,63 @@ correlations_ips <- correlations_ips %>%
 #             by = c("pairID", "year"))
 
 # merge datao to plot them on teh map
-corr_year <- xy_pair_sf %>% 
+corr_year_xy <- xy_pair_sf %>% 
   inner_join(correlations_ips, by = join_by(pairID))
 
 
 ```
 
-# Maps
+# Results 
 
-Distribution of the Spearman correlation 
+## Overview
 
-```{r ips_cor_map, include = T, warning = F, echo = F}
+```{r summary_tab, include = T, warning = F}
 
-# Create the plot
-ggplot() +
-  geom_sf(data = bav_sf_repr, fill = 'grey', color = 'black') +  # Add the bav_sf_repr layer as grey
-  geom_sf(data = corr_year, aes(color = spearm_cor), size = 2) +  # Plot points with color representing Spearman correlationSpearman correlation
-  #scale_color_viridis_c(option = "plasma", name = "Spearman\nCorrelation") +  # Use a continuous color scale
-   scale_color_gradient2(
-    low = "blue",     # Color for low values
-    mid = "white",    # Color for 0 values
-    high = "red",     # Color for high values
-    midpoint = 0,     # The point where 'white' is assigned
-    #limits = c(-0.25, 9),  # Scale limits
-    name = "Spearman\nCorrelation"  # Legend title
-  ) +
-  facet_wrap(~ year) +  # Facet the plot by year
-  theme_void() +  # Minimal theme for better aesthetics
+summary(correlations_ips)
+
+```
+## Distribution of the Spearman correlation 
+
+```{r ips_cor_hist, include = T, warning = F, echo = F}
+ggplot(data = correlations_ips) +
+  geom_histogram(aes(x = spearm_cor), fill = 'steelblue', color = 'black', bin = 30) +  # Histogram with fill based on spearm_cor
+  facet_wrap(~ year) +  # Create facets for each year
+  geom_vline(xintercept = 0.5, lty = 'dashed', color = 'grey') +
+  theme_minimal() +  # Use a minimal theme
   labs(
-    title = "Spatial Distribution of Spearman Correlation by Year",
-    x = "Longitude",
-    y = "Latitude"
+    title = "Distribution of Spearman Correlation by Year",
+    x = "Spearman Correlation",
+    y = "Frequency"
+  )
+```
+
+
+
+
+
+## Coefficient of variation
+
+A CV of **200%** means that the **standard deviation is twice as large as the mean**. In practical terms:
+- The data is highly dispersed and inconsistent.
+- On average, the values deviate from the mean by **200% of the mean**.
+
+For example, if the mean is 50, a CV of 200% suggests that the data values typically vary by ±100 around the mean, indicating extreme variability.
+
+```{r ips_cv_hist, include = T, warning = F, echo = F}
+# Create the histogram
+ggplot(data = correlations_ips) +
+  geom_histogram(aes(x = cv_counts), bins = 30, fill = "steelblue", color = "black") +  # Histogram with 30 bins
+  facet_wrap(~ year) +  # Create facets for each year
+    geom_vline(xintercept = 100, lty = 'dashed', color = 'grey') +
+  theme_minimal() +  # Use a minimal theme
+  labs(
+    title = "Distribution of CV Counts by Year",
+    x = "Coefficient of Variation (CV)",
+    y = "Frequency"
   )
 
 ```
-Distribution of the coefficient of variation 
+
 
 
 ```{r ips_cv_map, include = T, warning = F, echo = F}
@@ -373,28 +395,50 @@ Distribution of the coefficient of variation
 # Create the plot
 ggplot() +
   geom_sf(data = bav_sf_repr, fill = 'grey', color = 'black') +  # Add the bav_sf_repr layer as grey
-  geom_sf(data = corr_year, aes(color = cv_counts), size = 2) +  # Plot points with color representing Spearman correlationSpearman correlation
+  geom_sf(data = corr_year_xy, aes(color = cv_counts), size = 2) +  # Plot points with color representing Spearman correlationSpearman correlation
   #scale_color_viridis_c(option = "plasma", name = "Coefficient of variation") +  # Use a continuous color scale
   scale_color_viridis_c(
     option = "plasma",
     name = "Coefficient of variation\n(capped at 150)",
     limits = c(0, 150),  # Set limits
-    oob = scales::squish  # Values above 200 squish to max (200)
+    oob = scales::squish  # Values above 150 squish to max (150)
   ) +
    facet_wrap(~ year) +  # Facet the plot by year
   
   theme_void() +  # Minimal theme for better aesthetics
   labs(
-    title = "Spatial Distribution of Coefficient of variation by Year",
+    title = "Coefficient of variation by Year",
     x = "Longitude",
     y = "Latitude"
   )
 
 ```
 
-Distribution of the Outbreak indicator fit
+## Outbreak indication fit
 
+Compare if both traps overpasses the >3000 beetles/cught/week at the same time. 
 
+- over = both traps have > 3000 beetles
+- no_fit = only one trap has > 3000 beetles, the other has less
+- less = both traps have less then 3000 beetles 
+
+### Distribution of the Outbreak indicator fit
+
+```{r ips_outbreak_hist, include = T, warning = F, echo = F}
+# Create the histogram
+ggplot(data = ips_3k_percentages) +
+  geom_bar(aes(x =  over_3k, fill = over_3k), bins = 30) +  # Histogram with 30 bins
+  facet_grid(~ year) +  # Create facets for each year
+    geom_hline(yintercept = 50, lty = 'dashed', color = 'grey') +
+  theme_minimal() +  # Use a minimal theme
+  labs(
+    title = "Distribution of CV Counts by Year",
+    x = "Coefficient of Variation (CV)",
+    y = "Frequency"
+  ) +
+  theme(legend.position = 'bottom')
+
+```
 
 
 ```{r ips_3k_map, include = T, warning = F, echo = F}
@@ -402,12 +446,14 @@ Distribution of the Outbreak indicator fit
 # Create the plot
 ggplot() +
   geom_sf(data = bav_sf_repr, fill = 'grey', color = 'black') +  # Add the bav_sf_repr layer as grey
-  geom_sf(data = corr_year, aes(color = over_3k ), size = 2) +  # Plot points with color representing Spearman correlationSpearman correlation
-  scale_color_viridis_d(option = "plasma", name = "Outbreak indicator fit") +  # Use a continuous color scale
+  geom_sf(data = corr_year_xy, aes(color = over_3k ), size = 2) +  # Plot points with color representing Spearman correlationSpearman correlation
+  scale_color_viridis_d(option = "plasma", 
+                        name = "Outbreak indicator fit",
+                        na.value = "white") +  # Use a discrete color scale
    facet_wrap(~ year) +  # Facet the plot by year
   theme_void() +  # Minimal theme for better aesthetics
   labs(
-    title = "Spatial Distribution of Oubreak indicator fit by Year",
+    title = "Oubreak indicator fit by Year",
     x = "Longitude",
     y = "Latitude"
   )
@@ -415,7 +461,13 @@ ggplot() +
 ```
 
 
+# Output
 
+at Pair level: 
+
+- average XY coordinates
+- table: with full records: 
+- table on pair records:
 
 
 
