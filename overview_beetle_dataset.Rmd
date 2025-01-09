@@ -28,16 +28,11 @@ rm(list=ls())
 source('myPaths.R')
 
 ### Libs -----------------------------------------------------------
-library(lubridate)
 library(dplyr)
 library(sf)
 library(stringr)
 library(ggplot2)
-#library(zoo)
-#library(data.table)
 library(ggpubr)
-#library(ggpubr)   # add formulas using  stat_regline_equation(label.x=30000, label.y=40000)
-#library(ggpmisc)  # add equation to plots smooth 
 
 
 
@@ -101,9 +96,6 @@ bav_sf <- st_read(paste(out_path, "outSpatial/bavaria.gpkg", sep = '/'))
 # Reproject bav_sf to the CRS of xy_sf
 bav_sf_repr <- st_transform(bav_sf, st_crs(xy_sf))
 
-#st_crs(xy_sf) == st_crs(bav_sf_repr)
-#plot(xy_sf["falsto_name"])
-
 # simplify: keep only one XY per trap
 
 xy_sf_simple <- xy_sf %>%
@@ -160,11 +152,15 @@ dat <- dat_full
 dat$kont_dat <- as.Date(dat$kont_dat)
 
 # Decompose date into year, month, day, and day of year
+# filter only IPS data
 dat <- dat %>% 
+    dplyr::filter(art == "Buchdrucker") %>%  
   dplyr::mutate(year  = lubridate::year(kont_dat), 
                 month = lubridate::month(kont_dat), 
                 day   = lubridate::day(kont_dat),
                 doy   = lubridate::yday(kont_dat) + 1)
+
+nrow(dat)
 
 # Calculate the number of unique years for each trapID
 dat_summary <- dat %>%
@@ -177,7 +173,7 @@ dat_summary <- dat %>%
 dat <- dat %>% 
   dplyr::filter(representativ == "Ja")
 
-
+nrow(dat)
 # Calculate the number of unique years for each trapID
 dat_summary_repres <- dat %>%
   group_by(falsto_name, monsto_name) %>%               # Group by trapID
@@ -185,6 +181,10 @@ dat_summary_repres <- dat %>%
   rename(trapID = falsto_name,
          pairID = monsto_name)# Count unique years
 
+dat_summary_repres_pairID <- dat_summary_repres %>% 
+  ungroup() %>% 
+  dplyr::select(-trapID) %>% 
+  distinct()
 
 # Filter to find trapIDs with exactly 7 unique years
 trapIDs_with_7_years <- dat_summary_repres %>%
@@ -192,8 +192,6 @@ trapIDs_with_7_years <- dat_summary_repres %>%
 #table(dat_summary_repres$trapID,dat_summary_repres$unique_years)
 
 # Basic statistics
-#nrow(dat) # Total rows >73,000
-#length(unique(dat$falsto_name)) # Total traps = 302
 
 # Clean trap names and extract trap pair number
 dat <- dat %>% 
@@ -215,6 +213,7 @@ Notes about dates & years:
 
 - 2014 - does not have explicit XY information, trap data are pooled into a single globalid (XY) -> removed from database
 - 2015:2021 - only kept
+- now all trap pairs locations have 2 traps (eg Zwiesel has A,B,C but only one trap, not a trap pair - rather, a triplet. excluded from this analysis)
 
 
 # Methods
@@ -226,6 +225,17 @@ Notes about dates & years:
 - keep only 'Representative = Ja' (69.000 records compared to full dataset: 73.000)
 - get counts per trap 1 and trap 2
 - convert data from long to wide format to allow comparison of trap counts on pair levels
+
+*Full data*:
+
+- 302 unique traps (falsto_name)
+- 159 unique trap pairs (monsto_name)
+
+*Keeping only representative and remove no-rap pairs design*
+
+- 136 trap pairs
+
+
 
 
 ```{r clean_up_data, include = F, warning = F, echo = F}
@@ -360,7 +370,8 @@ dat_cleaned_filtered <- dat_cleaned %>%
 
 # Split the data into two datasets by species
 ips_data <- dat_cleaned_filtered %>% #dat_cleaned_sum_month %>%
-  dplyr::filter(species == "Buchdrucker") %>%   ungroup(.)
+  dplyr::filter(species == "Buchdrucker") %>%  
+  ungroup(.)
 
 
 
@@ -618,11 +629,8 @@ summary_trap_pairs <- correlations_ips %>%
     years_no_fit = sum(beetle_density == "no_fit", na.rm = TRUE), # Count years in "no_fit"
     no_fit_percentage = (years_no_fit / record_years) * 100 # Calculate percentage based on total records
   ) %>%
-  ungroup()
-
-
-
-# rank traps instead
+  ungroup() %>% 
+  dplyr::select(-record_years)
 
 # Rank trap pairs based on specified criteria
 ranked_trap_pairs <- summary_trap_pairs %>%
@@ -635,8 +643,8 @@ ranked_trap_pairs <- summary_trap_pairs %>%
     overall_rank = cor_rank + cv_rank + no_fit_rank           # Combined rank across all criteria
   ) %>%
   arrange(overall_rank) %>%   # Arrange by overall rank
-   mutate(order = row_number())  # Add order column for "weirdness"
-
+   mutate(order = row_number()) #%>%  # Add order column for "weirdness"
+   #full_join(dat_summary_repres_pairID)
 # add full traps:
 
 
@@ -712,9 +720,6 @@ At pair level:
 | beetle_density          | Chr    | Categorization of counts based on the 3000 threshold: 'over', 'no_fit', or 'less'. |
 
 
-
-
-Excluded traps: `r print(pairs_incomplete_years)`
 
 
 
