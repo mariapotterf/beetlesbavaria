@@ -93,6 +93,10 @@ Information about the bark beetle monitoring dataset using pheromone traps. Data
 xy_sf <- st_read(paste(out_path, "outSpatial/all_traps_3035.gpkg", sep = '/'))
 bav_sf <- st_read(paste(out_path, "outSpatial/bavaria.gpkg", sep = '/'))
 
+# Read elevation per trap
+xy_sf_elev_4326 <- st_read(paste(out_path, "outSpatial/traps_with_elevation.gpkg", sep = '/'))
+
+
 # Reproject bav_sf to the CRS of xy_sf
 bav_sf_repr <- st_transform(bav_sf, st_crs(xy_sf))
 
