@@ -129,8 +129,12 @@ dat_fin <-
 
 nrow(dat_fin)
 
+# Calculate the number of unique years for each trapID
+trap_years_summary <- dat_fin %>%
+  group_by(trapID) %>%               # Group by trapID
+  summarize(unique_years = n_distinct(year, na.rm = TRUE)) # Count unique years
 
-
+length(unique(trap_years_summary$trapID))
 
 
 ## Pre-processs table: get lags ----------------------------
