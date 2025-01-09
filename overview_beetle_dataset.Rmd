@@ -180,8 +180,16 @@ dat <- dat %>%
 
 # Calculate the number of unique years for each trapID
 dat_summary_repres <- dat %>%
-  group_by(falsto_name) %>%               # Group by trapID
-  summarize(unique_years = n_distinct(year, na.rm = TRUE)) # Count unique years
+  group_by(falsto_name, monsto_name) %>%               # Group by trapID
+  summarize(unique_years = n_distinct(year, na.rm = TRUE)) %>% 
+  rename(trapID = falsto_name,
+         pairID = monsto_name)# Count unique years
+
+
+# Filter to find trapIDs with exactly 7 unique years
+trapIDs_with_7_years <- dat_summary_repres %>%
+  dplyr::filter(unique_years == 7)
+#table(dat_summary_repres$trapID,dat_summary_repres$unique_years)
 
 # Basic statistics
 #nrow(dat) # Total rows >73,000
@@ -295,7 +303,7 @@ Compare if both traps in trap pair overpasses the >3000 beetles/caught/week at t
 As we have several records per year (1-27), I have calculated how often the three categories occurs from total records times per trap. For map display, I have chosen only **over** and **no_fit** categories, where I have chosen the higher share per record. 
 
 
-## Identif problematic locations
+## Identify problematic locations
 
 Order the trap pairs from the 1) least correlated, with the 2) highest coefficiet of variation and 3) with no-fit (3000 threshold).
 
@@ -349,6 +357,7 @@ Identify locations that do not have trap pairs, but have instead A,B,C indicatio
 dat_cleaned_filtered <- dat_cleaned %>%
   dplyr::filter(!grepl(paste(locations_with_sublocations$base_name, collapse = "|"), pairID))
 
+
 # Split the data into two datasets by species
 ips_data <- dat_cleaned_filtered %>% #dat_cleaned_sum_month %>%
   dplyr::filter(species == "Buchdrucker") %>%   ungroup(.)
@@ -371,14 +380,6 @@ ips_wide <- ips_data %>%
 # Define the full year range
 final_year_range <- 2018:2021
 
-ips_wide <- ips_wide %>%
-  ungroup(.) %>% 
-  group_by(pairID) %>% 
-  mutate(
-    year_coverage = ifelse(all(final_year_range %in% year), "2018-2021", "else")
-  ) #%>%
-
-
 # Calculate percentages of each class in `beetle_density`
 ips_3k_percentages <- ips_wide %>%
   group_by(pairID, year, beetle_density) %>%  # Group by pairID, year, and beetle_density
@@ -399,7 +400,7 @@ ips_3k_percentages_sub <- ips_3k_percentages %>%
 # calculate beetle metrics;
 
 correlations_ips <- ips_wide %>%
-  group_by(pairID, year, year_coverage) %>% # Group by pairID and year
+  group_by(pairID, year) %>% # Group by pairID and year
   summarize(
     spearm_cor = cor(count_1, count_2, use = "pairwise.complete.obs", method = "spearman"), # Calculate correlation
     n_records = n(), # Count the number of records in each group
@@ -445,8 +446,6 @@ correlations_ips %>%
 ```
 
 ## Overview
-
-total number of trap pairs: 302, removed 
 
 ```{r trap_counts}
 length(unique(dat$monsto_name))
@@ -602,32 +601,14 @@ ggplot() +
 
 select the traps that are covered in last years: 2018-2021, can be of the higher interest for checking in the field.
 
-```{r traps_mising_years}
-# Filter the table for incomplete year coverage and extract pairIDs
-pairs_incomplete_years <- correlations_ips %>%
-  dplyr::filter(year_coverage == "else") %>%
-  pull(pairID) %>%
-  unique()
-
-print(pairs_incomplete_years)
-
-# Calculate the number of unique pairIDs for each year coverage category
-coverage_summary <- correlations_ips %>%
-  group_by(year_coverage) %>%
-  dplyr::summarize(unique_pairIDs = n_distinct(pairID))
-
-print(coverage_summary)
-```
-
 
 ```{r identify_problematic_traps}
 # Aggregate metrics by trap pair
 summary_trap_pairs <- correlations_ips %>%
   mutate(beetle_density = ifelse(is.na(beetle_density), "lower", beetle_density)) %>% 
- # dplyr::filter(year_coverage == 'full') %>% 
-  dplyr::filter(complete.cases(.)) %>%  # Filter rows with complete cases
+   dplyr::filter(complete.cases(.)) %>%  # Filter rows with complete cases
   ungroup() %>% 
-  group_by(pairID,year_coverage) %>%
+  group_by(pairID) %>%
   dplyr::summarize(
     mean_cor = mean(spearm_cor, na.rm = TRUE),
     min_cor = min(spearm_cor, na.rm = TRUE),
@@ -656,6 +637,9 @@ ranked_trap_pairs <- summary_trap_pairs %>%
   arrange(overall_rank) %>%   # Arrange by overall rank
    mutate(order = row_number())  # Add order column for "weirdness"
 
+# add full traps:
+
+
 ```
 
 
@@ -664,10 +648,8 @@ ranked_trap_pairs <- summary_trap_pairs %>%
 
 summary_trap_pairs %>% 
   ggplot(aes(x = mean_cor ,
-             y = mean_cv,
-             #size = year_coverage,
-             color = year_coverage)) +
-  geom_point() + facet_grid(.~year_coverage)
+             y = mean_cv)) +
+  geom_point() 
 
 ```
 
