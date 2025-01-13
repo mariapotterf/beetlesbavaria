@@ -40,10 +40,7 @@ library(ggpubr)
 library(RColorBrewer)
 library(scales)
 library(viridis)
-
-
 library(tidyr)
-
 library(knitr)
 
 
@@ -89,13 +86,32 @@ Information about the bark beetle monitoring dataset using pheromone traps. Data
 | globalid      | Chr             | ID-number of a trap location. It is possible that some trap names have more than one globalid. That is the case if the trap was relocated without renaming the monitoring location (monsto_name).                                             |
 
 
-```{r, read data, echo = F, warning=F, include =F}
+```{r, read_xz_data, echo = F, warning=F, include =F}
 xy_sf <- st_read(paste(out_path, "outSpatial/all_traps_3035.gpkg", sep = '/'))
 bav_sf <- st_read(paste(out_path, "outSpatial/bavaria.gpkg", sep = '/'))
 
 # Read elevation per trap
-xy_sf_elev_4326 <- st_read(paste(out_path, "outSpatial/traps_with_elevation.gpkg", sep = '/'))
+xy_sf_elev_4326 <- st_read(paste(out_path, "r_beetlesbavaria/outSpatial/traps_with_elevation.gpkg", sep = '/'))
 
+# average the elevation per trapID - if trap moved. then copare the difference between elevations among pairID.
+#!!! 
+xy_elev_avg <- xy_sf_elev_4326 %>% 
+  as_data_frame() %>% 
+  group_by(falsto_name) %>% 
+  summarise(elevation = mean(elevation, na.rm = T)) %>% 
+  mutate(pairID = substr(falsto_name, 1, nchar(falsto_name) - 2)) %>%
+   mutate(trap_n = paste0('trap', as.numeric(str_extract(falsto_name, "[0-9]+")))) %>% 
+  dplyr::rename(trapID = falsto_name)  
+  
+head(xy_elev_avg)
+
+xy_elev_avg_wide <- xy_elev_avg %>%
+  ungroup(.) %>% 
+  dplyr::select(-trapID) %>% 
+  pivot_wider(names_from = trap_n, values_from = elevation) %>% 
+  dplyr::select(-trap3) %>% # remove the last columns for trap3
+  mutate(diff = trap1 - trap2)
+  
 
 # Reproject bav_sf to the CRS of xy_sf
 bav_sf_repr <- st_transform(bav_sf, st_crs(xy_sf))
@@ -131,7 +147,6 @@ xy_pair_avg <- xy_sf_simple %>%
 # Convert avg_coordinates to sf
 xy_pair_sf <- xy_pair_avg %>%
   st_as_sf(coords = c("x", "y"), crs = 3035)
-
 
 
 ```
