@@ -754,10 +754,7 @@ save(fin.m.counts.previous.tw,
      file = "outData/fin_models.RData")
 
 
-
-
 # Effect plots ------------------------------------------------------------
-
 
 # get update table for the line an pint plotting
 avg_data_sum_ips <- avg_data %>%
