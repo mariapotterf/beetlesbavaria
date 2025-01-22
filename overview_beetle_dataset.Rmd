@@ -21,8 +21,16 @@ knitr::opts_chunk$set(echo = FALSE)
 
 rm(list=ls()) 
 
+# Set the root path dynamically (relative to the R project folder)
+root_path <- here::here()
 
-source('myPaths.R')
+# Define relative paths for data and output
+raw_data_path <- file.path(root_path, "rawData", "Fwd__Borkenkäferforschung__Datentransfer")
+output_path <- file.path(root_path)
+
+
+
+#source('myPaths.R')
 
 ### Libs -----------------------------------------------------------
 library(dplyr)
@@ -43,13 +51,19 @@ library(knitr)
 
 
 ### get data -----------------------------------
-path = 'C:/Users/ge45lep/Documents/2022_BarkBeetles_Bavaria/rawData/Fwd__Borkenkäferforschung__Datentransfer'
-out_path = 'C:/Users/ge45lep/Documents/2022_BarkBeetles_Bavaria'
+# path = 'C:/Users/ge45lep/Documents/2022_BarkBeetles_Bavaria/rawData/Fwd__Borkenkäferforschung__Datentransfer'
+# path = 'C:/Users/ge45lep/Documents/2022_BarkBeetles_Bavaria/rawData/Fwd__Borkenkäferforschung__Datentransfer'
+# 
+# out_path = 'C:/Users/ge45lep/Documents/2022_BarkBeetles_Bavaria'
+# 
+# # Load RData table
+# load(paste(path, 'BoMo_2015_2021_Rohdaten.RData', sep = "/"))
 
-# Load RData table
-load(paste(path, 'BoMo_2015_2021_Rohdaten.RData', sep = "/"))
+# Load RData table using the relative path
+load(file.path(raw_data_path, "BoMo_2015_2021_Rohdaten.RData"))
 
-high_dens_threshold = 3000
+# Example of dynamically using the output path
+high_dens_threshold <- 3000
 
 
 ```
@@ -93,11 +107,22 @@ Data represents trap counts per DOY and year. Traps are organized by trap pairs.
 | globalid      | Chr            | ID-number of a trap location. It is possible that some trap names have more than one globalid. That is the case if the trap was relocated without renaming the monitoring location (monsto_name).                                                                                        |
 
 ```{r, read_xy_data, echo = F, warning=F, include =F}
-xy_sf <- st_read(paste(out_path, "outSpatial/all_traps_3035.gpkg", sep = '/'))
-bav_sf <- st_read(paste(out_path, "outSpatial/bavaria.gpkg", sep = '/'))
+# xy_sf <- st_read(paste(out_path, "outSpatial/all_traps_3035.gpkg", sep = '/'))
+# bav_sf <- st_read(paste(out_path, "outSpatial/bavaria.gpkg", sep = '/'))
+# 
+# # Read elevation per trap
+# xy_sf_elev_4326 <- st_read(paste(out_path, "r_beetlesbavaria/outSpatial/traps_with_elevation.gpkg", sep = '/'))
+# 
+# !!!
 
-# Read elevation per trap
-xy_sf_elev_4326 <- st_read(paste(out_path, "r_beetlesbavaria/outSpatial/traps_with_elevation.gpkg", sep = '/'))
+# Read spatial files
+xy_sf <- st_read(file.path(output_path, "outSpatial", "all_traps_3035.gpkg"))
+bav_sf <- st_read(file.path(output_path, "outSpatial", "bavaria.gpkg"))
+
+# Read elevation data per trap
+xy_sf_elev_4326 <- st_read(file.path(output_path, "outSpatial", "traps_with_elevation.gpkg"))
+
+
 
 # average the elevation per trapID - if trap moved. then copare the difference between elevations among pairID.
 #!!! 
