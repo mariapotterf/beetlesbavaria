@@ -357,11 +357,11 @@ It shows how much the data (beetle counts per trap) varies in relation to the me
 
 Compare if both traps in trap pair overpasses the \>3000 beetles/caught/week at the same time (DOY per year).
 
--   **over** = both traps have \> 3000 beetles (fit)
+-   **high** = both traps have \> 3000 beetles (fit)
 -   **no_fit** = only one trap has \> 3000 beetles, the other has less (no fit)
 -   **less** = both traps have less then 3000 beetles (fit)
 
-As we have several collection dates per year/traps (1-27, median value of days between two collection is 6), I have calculated how often the three categories occurs from total records times per trap. For map display, I have chosen only **over** and **no_fit** categories, where I have chosen the higher share per record.
+As we have several collection dates per year/traps (1-27, median value of days between two collection is 6), I have calculated how often the three categories occurs from total records times per trap. For map display, I have chosen only **high** and **no_fit** categories, where I have chosen the higher share per record.
 
 ## Identify problematic locations
 
@@ -406,27 +406,27 @@ ips_wide <- ips_data %>%
   summarise(count_1 = sum(count[trap_n == 1], na.rm = TRUE),  # Sum counts for trap_n 1
             count_2 = sum(count[trap_n == 2], na.rm = TRUE),  # Sum counts for trap_n 2
             .groups = "drop") %>% # Ungroup the data after summarising
-  mutate(beetle_density = case_when(
-    count_1 > high_dens_threshold & count_2 > high_dens_threshold ~ 'over',       # Both counts > high_dens_threshold
+  mutate(beetle_density_cl = case_when(
+    count_1 > high_dens_threshold & count_2 > high_dens_threshold ~ 'high',       # Both counts > high_dens_threshold
     count_1 > high_dens_threshold | count_2 > high_dens_threshold ~ 'no_fit',    # Only one count > high_dens_threshold
-    count_1 <= high_dens_threshold & count_2 <= high_dens_threshold ~ 'less'     # Both counts <= high_dens_threshold
+    count_1 <= high_dens_threshold & count_2 <= high_dens_threshold ~ 'low'     # Both counts <= high_dens_threshold
   )) #
 
 
 # Define the full year range
 final_year_range <- 2018:2021
 
-# Calculate percentages of each class in `beetle_density`
+# Calculate percentages of each class in `beetle_density_cl`
 ips_3k_percentages <- ips_wide %>%
-  group_by(pairID, year, beetle_density) %>%  # Group by pairID, year, and beetle_density
+  group_by(pairID, year, beetle_density_cl) %>%  # Group by pairID, year, and beetle_density_cl
   summarize(class_count = n(), .groups = "drop") %>%  # Count occurrences of each class
   group_by(pairID, year) %>%  # Group again by pairID and year
   mutate(class_percentage = class_count / sum(class_count) * 100) %>%  # Calculate percentages
   ungroup()
 
-# keep only higher from teh classes: over and no_fit, remve 'less'
+# keep only higher from teh classes: over and no_fit, remve 'low'
 ips_3k_percentages_sub <- ips_3k_percentages %>% 
-  dplyr::filter(beetle_density != 'less') %>% 
+  dplyr::filter(beetle_density_cl != 'low') %>% 
   group_by(pairID, year) %>%
   slice_max(class_percentage, with_ties = TRUE) %>% # keep rows for equal records
   ungroup() %>% 
@@ -487,10 +487,10 @@ correlations_ips %>%
 
 ```
 
-overall, correlation increases with higher number of cough beetles. Also, CV decreases with higher correlation. The lowest CV is in 2018. The outlier in 2018 is likely due to windthrow near Passau from 2017.
+Overall, correlation increases with higher number of cough beetles. Also, CV decreases with higher correlation. The lowest CV is in 2018. The outlier in 2018 is likely due to windthrow near Passau from 2017.
 
 
-## Temporal development
+## Temporal development: Summary table
 
 
 ```{r summary_tab, include = T, warning = F}
@@ -514,7 +514,7 @@ kable(summary_table, caption = "Summary Statistics for Spearman Correlation and 
 
 ```
 
-## Distribution of the Spearman correlation over time
+### Distribution of the Spearman correlation over time
 
 ```{r ips_cor_hist, include = T, warning = F, echo = F, fig.height = 3, fig.width = 5, fig.cap = "Distribution of Spearman correlation values (`spearm_cor`) by year. Red dot represent yearly median, red lines yearsly IQR. Dashed grey line represent median over years."}
 
@@ -550,11 +550,11 @@ ggplot(data = correlations_ips) +
   )
 ```
 
-## Coefficient of variation over time
+### Distribution of the Coefficient of variation over time
 
 The data is highly variable.
 
-```{r ips_cv_hist, include = T, warning = F, echo = F, fig.height=3,fig.width = 5, fig.cap = "Distribution of Coefficient of Variation (CV) counts by year. Red dot represent yearly median, red lines yearsly IQR. Dashed grey line represent median over years. "}
+```{r ips_cv_hist, include = T, warning = F, echo = F, fig.height=3,fig.width = 5, fig.cap = "Distribution of Coefficient of Variation (CV) counts by year. Red dot represents yearly median, red lines yearly IQR. Dashed grey line represents median over years. "}
 
 
 summary_data <- correlations_ips %>%
@@ -593,7 +593,7 @@ ggplot(data = correlations_ips) +
 ```
 ## Maps: 
 
-### Correlation over traps 
+### Spearman correlation over time and space  
 
 ```{r ips_corr_map, include = TRUE, warning = FALSE, echo = FALSE, fig.cap = "Spatial distribution of the Coefficient of Variation (CV) by year. Points represent traps, with colors scaled to indicate CV values, capped at 150."}
 #cv_scaling = 150
@@ -610,7 +610,7 @@ ggplot() +
   facet_wrap(~ year) +  # Facet the plot by year
   theme_void() +  # Minimal theme for better aesthetics
   labs(
-    title = "Coefficient of Variation by Year",
+    title = "Spearman correlation Year",
     x = "Longitude",
     y = "Latitude"
   )
@@ -618,7 +618,7 @@ ggplot() +
 
 
 
-### CV over traps 
+### Coefficient of variation over time and space 
 
 ```{r ips_cv_map, include = TRUE, warning = FALSE, echo = FALSE, fig.cap = "Spatial distribution of the Coefficient of Variation (CV) by year. Points represent traps, with colors scaled to indicate CV values, capped at 150."}
 cv_scaling = 150
@@ -646,45 +646,64 @@ ggplot() +
 Compare if both traps overpasses the \>3000 beetles/cought/week at the same time.
 
 -   over = both traps have \> 3000 beetles
--   no_fit = only one trap has \> 3000 beetles, the other has less
+-   no_fit = one trap has \> 3000 beetles, the other has less, indicating differet trends
 -   less = both traps have less then 3000 beetles
 
-### Share of the fit classes per year
+### Frequency of the fit classes per year
 
-```{r ips_high_dens_hist, include = T, warning = F, echo = F, fig.cap= "Distribution of CV Counts by Year"}
-# Create the histogram
-ggplot(data = ips_3k_percentages) +
-  geom_bar(aes(x =  beetle_density, fill = beetle_density), bins = 30) +  # Histogram with 30 bins
-  facet_grid(~ year) +  # Create facets for each year
-    geom_hline(yintercept = 50, lty = 'dashed', color = 'grey') +
-  theme_minimal() +  # Use a minimal theme
+Illustrates if both traps in a trap pair are showing the same beetle density indication at the dame DOY (i.e., low, high, no fit). Represented are shares of collection dates per year per fit class. Over time, the shares of high beetle density indication occurring simultaneously increases, but there is still high shares of records (30%) that do not fit (one trap indicates counts over 3000/beetles, the other indicates less coughs beetles in same recording interval, eg not issuing warning for high density). 
+
+
+```{r ips_high_dens_hist, include = T, warning = F, echo = F, fig.cap= "Distribution of share of 'fit classes' indicationg hig or low obeetle density over years. Dashed lines represent trends per fit-class and year. "}
+
+# Pre-calculate counts for beetle_density_cl
+counts <- ips_3k_percentages %>%
+  group_by(year, beetle_density_cl) %>%
+  summarise(count = n(), .groups = "drop") %>%
+  group_by(year) %>%
+  mutate(share = count / sum(count)*100)  # Calculate share per year
+
+ggplot(data = counts) +
+  geom_bar(aes(x = as.factor(year), 
+               y = share, 
+               fill = beetle_density_cl), stat = "identity",alpha = 0.8, position = "dodge" ) +  # Use pre-calculated counts
+ # facet_grid(~ year) +  # Create facets for each year
+  geom_hline(yintercept = 50, lty = 'dashed', color = 'grey') +
+  geom_smooth(
+    aes(x = factor(year), y = share, color = beetle_density_cl,
+        group = beetle_density_cl), 
+    method = "glm", se = FALSE, lty = 'dashed', lwd = 1
+  ) +  # Add trend lines
+  theme_classic() +  # Use a minimal theme
   labs(
     title = "",
-    x = "Coefficient of Variation (CV)",
-    y = "Frequency"
+    x = "",
+    y = "Share[%]"
   ) +
   theme(legend.position = 'bottom')
+
+
 
 ```
 
 ### Distribution of classes over years
 
-Spatial distribution of the classes showing indication of the simultaneous increase of high beetle density consitions (**over**: \<3000 beetles/ trap catch) and **no-fit**, where one trap reaches the high density threshold but not the other. For visualization purposes, I omitted the **lower** fit (both traps having less then 3000 beetles).
+Spatial distribution of the classes showing indication of the simultaneous increase of high beetle density consitions (**high**: \<3000 beetles/ trap catch) and **no-fit**, where one trap reaches the high density threshold but not the other. For visualization purposes, I omitted the **low** fit (both traps having less then 3000 beetles).
 
 ```{r ips_3k_map, include = T, warning = F, echo = F}
 
 # Define a new size column to make points with NA smaller
 corr_year_xy <- corr_year_xy %>%
-  mutate(point_size = ifelse(is.na(beetle_density), 1, 2))  # Smaller size for NA
+  mutate(point_size = ifelse(is.na(beetle_density_cl), 1, 2))  # Smaller size for NA
 
 
 # Create the plot
 ggplot() +
   geom_sf(data = bav_sf_repr, fill = 'grey', color = 'black') +  # Add the bav_sf_repr layer as grey
-  geom_sf(data = corr_year_xy, aes(color = beetle_density, size = point_size)) +  # Adjust point size and color
+  geom_sf(data = corr_year_xy, aes(color = beetle_density_cl, size = point_size)) +  # Adjust point size and color
   scale_size_continuous(range = c(1, 2), guide = "none") +  # Control point size
   scale_color_manual(
-    values = c("no_fit" = "blue", "over" = "red", "NA" = "white"),  # Set custom colors
+    values = c("no_fit" = "blue", 'high' = "red", "NA" = "white"),  # Set custom colors
     name = "high density indicator fit"
   ) +
   facet_wrap(~ year) +  # Facet the plot by year
@@ -708,7 +727,7 @@ ggplot() +
 ```{r identify_problematic_traps}
 # Aggregate metrics by trap pair
 summary_trap_ns <- correlations_ips %>%
-  mutate(beetle_density = ifelse(is.na(beetle_density), "lower", beetle_density)) %>% 
+  mutate(beetle_density_cl = ifelse(is.na(beetle_density_cl), "lower", beetle_density_cl)) %>% 
    dplyr::filter(complete.cases(.)) %>%  # Filter rows with complete cases
   ungroup() %>% 
   group_by(pairID) %>%
@@ -718,7 +737,7 @@ summary_trap_ns <- correlations_ips %>%
     max_cv = max(cv, na.rm = TRUE),
     mean_cv = mean(cv, na.rm = TRUE),
      record_years = n(), # Count total number of records for the pairID
-    years_no_fit = sum(beetle_density == "no_fit", na.rm = TRUE), # Count years in "no_fit"
+    years_no_fit = sum(beetle_density_cl == "no_fit", na.rm = TRUE), # Count years in "no_fit"
     no_fit_percentage = (years_no_fit / record_years) * 100 # Calculate percentage based on total records
   ) %>%
   ungroup() %>% 
@@ -780,8 +799,8 @@ At pair level:
 | mean_counts      | Num  | Mean of beetle counts from both traps in the pair.                                                                                                                            |
 | sd_counts        | Num  | Standard deviation of beetle counts from both traps in the pair.                                                                                                              |
 | cv               | Num  | Coefficient of Variation (CV), calculated as SD/Mean × 100.                                                                                                                   |
-| beetle_density   | Chr  | Categorization of counts based on the 3000 threshold: 'over' = both over 3000, 'no_fit' = one over 3000, where the one with the higher sgare is selected. 'lower' is excluded |
-| class_percentage | Num  | Percentage of the specific `beetle_density` class within all observations for the year. ('lower' is excluded)                                                                 |
+| beetle_density_cl   | Chr  | Categorization of counts based on the 3000 threshold: 'high' = both over 3000, 'no_fit' = one over 3000, where the one with the higher sgare is selected. 'lower' is excluded |
+| class_percentage | Num  | Percentage of the specific `beetle_density_cl` class within all observations for the year. ('lower' is excluded)                                                                 |
 
 **share_high_density.csv**
 
@@ -789,9 +808,9 @@ At pair level:
 |-------------|-------------|----------------------------------------------|
 | pairID           | Chr  | Identifier for the trap pair location.                                             |
 | year             | Num  | Year of data collection.                                                           |
-| beetle_density   | Chr  | Categorization of counts based on the 3000 threshold: 'over', 'no_fit', or 'less'. |
-| class_count      | Int  | Number of records falling into a specific `beetle_density` category.               |
-| class_percentage | Num  | Percentage of records in each `beetle_density` category for a given year and pair. |
+| beetle_density_cl   | Chr  | Categorization of counts based on the 3000 threshold: 'high', 'no_fit', or 'low'. |
+| class_count      | Int  | Number of records falling into a specific `beetle_density_cl` category.               |
+| class_percentage | Num  | Percentage of records in each `beetle_density_cl` category for a given year and pair. |
 
 **ips_wide_full.csv**
 
@@ -803,7 +822,7 @@ At pair level:
 | doy            | Num  | Day of the year (DOY) when the observation was recorded.                           |
 | count_1        | Int  | Count of beetles caught by trap 1 in the pair.                                     |
 | count_2        | Int  | Count of beetles caught by trap 2 in the pair.                                     |
-| beetle_density | Chr  | Categorization of counts based on the 3000 threshold: 'over', 'no_fit', or 'less'. |
+| beetle_density_cl | Chr  | Categorization of counts based on the 3000 threshold: 'high', 'no_fit', or 'low'. |
 
 ## Export data
 
