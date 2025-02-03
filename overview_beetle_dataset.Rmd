@@ -8,8 +8,8 @@ output:
     toc_depth: 3        # Limits TOC to headings level 1 and 2
     number_sections: true  # Adds numbering to the headings
     toc_float: true     # Makes the TOC float on the side for easy navigation
-    fig_caption: true    # Enables figure captions with numbering
-link-citations: true
+    fig_caption: false    # if true -> Enables figure captions with numbering
+link-citations: false
 ---
 
 
@@ -185,7 +185,7 @@ xy_pair_sf <- xy_pair_avg %>%
 Is there a difference in elevation for traps 1 and traps 2 within a trap pair? Tested with Wilcoxon rank sum test. not statistically significant difference. 
 NO!
 
-```{r elev_boxplot, warning=FALSE, echo =F, fig.cap='Boxplots of of respective elevations for trap1 and trap2'}
+```{r elev_boxplot, warning=FALSE, echo =F, fig.cap='  Fig.1 Boxplots of respective elevations for trap1 and trap2 within trap pair'}
 
 # are some traps located in higher elevation then others?
 xy_elev_avg %>% 
@@ -204,7 +204,7 @@ xy_elev_avg %>%
 
 ```
 
-```{r process_input_data, echo = F}
+```{r process_input_data, echo = F, warning=F}
 # Rename the table
 # keep all records to check the numbers
 dat_full <- Daten_B01
@@ -300,7 +300,6 @@ dat_cleaned <- dat %>%
 
 ```
 
--   2014 - does not have explicit XY information, trap data are pooled into a single globalid (XY), and records only in one trap -> year 2014 removed from database
 -   2015:2021 - only kept
 -   excluded specially added traps, that do not follow paired design: some trap locations have more then 2 traps(eg Zwiesel has A,B,C but only one trap per group, not a trap pair - rather, a triplet). Excluded.
 -   note: records the years of recording: the trap pairs differ differs in number of recorded years
@@ -394,7 +393,7 @@ Compare if both traps in trap pair overpasses the \>3000 beetles at the same tim
 
 As we have several collection dates per year/traps (~22 records per trap/season, median every 6 days), I have calculated how often the three categories occurs from total records times per trap. For map display, I have chosen only **high** and **no_fit** categories, where I have chosen the higher share per record.
 
-## Identify problematic locations
+## Identify problematic trap pairs
 
 Order the trap pairs from the 1) least correlated, with the 2) highest coefficient of variation and 3) with no-fit (3000 threshold). Combine the order of traps to identify the most problematic traps.
 
@@ -404,7 +403,9 @@ Order the trap pairs from the 1) least correlated, with the 2) highest coefficie
 
 **Combine Key Metrics**:
 
-Calculate the mean Spearman correlation (mean_cor), mean  CV (mean_cv) across all years per trap pair. Calculate the average of the percentage of records where the trap pair falls into the "no_fit" category (mean_no_fit_percentage) per year.
+Calculate the mean Spearman correlation (mean_cor), mean  CV (mean_cv) across all years per trap pair. Calculate the average of the percentage of records where the trap pair falls into the "no_fit" category (mean_no_fit_percentage) per year. Calculate the percentage of records where the trap pair falls into the "no_fit" category (mean_no_fit_percentage).
+
+**Rank Traps**
 
 Assign ranks to each trap pair based on average value per trap pair over years. 
 
@@ -437,7 +438,6 @@ ips_wide <- ips_data %>%
     count_1 <= high_dens_threshold & count_2 <= high_dens_threshold ~ 'low'     # Both counts <= high_dens_threshold
   )) #
 
-#length(unique(ips_wide$pairID))
 
 
 # Calculate percentages of each class in `beetle_density_cl`
@@ -448,7 +448,6 @@ ips_3k_percentages <- ips_wide %>%
   mutate(class_percentage = class_count / sum(class_count) * 100) %>%  # Calculate percentages
   ungroup()
 
-#length(unique(ips_3k_percentages$pairID)) #
 
 # keep only higher from teh classes: over and no_fit, remve 'low'
 ips_3k_percentages_sub <- ips_3k_percentages %>% 
@@ -458,9 +457,6 @@ ips_3k_percentages_sub <- ips_3k_percentages %>%
   sample_n(1) %>%  # Randomly select one row when there are ties to have just one record
   ungroup() %>% 
   dplyr::select(-class_count)
-
-#length(unique(ips_3k_percentages_sub$pairID)) # only 128
-
 
 
 # calculate beetle metrics;
@@ -476,13 +472,9 @@ correlations_ips <- ips_wide %>%
   ) %>%
    ungroup()
 
-#length(unique(correlations_ips$pairID)) # 
-
 
 correlations_ips <- correlations_ips %>%
   left_join(ips_3k_percentages_sub)
-
-#length(unique(correlations_ips$pairID)) # 
 
 
 
@@ -499,14 +491,15 @@ missing_from_corr_year_xy <- setdiff(unique(xy_pair_sf$pairID), unique(corr_year
 # Inspect the missing pairIDs
 #missing_from_corr_year_xy
 
+length(unique(corr_year_xy$pairID)) # 109
+length(unique(xy_pair_sf$pairID))   # 160, contains also triplets (A,B,C)
 
-# length(unique(dat_cleaned$trapID))
-# length(unique(dat_cleaned$pairID))
-# 
-# length(unique(dat_full$falsto_name))
-# length(unique(dat_full$monsto_name))
-# 
-# length(unique(correlations_ips$pairID))
+# Find missing pairIDs in corr_year_xy compared to xy_pair_sf
+missing_from_corr_year_xy <- setdiff(unique(xy_pair_sf$pairID), unique(corr_year_xy$pairID))
+
+# Inspect the missing pairIDs
+#missing_from_corr_year_xy
+
 
 
 
@@ -516,7 +509,7 @@ missing_from_corr_year_xy <- setdiff(unique(xy_pair_sf$pairID), unique(corr_year
 
 Is there any overall pattern between coefficient of variation and correlation over years? eg higher correlation does have lower coefficient of variation? 
 
-```{r scatter_plot_year, warning=F,echo = F, fig.height=3}
+```{r scatter_plot_year, warning=F,echo = F, fig.height=3, fig.cap = ' Fig. 2 Scatter plot for the Spearman correlation coefficient and coefficient of variation over years. Line represents linear relationship between two variables. '}
 correlations_ips %>% 
   ggplot(aes(x = spearm_cor ,
              y = cv#,
@@ -555,13 +548,13 @@ summary_table <- correlations_ips %>%
   )
 
 # Print the summary table
-kable(summary_table, caption = "Summary Statistics for Spearman Correlation and CV Counts by Year. count_pairID = number of individual pairID per year.")
+kable(summary_table, caption = "Tab 1. Summary Statistics for Spearman Correlation and CV Counts by Year. count_pairID = number of individual pairID per year.")
 
 ```
 
 ### Distribution of the Spearman correlation over time
 
-```{r ips_cor_hist, include = T, warning = F, echo = F, fig.height = 3, fig.width = 5, fig.cap = "Distribution of Spearman correlation values (`spearm_cor`) by year. Red dot represent yearly median, red lines yearsly IQR. Dashed grey line represent median over years."}
+```{r ips_cor_hist, include = T, warning = F, echo = F, fig.height = 3, fig.width = 5, fig.cap = " Fig.3: Distribution of Spearman correlation values (`spearm_cor`) by year. Red dot represent yearly median, red lines yearsly IQR. Dashed grey line represent median over years."}
 
 summary_data <- correlations_ips %>%
   group_by(year) %>%
@@ -599,7 +592,7 @@ ggplot(data = correlations_ips) +
 
 The data is highly variable.
 
-```{r ips_cv_hist, include = T, warning = F, echo = F, fig.height=3,fig.width = 5, fig.cap = "Distribution of Coefficient of Variation (CV) counts by year. Red dot represents yearly median, red lines yearly IQR. Dashed grey line represents median over years. "}
+```{r ips_cv_hist, include = T, warning = F, echo = F, fig.height=3,fig.width = 5, fig.cap = " Fig.4: Distribution of Coefficient of Variation (CV) counts by year. Red dot represents yearly median, red lines yearly IQR. Dashed grey line represents median over years. "}
 
 
 summary_data <- correlations_ips %>%
@@ -640,7 +633,7 @@ ggplot(data = correlations_ips) +
 
 ### Spearman correlation over time and space  
 
-```{r ips_corr_map, include = TRUE, warning = FALSE, echo = FALSE, fig.cap = "Spatial distribution of the Coefficient of Variation (CV) by year. Points represent traps, with colors scaled to indicate CV values, capped at 150."}
+```{r ips_corr_map, include = TRUE, warning = FALSE, echo = FALSE, fig.cap = " Fig.5: Spatial distribution of the Coefficient of Variation (CV) by year. Points represent traps, with colors scaled to indicate CV values, capped at 150."}
 #cv_scaling = 150
 # Create the plot
 ggplot() +
@@ -665,7 +658,7 @@ ggplot() +
 
 ### Coefficient of variation over time and space 
 
-```{r ips_cv_map, include = TRUE, warning = FALSE, echo = FALSE, fig.cap = "Spatial distribution of the Coefficient of Variation (CV) by year. Points represent traps, with colors scaled to indicate CV values, capped at 150."}
+```{r ips_cv_map, include = TRUE, warning = FALSE, echo = FALSE, fig.cap = " Fig.6: Spatial distribution of the Coefficient of Variation (CV) by year. Points represent traps, with colors scaled to indicate CV values, capped at 150."}
 cv_scaling = 150
 # Create the plot
 ggplot() +
@@ -708,15 +701,13 @@ counts_overall <- ips_3k_percentages %>%
   mutate(share = count / sum(count)*100)  # Calculate share per year
 
 
-
-
 # Print the summary table
-kable(counts_overall, caption = "Average of fit distribution classes over years. Share [%]")
+kable(counts_overall, caption = "Tab.2: Average of fit distribution classes over years. Share [%]")
 ```
 
 **Trends over years**
 
-```{r ips_high_dens_hist, include = T, warning = F, echo = F, fig.cap= "Distribution of share of 'fit classes' indicationg hig or low obeetle density over years. Dashed lines represent overall trend per fit-class. fig.height=3,fig.width = 5"}
+```{r ips_high_dens_hist, include = T, warning = F, echo = F, fig.cap= " Fig.7: Distribution of share of 'fit classes' indicating high or low beetle density over years. Dashed lines represent overall trend per fit-class. fig.height=3,fig.width = 4"}
 
 
 # Pre-calculate counts for beetle_density_cl
@@ -735,7 +726,7 @@ ggplot(data = counts) +
   geom_smooth(
     aes(x = factor(year), y = share, color = beetle_density_cl,
         group = beetle_density_cl), 
-    method = "glm", se = FALSE, lty = 'dashed', lwd = 1
+    method = "lm", se = FALSE, lty = 'dashed', lwd = 1
   ) +  # Add trend lines
   theme_classic() +  # Use a minimal theme
   labs(
@@ -751,9 +742,11 @@ ggplot(data = counts) +
 
 ### Distribution of classes over years
 
-Spatial distribution of the classes showing indication of the simultaneous increase of high beetle density conditions (**high**: \<3000 beetles/ trap catch) and **no-fit**, where one trap reaches the high density threshold but not the other. For visualization purposes, I omitted the **low** fit (both traps having less then 3000 beetles, which was a dominant category). I focused on showing *prevailing* shares per trap pair/year for **high** density and **no-fit**. Shows in the category with the more frequent occurence, or a random one if tied (e.g. both have 5% of occurence/year).
+Spatial distribution of the classes showing indication of the simultaneous increase of high beetle density conditions (**high**: \<3000 beetles/ trap catch) and **no-fit**, where one trap reaches the high density threshold but not the other. For visualization purposes, I omitted the **low** fit (both traps having less then 3000 beetles, which was a dominant category). I focused on showing *prevailing* shares per trap pair/year for **high** density and **no-fit**. Shows in the category with the more frequent occurrence, or a random one if tied (e.g. both have 5% of occurence/year).
 
-```{r ips_3k_map, include = T, warning = F, echo = F}
+Spatial distribution of the classes showing indication of the simultaneous increase of high beetle density conditions (**high**: \<3000 beetles/ trap catch) and **no-fit**, where one trap reaches the high density threshold but not the other. For visualization purposes, I omitted the **low** fit (both traps having less then 3000 beetles), and shown are prevailing shares per trap pair/year.
+
+```{r ips_3k_map, include = T, warning = F, echo = F, fig.cap=" Fig.8: Distribution of the no-fit and high density categories per site and year. Note that 'low' category occurs only if 'no-fit' nor 'high' were present."}
 
 # Define a new size column to make points with NA smaller
 corr_year_xy <- corr_year_xy %>%
@@ -769,7 +762,8 @@ ggplot() +
   geom_sf(data = corr_year_xy, aes(color = beetle_density_cl, size = point_size)) +  # Adjust point size and color
   scale_size_continuous(range = c(1, 2), guide = "none") +  # Control point size
   scale_color_manual(
-    values = c("no_fit" = "blue", 'high' = "red", "low" = "grey70"),  # Set custom colors
+    values = c("no_fit" = "blue", 'high' = "red", "low" = "grey70"),
+    # Set custom colors
     name = "High density indicator fit"
   ) +
   facet_wrap(~ year) +  # Facet the plot by year
@@ -791,7 +785,7 @@ ggplot() +
 
  I ranked the traps based on the overall poor performance of the trap pair: low correlation, high variability and not a consistent indicator of outbreak. 
 
-```{r identify_problematic_traps}
+```{r identify_problematic_traps,  warning=FALSE, echo = F}
 # Aggregate metrics by trap pair
 summary_trap_ns <- correlations_ips %>%
   mutate(beetle_density_cl = ifelse(is.na(beetle_density_cl), "lower", beetle_density_cl)) %>% 
@@ -837,20 +831,24 @@ ranked_trap_ns <- summary_trap_ns %>%
 
 ### Plot Trap Pairs by Yearly Coverage:
 
-The trap pairs are divided into two groups based on whether they cover all the years from 2018 to 2021. If a trap pair has data for all the years in the range 2018:2021, it is labeled as "end_years_present: yes." Otherwise, it is labeled as "end_years_present: no."
+The trap pairs are divided into two groups based on whether they cover all the years from 2018 to 2021 (blue) or not (red). If a trap pair has data for all the years in the range 2018:2021, it is labeled as "end_years_present: yes." Otherwise, it is labeled as "end_years_present: no."
 
 This split helps to distinguish between trap pairs with complete yearly coverage and those without. Some trap pairs may exhibit unusual correlations or CVs but may not be as relevant for check up in the field, because they might no longer be operational or may lack complete data. 
 
 
-```{r plot_problematic, warning=FALSE, echo = F}
+```{r plot_problematic, warning=FALSE, echo = F, fig.cap = " Fig.9: Scatter plot of the mean CV and mean corelation coefficient per trap pair over years. The point size represents the average value of the occurence of non-fit category per season over years. "}
 
 summary_trap_ns %>% 
   ggplot(aes(x = mean_cor ,
              y = mean_cv,
              size = mean_no_fit_percentage)) +
   geom_point(aes(color = end_years_present), alpha = 0.5) +
-  scale_color_manual(values = c("no" = "red", "yes" = "blue")) +
-   geom_text_repel(
+  scale_size_continuous(name = "Average no-fit occurrence [%]") + 
+  scale_color_manual(
+    values = c("no" = "red", "yes" = "blue"),  # Map colors to values
+    name = "Years covered",  # Legend title
+    labels = c("no" = "else", "yes"= "2018-2021")  # Legend labels
+  ) +  geom_text_repel(
     aes(label = pairID,
         color = end_years_present),  # Annotate using pairID
     size = 3,  # Customize label size
@@ -861,9 +859,10 @@ summary_trap_ns %>%
    theme_classic2()
 
 ```
-Zoom in into trap pairs that are covered during 2018:2021 - can be more usefull for next years evaluation/field visit.
 
-```{r plot_problematic_end_years, echo = F, warning=F}
+Show only trap pairs that are contains dataset during 2018:2021 - can be more useful for next years evaluation/field visit.
+
+```{r plot_problematic_end_years, echo = F, warning=F, fig.cap = " Fig.10: Scatter plot of the mean CV and mean corelation coefficient per trap pair over years. Shown are only trap pairs that are recorder every year in 2018-2021. The point size represents the average value of the occurence of non-fit category per season over years. "}
 
 summary_trap_ns %>% 
   dplyr::filter(end_years_present == "yes") %>% 
@@ -871,6 +870,7 @@ summary_trap_ns %>%
              y = mean_cv,
              size = mean_no_fit_percentage)) +
   geom_point(alpha = 0.5, color = 'blue') +
+  scale_size_continuous(name = "Average no-fit occurrence [%]") + 
   geom_text_repel(
     aes(label = pairID),  # Annotate using pairID
     size = 3,  # Customize label size
@@ -885,15 +885,18 @@ summary_trap_ns %>%
 
 At pair level:
 
--   average XY coordinates: *trap_pairs_avg.gpkg*, approximate locations between trap pair
+-   average XY coordinates: *trap_pairs_avg.gpkg*, approximate locations of trap pair (average coordinates between two traps within a trap pair)
 -   ranked table: *ranked_trap_ns.csv*
 
 Full records:
 
--   table: *ips_wide_full.csv* - contains beetle catches per doy and year
+-   table: *ips_wide_full.csv* - contains beetle catches per DOY and year
 
 
-**ranked_trap_ns.csv**
+## Variables description
+
+
+### ranked_trap_ns.csv
 
 | Column                 | Type | Description                                                                                       |
 |-------------------------|------|---------------------------------------------------------------------------------------------------|
@@ -906,12 +909,11 @@ Full records:
 | cv_rank                | Int  | Rank of the trap pair based on mean CV, with lower values indicating higher variation.            |
 | no_fit_rank            | Int  | Rank of the trap pair based on mean no-fit percentage, with higher values indicating more "no_fit".|
 | overall_rank           | Int  | Overall rank of the trap pair based on combined metrics (e.g., mean_cor, mean_cv, mean_no_fit_percentage).         |
-| order                  | Int  | Sequential order of the trap pairs ranked from the least (1, potentially requiring field visit) to the most representative trap pair   (139), where both traps are represenntiong teh most similar trends. |
+| order                  | Int  | Sequential order of the trap pairs ranked from the least (1, potentially requiring field visit) to the most representative trap pair   (139), where both traps are representing the most similar trends. |
 
 
 
-
-**ips_wide_full.csv**
+### ips_wide_full.csv
 
 | Column         | Type | Description                                                                        |
 |-------------|-------------|----------------------------------------------|
@@ -925,9 +927,10 @@ Full records:
 
 
 
+
 # Conclusion
 
-Using the high-density threshold of 3000 beetles, trap pairs are observed to be relatively non-representative in approximately 31.9% of recording dates per year, as they fall into the "no-fit" category (one trap has more then  3000 beetles trapped per week, other trap has less). This reinforces the importance of the paired trap design for monitoring. Conversely, in over 60% of cases, we observe a fit, indicating either low (47.1%) or very high (21.1%) population densities. 
+Using the high-density threshold of 3000 beetles, trap pairs are observed to be relatively non-representative in approximately 31.9% of recording dates per year, as they fall into the "no-fit" category (one trap has more then  3000 beetles trapped per week, other trap has less). This reinforces the importance of the paired trap design for monitoring. Conversely, in over 60% of cases, we observe a fit, indicating either low (47%) or high (21%) population densities. 
 
 
 ```{r export, echo = F, warning=F, include = F}
