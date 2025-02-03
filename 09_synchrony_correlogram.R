@@ -80,7 +80,7 @@ correlog_data %>%
   ggplot( aes(x = distance, y = correlation, color = year)) +
   geom_line() + 
   geom_point() +
- facet_wrap(~ year, scales = "free_x") +  # Separate plots per year
+ #facet_wrap(~ year, scales = "free_x") +  # Separate plots per year
   labs(title = "Correlogram by Year", x = "Distance", y = "Correlation") +
   theme_minimal()
 
@@ -110,29 +110,6 @@ ggplot(sum_ips_long, aes(x = year, y = sum_ips, color = trapID, group = trapID))
 
 
 
-
-# convert coordinates to lat/long - in degrees
-
-library(sf)  # For coordinate transformation
-
-# Create a spatial data frame with current UTM coordinates
-coords <- data.frame(x = x_coords, y = y_coords)
-
-# Define the UTM projection (Change EPSG code based on your region)
-utm_crs <- st_crs(32633)  # Example: UTM Zone 33N (adjust based on your location)
-
-# Convert to spatial points
-spatial_pts <- st_as_sf(coords, coords = c("x", "y"), crs = utm_crs)
-
-# Transform to WGS84 (Lat/Long)
-spatial_pts_wgs84 <- st_transform(spatial_pts, crs = 4326)
-
-# Extract lat/lon
-lat_lon <- as.data.frame(st_coordinates(spatial_pts_wgs84))
-names(lat_lon) <- c("longitude", "latitude")
-
-# Print converted coordinates
-head(lat_lon)
 
 
 # test corrplot -----------------
