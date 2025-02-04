@@ -42,7 +42,7 @@ root_path <- here::here()
 
 # Define relative paths for data and output
 raw_data_path <- file.path(root_path, "rawData", "Fwd__Borkenkäferforschung__Datentransfer")
-output_path <- file.path(raw_data_path)
+output_path <- file.path(root_path)
 
 source('myVars.R')
 
@@ -71,7 +71,7 @@ head(xy)
 xy_sf <- st_as_sf(xy, coords = c('x_coord', 'y_coord' ), 
                   crs = 32632 )  # What is a coordinate system??? for forestry in bavaria?
 
-#plot(xy_sf["OBJECTID"])
+plot(xy_sf["OBJECTID"])
 #st_distance(xy_sf, by_element = TRUE)
 
 # Change projection to common european one: 3035
@@ -89,8 +89,9 @@ xy_sf <-
 
 sort(unique(xy_sf$falsto_name))
 
+# export the shp of teh trap files
 xy_sf %>%  
-  st_write(paste(out_path, "outSpatial/all_traps_3035.gpkg", sep = '/'), append=FALSE)
+  st_write(paste(output_path, "outSpatial/all_traps_3035.gpkg", sep = '/'), append=FALSE)
 
 
 # Beetle data processing -------------------------------------------------------------- 
@@ -130,11 +131,11 @@ length(unique(dat$falsto_name)) # 302 traps
 
 
 # REname falsto_name trap to merge with sf data 
-# replace all spaces by '_', get trap_pair number 
+# replace all spaces by '_', get trap_n number 
 dat <- dat %>% 
    mutate(falsto_name = gsub(' ', '_', falsto_name)) %>% 
   mutate(falsto_name = gsub("[^A-Za-z0-9_]", "", falsto_name)) %>%  #remove special characters from falsto_name 
-  mutate(trap_pair = as.numeric(str_extract(falsto_name, "[0-9]+"))) # get the trap pair number
+  mutate(trap_n = as.numeric(str_extract(falsto_name, "[0-9]+"))) # get the trap pair number
 
 # remove the parantheses from globalid to merge with coordinates
 dat <- dat %>% 
@@ -157,7 +158,7 @@ dat %>%
   distinct(globalid) %>%
   arrange(year)
   
-# trap_pair == 3 I an exclude, there is only one trap added per year
+# trap_n == 3 I an exclude, there is only one trap added per year
 
 
 # usefull period: 2015-2021 (2014 does not have counts per trap, only sum by year)
@@ -205,6 +206,31 @@ med_less_than_7 <- sum(median_days_between$median_days <= 7, na.rm = TRUE)
 print(med_less_than_7)
 
 
+# get raw data with DOY counts -
+
+dat_DOY_count <- dat %>%
+  dplyr::filter(art == 'Buchdrucker') %>%
+  dplyr::filter(year !=2014) %>% 
+  dplyr::filter(month %in% 4:9) %>%  # filter months during vegetation season: some has record in januay, march ..
+  dplyr::select(
+    year,
+    doy,
+    #month,
+    fangmenge,
+    art,
+    falsto_name,
+    monsto_name,
+    trap_n
+  ) %>%
+  dplyr::rename(
+    count = fangmenge,
+    species = art,
+    trapID = falsto_name,
+    pairID = monsto_name
+  )
+
+
+
 ## Standardize beetle counts/trap/year --------------------------------------------------------------------
 
 
@@ -227,7 +253,7 @@ print(med_less_than_7)
 
 ips.year.avg <- 
   dat %>% 
-  filter(year > 2014) %>% 
+  dplyr::filter(year > 2014) %>% 
   group_by(art, year, falsto_name ) %>% 
   dplyr::summarize(sum_beetles = sum(fangmenge, na.rm = T),
             freq_visit  = length(unique(kont_dat)),
@@ -236,7 +262,7 @@ ips.year.avg <-
 
 # coount by weeks:
 ips.week.agg <- dat %>% 
-  filter(year > 2014) %>% 
+  dplyr::filter(year > 2014) %>% 
   dplyr::filter(art == "Buchdrucker") %>% 
   mutate(week_number = week(kont_dat)) %>% 
     group_by(art, year,week_number, falsto_name ) %>% 
@@ -421,7 +447,7 @@ dat.ips.clean <- dat %>%
 # https://stackoverflow.com/questions/61060750/r-better-way-to-filter-by-group-and-vector-of-values
 dat.ips.clean <- dat.ips.clean %>% 
   group_by(monsto_name) %>%      # filter by region
-  slice(which(all(c(1,2) %in% trap_pair) & trap_pair %in% c(1,2)))   # every trap needs to have both 1&2 traps 
+  slice(which(all(c(1,2) %in% trap_n) & trap_n %in% c(1,2)))   # every trap needs to have both 1&2 traps 
 
 
 # filter only traps that have records over all years
@@ -430,16 +456,24 @@ dat.ips.clean <- dat.ips.clean %>%
   dplyr::filter(n_distinct(year) == n_distinct(dat.ips.clean$year))
 
 dat.ips.clean %>% 
-  group_by(year, trap_pair) %>% 
+  group_by(year, trap_n) %>% 
   distinct(falsto_name) %>% 
   count() #%>% 
 
 # if keeping only traps that are continously monitored over time 
 # ->  79*2 traps/year
+consistent_trapIDs <- unique(dat.ips.clean$falsto_name)
+
+# filter the data counts on doy level to have also just consisten trap recordings ---------------------
+
+dat_DOY_count_consist <- dat_DOY_count %>% 
+  dplyr::filter(trapID %in% consistent_trapIDs)
 
 
-  
-# Get daily counts per trap (averaged by the revisit time)
+data.table::fwrite(dat_DOY_count_consist, 
+                   paste(output_path, 'outTable/dat_DOY_counts_IPS.csv', sep = "/"))
+
+# Get daily counts per trap (averaged by the revisit time) ---------------------------------------------
 df.daily <-  
   dat.ips.clean %>% 
     group_by(falsto_name, year) %>% 
@@ -608,13 +642,13 @@ xy_sf_all <- xy_sf
 #rm(xy_sf)  # remove the old one
 
 xy_sf_all %>%  
- st_write(paste(out_path, "outSpatial/xy_all_3035.gpkg", sep = '/'), append=FALSE)
+ st_write(paste(output_path, "outSpatial/xy_all_3035.gpkg", sep = '/'), append=FALSE)
 
 xy_sf_fin %>%  
-  st_write(paste(out_path, "outSpatial/xy_fin_3035.gpkg", sep = '/'), append=FALSE)
+  st_write(paste(output_path, "outSpatial/xy_fin_3035.gpkg", sep = '/'), append=FALSE)
 
 # export RAW data
-# data.table::fwrite(dat, paste(out_path, 'outSpatial/dat.csv', sep = "/"))
+# data.table::fwrite(dat, paste(output_path, 'outSpatial/dat.csv', sep = "/"))
 
 
 
@@ -691,7 +725,7 @@ bav_sf <- de_sf %>%
   dplyr::filter(name_en == "Bavaria")
 
 bav_sf %>%  
-  st_write(paste(out_path, "outSpatial/bavaria.gpkg", sep = '/'), append=FALSE)
+  st_write(paste(output_path, "outSpatial/bavaria.gpkg", sep = '/'), append=FALSE)
 
 
 buch_df_f <- ips.year.sum_sf %>% 
