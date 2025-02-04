@@ -18,22 +18,17 @@
 
 rm(list=ls()) 
 
-
-source('myPaths.R')
-
 ### Libs -----------------------------------------------------------
 library(lubridate)
 library(dplyr)
+library(tidyr)
 library(sf)
 library(stringr)
 library(ggplot2)
 library(zoo)
 library(data.table)
 library(ggpubr)
-#library(ggpubr)   # add formulas using  stat_regline_equation(label.x=30000, label.y=40000)
 library(ggpmisc)  # add equation to plots smooth 
-
-
 
 # Colors libs 
 library(RColorBrewer)
@@ -41,27 +36,31 @@ library(scales)
 library(viridis)
 
 
-library(tidyr)
-
-
-
 ### get data -----------------------------------
-path = 'C:/Users/ge45lep/Documents/2022_BarkBeetles_Bavaria/rawData/Fwd__Borkenkäferforschung__Datentransfer'
-out_path = 'C:/Users/ge45lep/Documents/2022_BarkBeetles_Bavaria'
+# Set the root path dynamically (relative to the R project folder)
+root_path <- here::here()
+
+# Define relative paths for data and output
+raw_data_path <- file.path(root_path, "rawData", "Fwd__Borkenkäferforschung__Datentransfer")
+output_path <- file.path(raw_data_path)
+
+source('myVars.R')
+
+#path = 'rawData/Fwd__Borkenkäferforschung__Datentransfer'
+#out_path ='outSpatial' #'C:/Users/ge45lep/Documents/2022_BarkBeetles_Bavaria'
 
 # Load RData table
-load(paste(path, 'BoMo_2015_2021_Rohdaten.RData', sep = "/"))
-
+load(file.path(raw_data_path, "BoMo_2015_2021_Rohdaten.RData"))
 
 
 ## Read XY coordinates -----------------------------------------------------------
 # need to save the csv fil as a new file, otherwise it did not work
 # or use teh  version 3: now it worked with the original one! 
-xy <- read.table(paste(path, "BoMo_Fallenstandorte_Lage_Laufzeit.csv", sep = '/'), 
-                 dec=',', sep = ';', 
-                 header = T, quote="\"", 
-                 skip = 1, #header = T,
-                 skipNul = TRUE) # ,fileEncoding="UTF-16LE"
+
+xy <- read.csv2(paste(raw_data_path, "BoMo_Fallenstandorte_Lage_Laufzeit.csv", sep = '/'), 
+                dec = ',', header = TRUE, quote = "\"", 
+                skip = 1, fileEncoding = "UTF-16LE")
+
 
 #readLines(paste(path, "BoMo_Fallenstandorte_Lage_Laufzeit.csv", sep = '/'))
 # Investigate beetle data: Bavaria
