@@ -10,7 +10,20 @@ library(dplyr)
 library(ncf)
 library(ggplot2)
 
-dat <- read_csv("outTable/beetle_dynamic_indicators.csv")
+dat <- read_csv("outTable/beetle_dynamic_indicators.csv") # yearly level
+dat_doy <- read_csv("outTable/dat_DOY_counts_IPS.csv")
+
+# get uinique coordinates: if teh trap shifted, use average of teh coordinate per trap
+dat_xy <- dat %>% 
+  dplyr::select(trapID, x, y) %>% 
+  distinct() %>% 
+  group_by(trapID) %>% 
+  summarise(x = mean(x, na.rm =T),
+            y = mean(y, na.rm =T))
+
+# add coordinates to DOY data
+dat_doy <- dat_doy %>% 
+  left_join(dat_xy, by = join_by(trapID))
 #View(dat)
 
 str(dat)
@@ -119,7 +132,7 @@ ggplot(sum_ips_long, aes(x = year, y = sum_ips, color = trapID, group = trapID))
 
 
 # Investigate cross-correlation structure: dummy example ---------------------------------------------
-
+# ips counts and climate predictors ------------------------------------
 # Create a dummy dataset with spatial and temporal structure
 set.seed(123)
 dat <- expand.grid(trapID = 1:10, year = 2015:2021) %>%
