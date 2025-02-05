@@ -10,6 +10,8 @@ library(dplyr)
 library(ncf)
 library(ggplot2)
 
+source("my_functions.R")
+
 # Vars ----------
 drought_years <- c(2018, 2019, 2020)  # Add actual drought years
 
@@ -41,7 +43,8 @@ head(dat_doy)
 
 # Remove NA values for sum_ips
 dat_clean <- dat %>%
-  dplyr::filter(!is.na(sum_ips)) 
+  drop_na()
+  #dplyr::filter(!is.na(sum_ips)) 
 
 
 # get values on pair level, not on a trap level ------------
@@ -52,11 +55,6 @@ dat_pairID <- dat_clean %>%
 
 
 # what is teh average distance between two traps? 
-
-# Load necessary package
-library(stats)  # dist() function is from base R
-
-
 # Compute pairwise Euclidean distances
 distance_matrix <- as.matrix(dist(cbind(x_coords, y_coords), method = "euclidean"))
 
@@ -66,7 +64,7 @@ pairwise_distances <- distance_matrix[lower.tri(distance_matrix, diag = FALSE)]
 # Compute the average Euclidean distance
 average_distance <- mean(pairwise_distances)
 
-# 152 km between all trap pairs
+# 152 km for pairwise distance calculation between all trap pairs
 
 ###  get average nearest neighbour distance: -----------------
 
@@ -80,6 +78,7 @@ nearest_distances <- apply(distance_matrix, 1, min)
 average_nn_distance <- mean(nearest_distances)
 
 average_nn_distance
+# 23 km
 
 
 
@@ -181,7 +180,177 @@ corr_data_drought_avg %>%
 
 # run correlogram for all variables ---------------------------------------
 
+# Define a function to compute correlograms
+compute_correlogram <- function(data, variable, years, increment = 20000, resamp = 500) {
+  
+  # Initialize an empty list to store results
+  correlog_list <- list()
+  
+  # Loop through each year and compute correlograms
+  for (yr in years) {
+    subset_data <- data %>% dplyr::filter(year == yr)
+    
+    # Run correlogram analysis only if enough data points exist
+    if (nrow(subset_data) > 10) {
+      correlog_res <- correlog(
+        x = subset_data$x, 
+        y = subset_data$y, 
+        z = subset_data[[variable]],  # Use variable dynamically
+        increment = increment, 
+        resamp = resamp
+      )
+      
+      # Store results in a data frame
+      correlog_df <- data.frame(
+        variable = variable,
+        year = yr,
+        distance = correlog_res$mean.of.class,
+        correlation = correlog_res$correlation,
+        p_val = correlog_res$p
+      ) %>% 
+        mutate(row_number = 1:n(),
+               significant = ifelse(p_val < 0.05, "Yes", "No"))
+      
+      # Append to list
+      correlog_list[[paste(variable, yr, sep = "_")]] <- correlog_df
+    }
+  }
+  
+  # Combine results into a single dataframe
+  correlog_data <- bind_rows(correlog_list)
+  
+  return(correlog_data)
+}
 
+# Define variables to analyze
+variables <- c("sum_ips", "agg_doy", "peak_doy", "peak_diff") #,
+
+# Get unique years
+years <- unique(dat_clean$year)
+
+# Run the function for each variable and combine results
+correlog_results <- map_dfr(variables, ~ compute_correlogram(dat_clean, .x, years))
+
+
+# avegare values across bins: 
+
+corr_data_drought_avg <- correlog_results %>%
+  dplyr::filter(distance < 160000) %>% 
+  mutate(drought_status = ifelse(year %in% drought_years, "Drought", "Non-Drought")) %>% 
+  group_by(variable, drought_status, row_number) %>%
+  summarise(
+    year = mean(year, na.rm = TRUE),
+    distance = mean(distance, na.rm = TRUE),
+    mean_corr = mean(correlation, na.rm = TRUE),
+    sd_corr = sd(correlation, na.rm = TRUE),
+    lower_ci = quantile(correlation, 0.05, na.rm = TRUE),
+    upper_ci = quantile(correlation, 0.95, na.rm = TRUE),
+    p_val = mean(p_val, na.rm = TRUE),
+    .groups = "drop"
+  ) %>% 
+  mutate(significant = ifelse(p_val < 0.05, "Yes", "No"))
+
+
+# Define factor levels for variable ordering
+corr_data_drought_avg <- corr_data_drought_avg %>%
+  mutate(variable = factor(variable, levels = c("sum_ips", "agg_doy", 
+                                                "peak_doy", "peak_diff"),
+                           labels = c(lab_popul_level, 
+                                      lab_colonization_time, 
+                                      lab_peak_time, 
+                                      lab_peak_growth)))
+
+
+# Define the color scheme based on extracted colors
+color_palette <- c("Drought" = "#8b0000", "Non-Drought" = "#b0b0b0")  # Red & Gray
+fill_palette <- c("Drought" = "#8b0000", "Non-Drought" = "#b0b0b0")   # Same for ribbon shading
+
+# Plot using ggplot with facets for each variable
+windows()
+p_correlograms_ribbons <- corr_data_drought_avg %>% 
+  ggplot(aes(x = distance/1000, y = mean_corr, fill = drought_status)) +
+  #geom_ribbon(aes(ymin = mean_corr-sd_corr , 
+  #                ymax = mean_corr+sd_corr ), alpha = 0.2) +  # Confidence bands
+  geom_ribbon(aes(ymin = lower_ci, ymax = upper_ci), alpha = 0.2) +  # Confidence bands
+  geom_line(aes(color = drought_status), lwd = 0.8) +  # Line plot
+  geom_point(color = 'white', size = 1.5) +  # Points with size for significance
+  
+  geom_point(aes(shape = significant, color = drought_status),  size = 1) +  # Points with size for significance
+  # geom_point(aes(color = drought_status)) +  # Points with size for significance
+  scale_color_manual(values = color_palette) +  # Apply extracted colors to lines and points
+  scale_fill_manual(values = fill_palette) +  # Apply extracted colors to shaded CIs
+  scale_shape_manual(values = c("Yes" = 16, "No" = 1)) +  # 16 = closed circle, 1 = open circle 
+  geom_hline(yintercept = 0, lty = 'dashed', col = 'grey') +
+  facet_wrap(~ variable) +  # Facet by variable , scales = "free_y"
+  labs(title = "",
+       x = "Distance [km]",
+       y = "Spatial Correlation",
+       fill = "Drought Status",
+       color = "Drought Status",
+       size = "Significance") +
+  # theme_bw() +
+  #theme(legend.position = "bottom")  + # Move legend to the right
+  theme_classic(base_size = 8) +
+  theme(
+    aspect.ratio = 1, 
+    axis.ticks.y = element_line(),
+    axis.ticks.x = element_line(),
+    panel.grid.major = element_blank(), 
+    panel.grid.minor = element_blank(),
+    #panel.background = element_rect(fill = NA, colour = "black"),
+    #panel.background = element_rect(fill = "white", colour = "black"),
+    legend.position = "bottom",
+    #axis.title.y = element_blank(),
+    plot.title = element_text(size = 10) # Set the plot title size to 10
+  ) 
+p_correlograms_ribbons
+
+p_correlograms_lines <- corr_data_drought_avg %>% 
+  ggplot(aes(x = distance/1000, y = mean_corr, fill = drought_status)) +
+  #geom_ribbon(aes(ymin = mean_corr-sd_corr , 
+  #                ymax = mean_corr+sd_corr ), alpha = 0.2) +  # Confidence bands
+  #geom_ribbon(aes(ymin = lower_ci, ymax = upper_ci), alpha = 0.2) +  # Confidence bands
+  geom_line(aes(color = drought_status), lwd = 0.8) +  # Line plot
+  geom_point(color = 'white', size = 2) +  # Points with size for significance
+  
+   geom_point(aes(shape = significant, color = drought_status),  size = 1) +  # Points with size for significance
+ # geom_point(aes(color = drought_status)) +  # Points with size for significance
+  scale_color_manual(values = color_palette) +  # Apply extracted colors to lines and points
+  scale_fill_manual(values = fill_palette) +  # Apply extracted colors to shaded CIs
+  scale_shape_manual(values = c("Yes" = 16, "No" = 1)) +  # 16 = closed circle, 1 = open circle 
+  geom_hline(yintercept = 0, lty = 'dashed', col = 'grey') +
+   facet_wrap(~ variable) +  # Facet by variable , scales = "free_y"
+  labs(title = "",
+       x = "Distance [km]",
+       y = "Spatial Correlation",
+       fill = "Drought Status",
+       color = "Drought Status",
+       size = "Significance") +
+ # theme_bw() +
+  #theme(legend.position = "bottom")  + # Move legend to the right
+  theme_classic(base_size = 8) +
+  theme(
+    aspect.ratio = 1, 
+    axis.ticks.y = element_line(),
+    axis.ticks.x = element_line(),
+    panel.grid.major = element_blank(), 
+    panel.grid.minor = element_blank(),
+    #panel.background = element_rect(fill = NA, colour = "black"),
+    #panel.background = element_rect(fill = "white", colour = "black"),
+    legend.position = "bottom",
+    #axis.title.y = element_blank(),
+    plot.title = element_text(size = 10) # Set the plot title size to 10
+  ) 
+p_correlograms_lines
+p_correlograms_ribbons
+ggsave(filename = 'outFigs/p_correlograms_lines.png', plot = p_correlograms_lines, 
+       width = 5, height = 5, dpi = 300, 
+       bg = 'white')
+
+ggsave(filename = 'outFigs/p_correlograms_ribbons.png', 
+       plot = p_correlograms_ribbons, 
+       width = 5, height = 5, dpi = 300, 
+       bg = 'white')
 
 # pairwise correlation beetle-beetle: DOY -------------------------------------------
 
@@ -328,111 +497,7 @@ ggplot(ccf_results_per_year , aes(x = year, y = correlation, fill = year)) +
 
 
 
-# spatial cross correlation analysis:drought year level ---------------------------------------------
-
-# Define drought and non-drought years
-drought_years <- c(2018) # , 2019, 2020
-non_drought_years <- c(2016) #2015,   2017, 2021
-
-
-# Function to compute spatial correlations for a given period (drought or non-drought)
-compute_spatial_corr_for_period <- function(years_group, label) {
- # year = 2018
-  dat_subset <- 
-    dat_clean %>%
-    #dplyr::filter(year %in% drought_years)  %>% 
-    dplyr::filter(year %in% years_group) %>% #drought_years
-   # dplyr::select(year, pairID, sum_ips) %>%
-    dplyr::select(year, pairID, sum_ips) %>%
-    pivot_wider(names_from = pairID, values_from = sum_ips) %>%
-    unnest(cols = -year) 
-   # mutate(across(-year, ~ map(.x, ~ .x %>% unlist() %>% as.numeric()), .names = "{.col}")) #%>%
-    #pivot_wider(names_from = pairID, values_from = sum_ips) #%>%
-  #  drop_na()  # Remove rows with missing data
-  
-  pair_names <- colnames(dat_subset)[-1]  # Exclude 'year' column
-  
-  # Function to compute correlation for each trap pair
-  compute_corr <- function(trap1, trap2) {
-    cor(dat_subset[[trap1]], 
-        dat_subset[[trap2]], use = "complete.obs", method = "spearman")
-  }
-  
-  # Compute correlation for all trap pairs
-  spatial_corr_results <- expand.grid(pair1 = pair_names, pair2 = pair_names) %>%
-    dplyr::filter(pair1 != pair2) %>%
-    mutate(corr_value = map2_dbl(pair1, pair2, compute_corr),
-           period = label)  # Add drought vs. non-drought label
-  
-  return(spatial_corr_results)
-}
-
-# Compute correlations for drought and non-drought years
-spatial_corr_drought <- compute_spatial_corr_for_period(drought_years, "Drought")
-spatial_corr_non_drought <- compute_spatial_corr_for_period(non_drought_years, "Non-Drought")
-
-# Combine results
-spatial_corr_results <- bind_rows(spatial_corr_drought, spatial_corr_non_drought)
-
-# Create boxplot comparing drought vs. non-drought spatial synchronization
-ggplot(spatial_corr_results, aes(x = period, y = corr_value, fill = period)) +
-  geom_boxplot(notch = TRUE) +
-  labs(title = "Comparison of Spatial Synchronization: Drought vs. Non-Drought",
-       x = "Period",
-       y = "Spearman Correlation (Spatial Synchronization)") +
-  theme_minimal() +
-  theme(legend.position = "none")
 
 
 
 
-# include spatial correlation with distance? -------------------
-
-# Define drought and non-drought years
-drought_years <- c(2018, 2019, 2020)
-non_drought_years <- c(2015, 2016, 2017, 2021)
-
-# Compute mean values at the trap pair level
-dat_pairID <- dat_clean %>% 
-  group_by(pairID, year) %>%
-  summarise(across(where(is.numeric), mean, na.rm = TRUE))
-
-# Function to compute spatial correlations for a given period (drought or non-drought)
-compute_spatial_corr_for_period <- function(years_group, label) {
-  dat_subset <- dat_pairID %>%
-    filter(year %in% years_group) %>%
-    select(year, pairID, sum_ips) %>%
-    pivot_wider(names_from = pairID, values_from = sum_ips) %>%
-    drop_na()  # Remove rows with missing data
-  
-  pair_names <- colnames(dat_subset)[-1]  # Exclude 'year' column
-  
-  # Function to compute correlation for each trap pair
-  compute_corr <- function(trap1, trap2) {
-    cor(dat_subset[[trap1]], dat_subset[[trap2]], use = "complete.obs", method = "spearman")
-  }
-  
-  # Compute correlation for all trap pairs
-  spatial_corr_results <- expand.grid(pair1 = pair_names, pair2 = pair_names) %>%
-    filter(pair1 != pair2) %>%
-    mutate(corr_value = map2_dbl(pair1, pair2, compute_corr),
-           period = label)  # Add drought vs. non-drought label
-  
-  return(spatial_corr_results)
-}
-
-# Compute correlations for drought and non-drought years
-spatial_corr_drought <- compute_spatial_corr_for_period(drought_years, "Drought")
-spatial_corr_non_drought <- compute_spatial_corr_for_period(non_drought_years, "Non-Drought")
-
-# Combine results
-spatial_corr_results <- bind_rows(spatial_corr_drought, spatial_corr_non_drought)
-
-# Create boxplot comparing drought vs. non-drought spatial synchronization
-ggplot(spatial_corr_results, aes(x = period, y = corr_value, fill = period)) +
-  geom_boxplot(notch = TRUE) +
-  labs(title = "Comparison of Spatial Synchronization: Drought vs. Non-Drought",
-       x = "Period",
-       y = "Spearman Correlation (Spatial Synchronization)") +
-  theme_minimal() +
-  theme(legend.position = "none")
