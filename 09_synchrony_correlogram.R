@@ -265,7 +265,7 @@ corr_data_drought_avg <- corr_data_drought_avg %>%
 color_palette <- c("Drought" = "#8b0000", "Non-Drought" = "#b0b0b0")  # Red & Gray
 fill_palette <- c("Drought" = "#8b0000", "Non-Drought" = "#b0b0b0")   # Same for ribbon shading
 
-# Plot using ggplot with facets for each variable
+# Plot using ggplot with facets for each variable ------------------------------
 windows()
 p_correlograms_ribbons <- corr_data_drought_avg %>% 
   ggplot(aes(x = distance/1000, y = mean_corr, fill = drought_status)) +
