@@ -28,10 +28,3 @@ doy.end    = 273  # SEpt 30  304 # Oct 30
 veg.period = doy.start:doy.end
 
 
-# plot labels: 
-lab_popul_level       = "Population level [#]"
-lab_colonization_time = "Aggregation timing [DOY]"
-lab_peak_time         = "Peak swarming timing [DOY]"
-lab_peak_growth       = "Peak swarming intensity [#]"
-
-
