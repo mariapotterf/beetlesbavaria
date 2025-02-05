@@ -26,3 +26,12 @@ study_period          = 2015:2021  # for anomalies calculation
 doy.start  =  91 # April 1st# 60  # March 1st, 
 doy.end    = 273  # SEpt 30  304 # Oct 30
 veg.period = doy.start:doy.end
+
+
+# plot labels: 
+lab_popul_level       = "Population level [#]"
+lab_colonization_time = "Aggregation timing [DOY]"
+lab_peak_time         = "Peak swarming timing [DOY]"
+lab_peak_growth       = "Peak swarming intensity [#]"
+
+
