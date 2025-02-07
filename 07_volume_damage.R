@@ -1063,10 +1063,6 @@ plot(predict_data)
 # Extract residuals from the model
 residuals <- resid(mRS.previous1$lme, type = "normalized")
 
-# Plot ACF of the residuals
-acf(residuals, main="ACF of Model Residuals")
-pacf(residuals, main="ACF of Model Residuals")
-
 
 # the best model!
 fin.m.RS <- mRS.simpl
@@ -1144,8 +1140,8 @@ p_spagett_damage <- plot_data_with_average(df_full_years_to_spagetti_plot, #df_f
   #coord_cartesian(ylim = c(0, 40000)) #+
 
 (p_spagett_damage)
-range(df_full_years_to_spagetti_plot$damage_vol_k)
-hist(df_full_years_to_spagetti_plot$damage_vol_k)
+#range(df_full_years_to_spagetti_plot$damage_vol_k)
+#hist(df_full_years_to_spagetti_plot$damage_vol_k)
 
 
 p_spagett_RS<- plot_data_with_average(df_full_years_to_spagetti_plot, 
@@ -1197,6 +1193,16 @@ p0.damage <-
 (p0.damage)
 
 
+# Extract confidence intervals
+breakpoint_ci <- confint_breakpoints_damage
+lower_ci <- breakpoint_ci[1, "CI(95%).low"]  # Lower bound
+upper_ci <- breakpoint_ci[1, "CI(95%).up"]  # Upper bound
+
+# convert logs to counts
+est_breakpoint <- exp(confint(seg_model_log)[,"Est."]) /1000      # Estimated breakpoint
+lower_ci <- exp(lower_ci)/1000             # Lower CI
+upper_ci <- exp(upper_ci)/1000             # Upper CI
+
 
 
 p1.damage <- 
@@ -1209,7 +1215,11 @@ p1.damage <-
                      y_title = paste(lab_popul_level, '*1000'), 
                      #my_title = "Effect of Year on Sum IPS", 
                      x_annotate = 50, 
-                     lab_annotate = p_val_ips)
+                     lab_annotate = p_val_ips) +
+  geom_vline(xintercept = est_breakpoint, linetype = "dashed", color = "black") +
+   # Add grey shaded rectangle for CI
+  annotate("rect", xmin = lower_ci, xmax = upper_ci, ymin = -Inf, ymax = Inf, 
+           alpha = 0.2, fill = "grey")
 
 (p1.damage)
 
@@ -1250,6 +1260,15 @@ p0.RS <-
 
 (p0.RS)
 
+# Extract confidence intervals
+breakpoint_ci <- confint_breakpoints_RS
+lower_ci <- breakpoint_ci[1, "CI(95%).low"]  # Lower bound
+upper_ci <- breakpoint_ci[1, "CI(95%).up"]  # Upper bound
+
+# convert logs to counts
+est_breakpoint <- exp(breakpoint_ci[,"Est."]) /1000      # Estimated breakpoint
+lower_ci <- exp(lower_ci)/1000             # Lower CI
+upper_ci <- exp(upper_ci)/1000             # Upper CI
 
 
 
@@ -1263,7 +1282,12 @@ p1.RS <-
                      #y_title = paste(lab_popul_level, '*1000'), 
                      #my_title = "Effect of Year on Sum IPS", 
                      x_annotate = 40, 
-                     lab_annotate = p_val_ips)
+                     lab_annotate = p_val_ips) +
+  geom_vline(xintercept = est_breakpoint, linetype = "dashed", color = "black") +
+  # Add grey shaded rectangle for CI
+  annotate("rect", xmin = lower_ci, xmax = upper_ci, ymin = -Inf, ymax = Inf, 
+           alpha = 0.2, fill = "grey")
+
 
 (p1.RS)
 
@@ -1292,7 +1316,7 @@ ggsave(filename = 'outFigs/observation_vs_traps2.png',
 # create area plots: sum damage per year
 df_sum <- df_merged_RS_damage_district %>% 
   group_by(year) %>%
-  dplyr::summarise(RS_harvest = sum(RS_harvest, na.rm = T),
+  dplyr::summarise(#RS_harvest = sum(RS_harvest, na.rm = T),
                    RS_wind_beetle  = sum(RS_wind_beetle , na.rm = T),
                    damaged_volume_total_m3  = sum(damaged_volume_total_m3,na.rm = T ))
   
@@ -1358,8 +1382,8 @@ dmg_shp <-
   sf_simpled %>% 
     dplyr::select(c(forstrev_1)) %>% 
   full_join(df_damage_sum, by = c("forstrev_1" = "ID")) %>% 
-  dplyr::select(c(forstrev_1, sum_dmg,sum_RS)) %>% 
-  mutate(log_sum_dmg )
+  dplyr::select(c(forstrev_1, sum_dmg,sum_RS)) #%>% 
+  #mutate(log_sum_dmg )
   
   
 
@@ -1427,7 +1451,7 @@ map.damage <-
     geom_sf(data = bav_3035,
             color = 'black', fill = NA, lwd = 0.8)  +
     geom_sf(data = df_sum_ips_years_sf,
-            aes(color = sum_cap/1000), color = 'grey20', size = 2.5) +
+            aes(color = sum_cap/1000), color = 'grey20', size = 2.5, stroke = 1) +
     geom_sf(data = df_sum_ips_years_sf,
             aes(color = sum_cap/1000), size = 2) +
   scale_color_gradientn(
@@ -1463,7 +1487,7 @@ map.RS <-
   geom_sf(data = bav_3035,
           color = 'black', fill = NA, lwd = 0.8)  +
   geom_sf(data = df_sum_ips_years_sf,
-          aes(color = sum_cap/1000), color = 'grey20', size = 2.5) +
+          aes(color = sum_cap/1000), color = 'grey20', size = 2.5, stroke = 1) +
   geom_sf(data = df_sum_ips_years_sf,
           aes(color = sum_cap/1000), size = 2) +
   scale_color_gradientn(
@@ -1491,7 +1515,7 @@ windows(7,5)
 damage_maps <- ggarrange(map.damage, map.RS, align = 'hv')
 damage_maps
 
-ggsave(filename = 'outFigs/damage_maps.png', 
+ggsave(filename = 'outFigs/damage_maps_R1.png', 
        plot = damage_maps, width = 7, 
        height = 5, dpi = 300, bg = 'white')
 
