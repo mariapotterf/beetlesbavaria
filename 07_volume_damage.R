@@ -61,7 +61,7 @@ library(ggeffects)
 library(MASS)
 library(car)     # for VIF
 library(glmmTMB) # many families
-
+library(segmented)
 
 
 library(lme4) #pseudo-R2 and and mixed model functionality
@@ -302,7 +302,7 @@ ips_damage_pairID <- ips_damage_merge %>%
 
 # break point analysis: counts vs observed damage --------------------
 plot(damaged_volume_total_m3 ~ sum_ips, ips_damage_pairID)
-
+# try on raw data
 # Fit a mixed-effects model with sum_ips as a predictor
 base_model <- lmer(damaged_volume_total_m3 ~ sum_ips + (1 | pairID), data = ips_damage_pairID)
 
@@ -315,6 +315,7 @@ summary(seg_model)
 
 # Extract detected breakpoints
 breakpoints <- seg_model$psi
+(breakpoints)
 
 # Plot results
 ggplot(ips_damage_pairID, aes(x = sum_ips, y = damaged_volume_total_m3)) +
@@ -326,38 +327,66 @@ ggplot(ips_damage_pairID, aes(x = sum_ips, y = damaged_volume_total_m3)) +
        y = "Tree Damage (m³)") +
   theme_minimal()
 
+## try log transformation for minimise teh variability  ---------------
 
+# Log transformation (adding +1 to avoid log(0))
+ips_damage_pairID$log_sum_ips <- log(ips_damage_pairID$sum_ips + 1)
+ips_damage_pairID$log_damage_volume <- log(ips_damage_pairID$damaged_volume_total_m3 + 1)
 
-# multivariate analysis -------------------
-# Step 1: Fit a mixed-effects model with environmental covariates
-base_model <- lmer(damaged_volume_total_m3 ~ sum_ips + #veg_tmp +  spei12 + 
-                     lag1_damaged_volume_total + (1 | pairID), data = ips_damage_pairID)
-summary(base_model)
-# Step 2: Apply segmented regression to detect breakpoints for sum_ips
-seg_model <- segmented(lm(damaged_volume_total_m3 ~ sum_ips +#  veg_tmp + spei12 + 
-                            lag1_damaged_volume_total, data = ips_damage_pairID), 
-                       seg.Z = ~sum_ips, 
-                       psi = list(sum_ips = median(ips_damage_pairID$sum_ips, na.rm = TRUE)))  # Initial guess
+# Fit new segmented model
+lmer_model_log <- lmer(log_damage_volume ~ log_sum_ips +  (1 | pairID), data = ips_damage_pairID)
+seg_model_log <- segmented(lm(log_damage_volume ~ log_sum_ips, data = ips_damage_pairID), 
+                           seg.Z = ~log_sum_ips, 
+                           psi = list(log_sum_ips = median(ips_damage_pairID$log_sum_ips, na.rm = TRUE)))
 
-# Summarize results
-summary(seg_model)
+# Check model fit
+summary(seg_model_log)
 
-# Extract estimated breakpoint
-breakpoints <- seg_model$psi
+# Extract detected breakpoints
+breakpoints_log <- seg_model_log$psi
+(breakpoints_log)
 
-breakpoints
-
-# Step 3: Visualization of Breakpoint Analysis
-ggplot(ips_damage_pairID, aes(x = sum_ips, y = damaged_volume_total_m3)) +
+# Plot results
+ggplot(ips_damage_pairID, aes(x = log_sum_ips, y = log_damage_volume)) +
   geom_point(alpha = 0.5) +
-  geom_line(aes(y = predict(seg_model)), color = "red", size = 1.2) #+
+  #geom_line(aes(y = predict(seg_model)), color = "red", lwd = 1.2) +
   geom_vline(xintercept = breakpoints[, 2], linetype = "dashed", color = "blue") +
-  labs(title = "Multivariate Breakpoint Analysis: Trap Catch vs. Observed Damage",
-       subtitle = "Including Environmental Factors and Past Damage",
+  labs(title = "Breakpoint Analysis: Trap Catch vs. Observed Damage",
        x = "Trap Catch (Beetle Density)",
        y = "Tree Damage (m³)") +
   theme_minimal()
 
+
+
+AIC(seg_model_log, lmer_model_log, base_model, seg_model) #
+
+# teh log transormation is better, and inclreased my 
+#> (breakpoints_log)
+#Initial    Est.    St.Err
+#psi1.log_sum_ips      NA 9.75956 0.1369689
+
+## Interpret this number: 17.400 beetles/trap - m,ake it visible -----------------
+# Define threshold
+threshold <- exp(9.76)  # Convert log-scale breakpoint to original scale (~17,470)
+se_upper_threshold <- exp(9.76+0.13)
+se_lower_threshold <- exp(9.76-0.13)
+
+# Count records where sum_ips < threshold
+num_below_threshold <- sum(ips_damage_pairID$sum_ips < se_upper_threshold, na.rm = TRUE)
+
+# Display result
+num_below_threshold
+
+# Total number of records
+total_records <- nrow(ips_damage_pairID)
+
+# Percentage below threshold
+percent_below <- (num_below_threshold / total_records) * 100
+
+# Display result
+percent_below
+
+# 42% of records are below this threshold, 50% of teh upper line
 
 # Extract RS data   -------------------------------------------------------------
 # merge disturbance rasters together; check n of cells 
