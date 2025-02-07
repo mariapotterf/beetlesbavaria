@@ -250,7 +250,8 @@ ips_damage_merge <-
                  pest_species, tree_species, unit,
                  globalid )) %>% 
   dplyr::rename(trapID = falsto_name) %>% 
-   # add beetle dynamics variables 
+   
+  # add beetle dynamics variables 
   left_join(dat_dynamics) %>%
   group_by(trapID)  %>% 
   dplyr::arrange(year,.by_group = TRUE) %>% 
@@ -293,7 +294,7 @@ ips_damage_pairID <- ips_damage_merge %>%
 
 
 
-# Extract RS data   -------------------------------------------------------------
+### Prepare RS data   -------------------------------------------------------------
 # merge disturbance rasters together; check n of cells 
 ncell(grid_sel_ras)
 ncell(dist_year_crop)
@@ -354,7 +355,7 @@ df_RS <- df_disturb_sum %>%
 
 
 
-#### Merge RS with damage data -----------------------------------------------
+### Merge RS with damage data -----------------------------------------------
 df_merged_RS_damage_district <- df_RS %>% 
   full_join(df_damage, by = c("ID"   = "AELF_district_ID",
                               "year" = "Year")) %>% 
@@ -366,7 +367,7 @@ df_merged_RS_damage_district <- df_RS %>%
 
 
 
-#### MAP: correlations per XY: beetle counts vs damage volume --------------------
+#### MAP: correlations per XY: beetle counts vs damage volume 
 # df_cor_counts_damage <- 
 #   ips_damage_clean %>% 
 #   #dplyr::filter(!ID %in% c(0, 50104, 60613,62705)) %>% # exlude if there is missing data
@@ -379,14 +380,90 @@ df_merged_RS_damage_district <- df_RS %>%
 #                                         method = "spearman", use = "complete.obs"))
 
 
-#### MAP: correlations per district: beetle counts vs RS damage --------------------------
+#### MAP: correlations per district: beetle counts vs RS damage 
 # merge based on the district ID, subset the data as the traps do not cover the whole 
 # bavaria's districts
 
-# Final table: for RS and for damaged volume ----------------------------------
+# Final tables ------------------------------------------
 
-### Tab for spagetti plot -----------------
-#library(dplyr)
+# keep datasets separated, as RS has lower number of years
+# run analysis for trap vs RS damage
+# trap vs damaged volume
+df_merged_RS_damage_district_lag1 <- df_merged_RS_damage_district %>% 
+  group_by(ID) %>% 
+  dplyr::arrange(year, .by_group = TRUE) %>%
+  mutate(lag1_RS_wind_beetle  = lag(RS_wind_beetle , n = 1, default = NA)) #%>% 
+
+
+# check if correct:
+df_merged_RS_damage_district_lag1 %>% 
+  dplyr::filter(ID == 10504) %>% 
+  dplyr::select(ID, year, RS_wind_beetle , lag1_RS_wind_beetle) #%>% # sum_ips, sum_ips_lag1
+
+
+df_traps_RS_damage <-  
+  ips_damage_clean %>%  
+  left_join(df_merged_RS_damage_district_lag1,
+            by = c("forstrev_1" =   "ID",
+                   "year"       = "year",
+                   "damaged_volume_total_m3" = "damaged_volume_total_m3") ) %>% 
+  mutate(trapID = as.factor(trapID)) %>% 
+  group_by(pairID, year) %>% 
+  summarise(sum_ips    = mean(sum_ips, na.rm = T),
+            agg_doy    = mean(agg_doy, na.rm = T),
+            peak_doy   = mean(peak_doy, na.rm = T),
+            peak_diff  = mean(peak_diff, na.rm = T),
+            damage_vol = mean(damaged_volume_total_m3, na.rm = T),
+            lag1_damage_vol = mean(lag1_damaged_volume_total, na.rm = T),
+            x              = mean(x, na.rm = T),
+            y              = mean(y, na.rm = T),
+            RS_wind_beetle = mean(RS_wind_beetle, na.rm = T),
+            lag1_RS_wind_beetle = mean(lag1_RS_wind_beetle, na.rm = T),
+            sum_ips_lag1  = mean(sum_ips_lag1, na.rm = T),
+            sum_ips_lag2   = mean(sum_ips_lag2, na.rm = T),
+            log_sum_ips_lag1 = mean(log(sum_ips_lag1), na.rm = T),
+            log_sum_ips_lag2 = mean(log(sum_ips_lag2), na.rm = T),
+            agg_doy_lag1     = mean(agg_doy_lag1, na.rm = T),
+            agg_doy_lag2     = mean(agg_doy_lag2, na.rm = T),
+            peak_doy_lag1    = mean(peak_doy_lag1, na.rm = T),
+            peak_doy_lag2    = mean(peak_doy_lag2, na.rm = T),
+            peak_diff_lag1   = mean(peak_diff_lag1, na.rm = T),
+            peak_diff_lag2   = mean(peak_diff_lag2, na.rm = T)
+  ) %>%
+  ungroup(.) %>% 
+  mutate(log_sum_ips = log(sum_ips)) %>% 
+  mutate(f_year = as.factor(year))
+
+
+
+summary(df_traps_RS_damage)
+
+###### create final tables for RS data and volume data 
+
+fin_dat_damage <- df_traps_RS_damage %>% 
+  dplyr::select(-RS_wind_beetle) %>% 
+  na.omit() 
+
+dim(fin_dat_damage)
+
+
+fin_dat_damage %>% 
+  ggplot(aes(x = log(sum_ips),
+             y = log(damage_vol))) +
+  geom_point() +
+  geom_smooth()
+
+# do not remove outliers here 
+fin_dat_RS <- df_traps_RS_damage %>% 
+  na.omit()
+
+dim(fin_dat_RS)
+
+
+
+
+## Tab for spagetti plot -----------------
+
 
 df_full_years_to_spagetti_plot <-  
   ips_damage_merge %>%  
@@ -415,9 +492,10 @@ df_full_years_to_spagetti_plot$damage_vol_k <- ifelse(
                                                     0.01, 
                                                     df_full_years_to_spagetti_plot$damage_vol_k)
 
-# Break point analysis ------------------------------------------------------
+# Analysis ------------------------------------------------------------------
+## Break point analysis ------------------------------------------------------
 
-##counts vs damage --------------------
+### counts vs damage --------------------
 plot(damaged_volume_total_m3 ~ sum_ips, ips_damage_pairID)
 
 # try on raw data
@@ -509,14 +587,10 @@ percent_below
 
 
 
-## RS ---------------------------------------------------------- 
+### RS ---------------------------------------------------------- 
 
 df <- na.omit(df_full_years_to_spagetti_plot)
 
-
-# START !!!!
-
-# break point analysis: counts vs observed damage --------------------
 plot(RS_wind_beetle   ~ sum_ips, df)
 # try on raw data
 # Fit a mixed-effects model with sum_ips as a predictor
@@ -536,9 +610,9 @@ breakpoints <- seg_model$psi
 # Plot results
 ggplot(df, aes(x = sum_ips, y = RS_wind_beetle)) +
   geom_point(alpha = 0.5) +
-  geom_line(aes(y = predict(seg_model)), color = "red", lwd = 1.2) +
-  #geom_vline(xintercept = breakpoints[, 2], linetype = "dashed", color = "blue") +
-  labs(title = "Breakpoint Analysis: Trap Catch vs. Observed Damage",
+  #geom_line(aes(y = predict(seg_model)), color = "red", lwd = 1.2) +
+  geom_vline(xintercept = breakpoints[, 2], linetype = "dashed", color = "blue") +
+  labs(title = "Breakpoint Analysis: Trap Catch vs. RS Damage",
        x = "Trap Catch (Beetle Density)",
        y = "Tree Damage (m³)") +
   theme_minimal()
@@ -583,12 +657,12 @@ AIC(seg_model_log, lmer_model_log, base_model, seg_model) #
 
 ## Interpret this number: 17.400 beetles/trap - m,ake it visible -----------------
 # Define threshold
-threshold <- exp(9.76)  # Convert log-scale breakpoint to original scale (~17,470)
-se_upper_threshold <- exp(9.76+0.13)
-se_lower_threshold <- exp(9.76-0.13)
+threshold <- exp(9.43)  # Convert log-scale breakpoint to original scale (~17,470)
+se_upper_threshold <- exp(9.43+0.16)
+se_lower_threshold <- exp(9.43-0.16)
 
 # Count records where sum_ips < threshold
-num_below_threshold <- sum(ips_damage_pairID$sum_ips < se_upper_threshold, na.rm = TRUE)
+num_below_threshold <- sum(df$sum_ips < se_upper_threshold, na.rm = TRUE)
 
 # Display result
 num_below_threshold
@@ -603,92 +677,6 @@ percent_below <- (num_below_threshold / total_records) * 100
 percent_below
 
 # 42% of records are below this threshold, 50% of teh upper line
-
-
-
-
-# END !!!!
-
-
-
-
-
-
-
-# keep datasets separated, as RS has lower number of years
-# run analysis for trap vs RS damage
-# trap vs damaged volume
-df_merged_RS_damage_district_lag1 <- df_merged_RS_damage_district %>% 
-  group_by(ID) %>% 
-  dplyr::arrange(year, .by_group = TRUE) %>%
-  mutate(lag1_RS_wind_beetle  = lag(RS_wind_beetle , n = 1, default = NA)) #%>% 
-  
-
-# check if correct:
-df_merged_RS_damage_district_lag1 %>% 
-  dplyr::filter(ID == 10504) %>% 
-  dplyr::select(ID, year, RS_wind_beetle , lag1_RS_wind_beetle) #%>% # sum_ips, sum_ips_lag1
-
-
-df_traps_RS_damage <-  
-  ips_damage_clean %>%  
-  left_join(df_merged_RS_damage_district_lag1,
-             by = c("forstrev_1" =   "ID",
-                    "year"       = "year",
-                    "damaged_volume_total_m3" = "damaged_volume_total_m3") ) %>% 
-  mutate(trapID = as.factor(trapID)) %>% 
-  group_by(pairID, year) %>% 
- summarise(sum_ips    = mean(sum_ips, na.rm = T),
-           agg_doy    = mean(agg_doy, na.rm = T),
-           peak_doy   = mean(peak_doy, na.rm = T),
-           peak_diff  = mean(peak_diff, na.rm = T),
-           damage_vol = mean(damaged_volume_total_m3, na.rm = T),
-           lag1_damage_vol = mean(lag1_damaged_volume_total, na.rm = T),
-           x              = mean(x, na.rm = T),
-           y              = mean(y, na.rm = T),
-           RS_wind_beetle = mean(RS_wind_beetle, na.rm = T),
-           lag1_RS_wind_beetle = mean(lag1_RS_wind_beetle, na.rm = T),
-            sum_ips_lag1  = mean(sum_ips_lag1, na.rm = T),
-           sum_ips_lag2   = mean(sum_ips_lag2, na.rm = T),
-           log_sum_ips_lag1 = mean(log(sum_ips_lag1), na.rm = T),
-           log_sum_ips_lag2 = mean(log(sum_ips_lag2), na.rm = T),
-           agg_doy_lag1     = mean(agg_doy_lag1, na.rm = T),
-           agg_doy_lag2     = mean(agg_doy_lag2, na.rm = T),
-           peak_doy_lag1    = mean(peak_doy_lag1, na.rm = T),
-           peak_doy_lag2    = mean(peak_doy_lag2, na.rm = T),
-           peak_diff_lag1   = mean(peak_diff_lag1, na.rm = T),
-           peak_diff_lag2   = mean(peak_diff_lag2, na.rm = T)
-           ) %>%
- ungroup(.) %>% 
- mutate(log_sum_ips = log(sum_ips)) %>% 
-  mutate(f_year = as.factor(year))
-  
-
-
-summary(df_traps_RS_damage)
-
-###### create final tables for RS data and volume data 
-
-fin_dat_damage <- df_traps_RS_damage %>% 
-  dplyr::select(-RS_wind_beetle) %>% 
-  na.omit() 
-
-dim(fin_dat_damage)
-
-
-fin_dat_damage %>% 
-  ggplot(aes(x = log(sum_ips),
-             y = log(damage_vol))) +
-  geom_point() +
-  geom_smooth()
-
-# do not remove outliers here
-
-
-fin_dat_RS <- df_traps_RS_damage %>% 
-  na.omit()
-
-dim(fin_dat_RS)
 
 
 
