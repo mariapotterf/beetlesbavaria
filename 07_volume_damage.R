@@ -32,16 +32,12 @@ rm(list=ls())
 
 # Libs --------------------------------------------------------------------------
 library(dplyr)
-
 library(sf)
 library(raster)
 library(terra)
-
-
 library(data.table)
 library(ggplot2)
 library(ggpubr)
-#library(ggspatvector)
 
 library(lubridate)
 library(fasterize)
@@ -61,7 +57,7 @@ library(ggeffects)
 library(MASS)
 library(car)     # for VIF
 library(glmmTMB) # many families
-library(segmented)
+library(segmented)  # for breakpoint analysis 
 
 
 library(lme4) #pseudo-R2 and and mixed model functionality
@@ -83,14 +79,13 @@ library(mgcViz)
 library(lme4)
 library(gratia)
 #library(knitr)   # for table outputs
-
-
-
 library(stringr) 
 
 
 
 # Data --------------------------------------------------------------------------
+
+## Input data ----------------------------------------------------
 ### read beetle data 
 # load cleaned data
 load("outData/ips_counts.Rdata")
@@ -112,7 +107,7 @@ source("my_functions.R")
 
 
 
-### read tree damage volume & districts shp 
+### Tree damage volume & districts shp  ---------------------
 sf_districts <-  st_read('rawData/damage_volume/AELF_Revier_20240502/AELF_Revier_bis20240424_LWF_20240502.shp')
 df_damage    <-  fread('rawData/damage_volume/Bavaria_TreeDamageData_IpsTypographus_2015-2021.csv', dec = ',')
 
@@ -126,12 +121,8 @@ crs(disturb_year) <- "EPSG:3035"
 sf_ID   <- unique(sf_districts$forstrev_1)  # 336 districts numbers
 df_ID   <- unique(df_damage$AELF_district_ID)  # 337 district numbers
 
-#length(sf_ID)
-#length(df_ID)
 
-
-
-#### Process beetle sums/year/trap --------------------------------------------
+### Trap catches: sums/year/trap --------------------------------------------
 # add beetle counts to trap locations per year 
 sum_ips <- 
   dat.ips.clean %>% 
@@ -175,11 +166,10 @@ plot(v_sum_ips_simpl, add = T, col = 'red')
 identical(crs(v_districts_simpl), crs(v_sum_ips_simpl))
 
 
-# Read rasters ------------------------------------------------------------
+### Tree disturbances rasters ------------------------------------------------------------
 # there is an aditiona row in the damage data with district ID 0 - I can remove that
 
-
-###### crop  rasters to Bavaria --------------------------
+#crop  rasters to Bavaria 
 dist_year_crop <- terra::crop(disturb_year, v_districts_simpl)
 dist_type_crop <- terra::crop(disturb_type, v_districts_simpl)
 forest_crop    <- terra::crop(forest,       v_districts_simpl)
@@ -189,7 +179,7 @@ crs(disturb_type) <- crs(dist_year_crop)
 crs(forest_crop)  <- crs(dist_year_crop)
 
 
-### Process department shp and extract revier ID  -------------------------------
+# Process department shp and extract revier ID 
 sf_simpled <- st_as_sf(v_districts_simpl) #st_simplify(sf_districts_trans, dTolerance = 20, preserveTopology = TRUE)
 
 identical(crs(sf_simpled), crs(v_districts_simpl))
@@ -242,7 +232,9 @@ district_ID <- terra::extract(rast(grid_sel_ras),
                             #  vect(sum_ips_sf_trans), 
                               df = TRUE, bind = TRUE )
 
-#### Link beetle counts vs damage volume per department -------------------------------------------------------
+
+## Processing -----------------------------------------------------
+### Link beetle counts vs damage volume per department -------------------------------------------------------
 ips_damage_district <- district_ID %>% 
   as.data.frame() %>% 
   dplyr::rename(., forstrev_1 = layer)
@@ -300,8 +292,134 @@ ips_damage_pairID <- ips_damage_merge %>%
   mutate(across(where(is.numeric), ~ifelse(is.nan(.), NA, .))) 
 
 
-# break point analysis: counts vs observed damage --------------------
+
+# Extract RS data   -------------------------------------------------------------
+# merge disturbance rasters together; check n of cells 
+ncell(grid_sel_ras)
+ncell(dist_year_crop)
+ncell(dist_type_crop)
+ncell(forest_crop)
+
+
+# extract values:
+ID     = terra::values(grid_sel_ras)
+year   = terra::values(dist_year_crop, mat = F)
+type   = terra::values(dist_type_crop, mat = F)
+forest = terra::values(forest_crop, mat = F)
+
+# merge into one df
+df_disturb <- data.frame(ID = ID,
+                         year = year,
+                         type = type,
+                         forest = forest
+                         ) %>% 
+  dplyr::filter(!is.na(ID))
+
+# What to get: per district: how many cells, forest, disturbances, harvest& bark beetles
+df_forest <- df_disturb %>% 
+  group_by(ID) %>%
+  dplyr::summarize(forest86 = sum(forest == 1, na.rm = TRUE),
+                   area_cells = n())
+
+# RS get disturbances and type 2015-2020
+df_disturb_sum <- 
+  df_disturb %>% 
+  dplyr::filter(year %in% 2015:2021) %>% 
+  dplyr::select(!forest) %>% 
+  dplyr::filter(!is.nan(type)) %>%        # Exclude rows where 'type' is NaN
+  group_by(ID, year, type) %>% 
+    dplyr::summarize(count = n(), .groups = "drop") %>% 
+  pivot_wider(
+    names_from = type,          # Create new column names from the 'type' values
+    values_from = count,        # Fill these new columns with values from 'count'
+    names_prefix = "type_",     # Optional: prefix for new column names for clarity
+    values_fill = list(count = 0)  # Fill missing values with 0
+  )
+
+
+# merge forest and disturbances from RS data per ASFL districts
+df_RS <- df_disturb_sum %>% 
+  full_join(df_forest, by = join_by(ID)) %>% 
+  dplyr::rename(RS_wind_beetle = type_1,
+                RS_fire    = type_2,
+                RS_harvest = type_3) %>% 
+  mutate(RS_sum = RS_wind_beetle + RS_fire +RS_harvest) %>% 
+  dplyr::select(c(ID,  year,  RS_wind_beetle)) %>% 
+  group_by(ID)
+  
+
+# type_1 = wind & beetles
+# type_2 = fire
+# type_3 = harvest
+
+
+
+#### Merge RS with damage data -----------------------------------------------
+df_merged_RS_damage_district <- df_RS %>% 
+  full_join(df_damage, by = c("ID"   = "AELF_district_ID",
+                              "year" = "Year")) %>% 
+  mutate(AELF_name = str_replace_all(AELF_name, "[^A-Za-z0-9\\s]", ""),
+         AELF_district_name  = str_replace_all(AELF_district_name , "[^A-Za-z0-9\\s]", ""))  %>% 
+  dplyr::select(!c( AELF_ID, tree_species, unit, pest_species ))# %>%  # keep: AELF_district_name, AELF_name,
+
+
+
+
+
+#### MAP: correlations per XY: beetle counts vs damage volume --------------------
+# df_cor_counts_damage <- 
+#   ips_damage_clean %>% 
+#   #dplyr::filter(!ID %in% c(0, 50104, 60613,62705)) %>% # exlude if there is missing data
+#   group_by(trapID,forstrev_1        ) %>% 
+#   dplyr::summarize(spearm_cor_lag0 = cor(damaged_volume_total_m3, sum_ips, 
+#                                            method = "spearman", use = "complete.obs"),
+#                    spearm_cor_lag1 = cor(damaged_volume_total_m3, sum_ips_lag1 , 
+#                                             method = "spearman", use = "complete.obs"),
+#                    spearm_cor_lag2 = cor(damaged_volume_total_m3, sum_ips_lag2 , 
+#                                         method = "spearman", use = "complete.obs"))
+
+
+#### MAP: correlations per district: beetle counts vs RS damage --------------------------
+# merge based on the district ID, subset the data as the traps do not cover the whole 
+# bavaria's districts
+
+# Final table: for RS and for damaged volume ----------------------------------
+
+### Tab for spagetti plot -----------------
+#library(dplyr)
+
+df_full_years_to_spagetti_plot <-  
+  ips_damage_merge %>%  
+  left_join(df_merged_RS_damage_district,
+            by = c("forstrev_1" =   "ID",
+                   "year"       = "year",
+                   "damaged_volume_total_m3" = "damaged_volume_total_m3") )  %>% 
+  mutate(trapID = as.factor(trapID)) %>% 
+  group_by(pairID, year) %>% 
+  dplyr::summarise(sum_ips    = mean(sum_ips, na.rm = T),
+            agg_doy    = mean(agg_doy, na.rm = T),
+            peak_doy   = mean(peak_doy, na.rm = T),
+            peak_diff  = mean(peak_diff, na.rm = T),
+            damage_vol = mean(damaged_volume_total_m3, na.rm = T),
+            RS_wind_beetle = mean(RS_wind_beetle, na.rm = T)#,
+  ) %>%
+  ungroup(.) %>% 
+  mutate(#log_sum_ips = log(sum_ips),
+         RS_wind_beetle_ha = RS_wind_beetle*0.09,  # update values for plotting
+         damage_vol_k = damage_vol/1000) #%>% 
+#  dplyr::filter(!pairID %in% c('Peiting', "Eschenbach_idOPf"))
+
+# Replace or filter out zero values before plotting
+df_full_years_to_spagetti_plot$damage_vol_k <- ifelse(
+  df_full_years_to_spagetti_plot$damage_vol_k <= 0.01, 
+                                                    0.01, 
+                                                    df_full_years_to_spagetti_plot$damage_vol_k)
+
+# Break point analysis ------------------------------------------------------
+
+##counts vs damage --------------------
 plot(damaged_volume_total_m3 ~ sum_ips, ips_damage_pairID)
+
 # try on raw data
 # Fit a mixed-effects model with sum_ips as a predictor
 base_model <- lmer(damaged_volume_total_m3 ~ sum_ips + (1 | pairID), data = ips_damage_pairID)
@@ -388,197 +506,111 @@ percent_below
 
 # 42% of records are below this 17.400 threshold, 50% of teh upper line (19.000)
 
-# Extract RS data   -------------------------------------------------------------
-# merge disturbance rasters together; check n of cells 
-ncell(grid_sel_ras)
-ncell(dist_year_crop)
-ncell(dist_type_crop)
-ncell(forest_crop)
-
-
-# extract values:
-ID     = terra::values(grid_sel_ras)
-year   = terra::values(dist_year_crop, mat = F)
-type   = terra::values(dist_type_crop, mat = F)
-forest = terra::values(forest_crop, mat = F)
-
-# merge into one df
-df_disturb <- data.frame(ID = ID,
-                         year = year,
-                         type = type,
-                         forest = forest
-                         ) %>% 
-  dplyr::filter(!is.na(ID))
-
-# What to get: per district: how many cells, forest, disturbances, harvest& bark beetles
-df_forest <- df_disturb %>% 
-  group_by(ID) %>%
-  dplyr::summarize(forest86 = sum(forest == 1, na.rm = TRUE),
-                   area_cells = n())
-
-# RS get disturbances and type 2015-2020
-df_disturb_sum <- 
-  df_disturb %>% 
-  dplyr::filter(year %in% 2015:2021) %>% 
-  dplyr::select(!forest) %>% 
-  dplyr::filter(!is.nan(type)) %>%        # Exclude rows where 'type' is NaN
-  group_by(ID, year, type) %>% 
-    dplyr::summarize(count = n(), .groups = "drop") %>% 
-  pivot_wider(
-    names_from = type,          # Create new column names from the 'type' values
-    values_from = count,        # Fill these new columns with values from 'count'
-    names_prefix = "type_",     # Optional: prefix for new column names for clarity
-    values_fill = list(count = 0)  # Fill missing values with 0
-  )
-
-
-# merge forest and disturbances from RS data per ASFL districts
-df_RS <- df_disturb_sum %>% 
-  full_join(df_forest, by = join_by(ID)) %>% 
-  dplyr::rename(RS_wind_beetle = type_1,
-                RS_fire    = type_2,
-                RS_harvest = type_3) %>% 
-  mutate(RS_sum = RS_wind_beetle + RS_fire +RS_harvest) %>% 
-  dplyr::select(c(ID,  year,  RS_wind_beetle)) %>% 
-  group_by(ID)
-  
-
-# type_1 = wind & beetles
-# type_2 = fire
-# type_3 = harvest
 
 
 
-#### Merge RS with damage data -----------------------------------------------
-df_all <- df_RS %>% 
-  full_join(df_damage, by = c("ID"   = "AELF_district_ID",
-                              "year" = "Year")) %>% 
- # dplyr::filter(year %in% 2015:2020) %>% 
-  #dplyr::filter(RS_wind_beetle <2000) %>% 
-  dplyr::select(!c( AELF_ID, tree_species, unit, pest_species ))# %>%  # keep: AELF_district_name, AELF_name,
+## RS ---------------------------------------------------------- 
+
+df <- na.omit(df_full_years_to_spagetti_plot)
+
+
+# START !!!!
+
+# break point analysis: counts vs observed damage --------------------
+plot(RS_wind_beetle   ~ sum_ips, df)
+# try on raw data
+# Fit a mixed-effects model with sum_ips as a predictor
+base_model <- lmer(RS_wind_beetle ~ sum_ips + (1 | pairID), data = df)
+
+# Apply segmented regression to detect breakpoints
+seg_model <- segmented(lm(RS_wind_beetle ~ sum_ips, data = df), 
+                       seg.Z = ~sum_ips, psi = list(sum_ips = median(df$sum_ips, na.rm = TRUE)))  # Initial guess
+
+# Summarize results
+summary(seg_model)
+
+# Extract detected breakpoints
+breakpoints <- seg_model$psi
+(breakpoints)
+
+# Plot results
+ggplot(df, aes(x = sum_ips, y = RS_wind_beetle)) +
+  geom_point(alpha = 0.5) +
+  geom_line(aes(y = predict(seg_model)), color = "red", lwd = 1.2) +
+  #geom_vline(xintercept = breakpoints[, 2], linetype = "dashed", color = "blue") +
+  labs(title = "Breakpoint Analysis: Trap Catch vs. Observed Damage",
+       x = "Trap Catch (Beetle Density)",
+       y = "Tree Damage (m³)") +
+  theme_minimal()
+
+## try log transformation for minimise teh variability  ---------------
+
+# Log transformation (adding +1 to avoid log(0))
+df$log_sum_ips        <- log(df$sum_ips + 1)
+df$log_RS_wind_beetle <- log(df$RS_wind_beetle + 1)
+
+# Fit new segmented model
+lmer_model_log <- lmer(log_RS_wind_beetle ~ log_sum_ips +  (1 | pairID), data = df)
+seg_model_log <- segmented(lm(log_RS_wind_beetle ~ log_sum_ips, data = df), 
+                           seg.Z = ~log_sum_ips, 
+                           psi = list(log_sum_ips = median(df$log_sum_ips, na.rm = TRUE)))
+
+# Check model fit
+summary(seg_model_log)
+
+# Extract detected breakpoints
+breakpoints_log <- seg_model_log$psi
+(breakpoints_log)
+
+# Plot results
+ggplot(df, aes(x = log_sum_ips, y = log_RS_wind_beetle)) +
+  geom_point(alpha = 0.5) +
+  #geom_line(aes(y = predict(seg_model)), color = "red", lwd = 1.2) +
+  geom_vline(xintercept = breakpoints_log[, 2], linetype = "dashed", color = "blue") +
+  labs(title = "Breakpoint Analysis: Trap Catch vs. Observed Damage",
+       x = "Trap Catch (Beetle Density)",
+       y = "Tree Damage (m³)") +
+  theme_minimal()
 
 
 
-# Get a summary table for year & per district --------------------------------------
+AIC(seg_model_log, lmer_model_log, base_model, seg_model) #
 
-# Represent results using quantiles, as they are skewed?
-#qntils = c(0, 0.25, 0.5, 0.75, 1)
-df_all %>% 
-  ungroup() %>% 
-  summarize(sum_volume = sum(damaged_volume_total_m3),
-            sum_RS = sum(RS_wind_beetle, na.rm = T)*0.09)
+# teh log transormation is better, and inclreased my 
+#> (breakpoints_log)
+#Initial    Est.    St.Err
+#psi1.log_sum_ips      NA 9.75956 0.1369689
 
-## data per years ----------------------------------------------------------------
-observation_mortality_year <- 
-  df_all %>% 
-  ungroup(.) %>% 
-  filter(year %in% 2015:2021) %>%
-    dplyr::select(ID, year, damaged_volume_total_m3, RS_wind_beetle) %>% 
-    dplyr::mutate(RS_wind_beetle = RS_wind_beetle*0.09) %>% # convert pixels to hectares
-    group_by(year) %>% 
-    dplyr::summarize(mean_dam   = mean(damaged_volume_total_m3  , na.rm = T),
-                     sd_dam     = sd(damaged_volume_total_m3, na.rm = T),
-                     mean_RS   = mean(RS_wind_beetle  , na.rm = T),
-                     sd_RS     = sd(RS_wind_beetle, na.rm = T)) %>% 
-  mutate(Field_volume       = stringr::str_glue("{round(mean_dam,1)}±{round(sd_dam,1)}"),
-         RS_area            = stringr::str_glue("{round(mean_RS,1)}±{round(sd_RS,1)}")) %>% 
-  dplyr::select(year, Field_volume, RS_area) 
+## Interpret this number: 17.400 beetles/trap - m,ake it visible -----------------
+# Define threshold
+threshold <- exp(9.76)  # Convert log-scale breakpoint to original scale (~17,470)
+se_upper_threshold <- exp(9.76+0.13)
+se_lower_threshold <- exp(9.76-0.13)
 
+# Count records where sum_ips < threshold
+num_below_threshold <- sum(ips_damage_pairID$sum_ips < se_upper_threshold, na.rm = TRUE)
 
-(observation_mortality_year)
+# Display result
+num_below_threshold
 
+# Total number of records
+total_records <- nrow(ips_damage_pairID)
 
-# Export as a nice table in word:
-sjPlot::tab_df(observation_mortality_year,
-               #               col.header = c(as.character(qntils), 'mean'),
-               show.rownames = F,
-               file="outTable/summary_out_observation_damage_year.doc",
-               digits = 0) 
+# Percentage below threshold
+percent_below <- (num_below_threshold / total_records) * 100
 
+# Display result
+percent_below
 
-## per drought years ---------------------------------------------
-observation_mortality_drought <- 
-  df_all %>% 
-  ungroup(.) %>% 
-  filter(year %in% 2015:2021) %>%
-  mutate(drought_status = ifelse(year %in% 2018:2020, "Hotter drought", "Other")) %>% 
-  dplyr::select(ID, drought_status, damaged_volume_total_m3, RS_wind_beetle) %>% 
-  dplyr::mutate(RS_wind_beetle = RS_wind_beetle*0.09) %>% # convert pixels to hectares
-  group_by(drought_status) %>% 
-  dplyr::summarize(mean_dam   = mean(damaged_volume_total_m3  , na.rm = T),
-                   sd_dam     = sd(damaged_volume_total_m3, na.rm = T),
-                   mean_RS   = mean(RS_wind_beetle  , na.rm = T),
-                   sd_RS     = sd(RS_wind_beetle, na.rm = T)) %>% 
-  mutate(Field_volume       = stringr::str_glue("{round(mean_dam,1)}±{round(sd_dam,1)}"),
-         RS_area            = stringr::str_glue("{round(mean_RS,1)}±{round(sd_RS,1)}")) %>% 
-  dplyr::select(drought_status, Field_volume, RS_area) 
-
-
-(observation_mortality_drought)
-
-
-# Export as a nice table in word:
-sjPlot::tab_df(observation_mortality_drought,
-               show.rownames = F,
-               file="outTable/summary_out_observation_mortality_drought.doc",
-               digits = 0) 
+# 42% of records are below this threshold, 50% of teh upper line
 
 
 
 
+# END !!!!
 
 
 
-
-
-#### MAP: correlations per XY: beetle counts vs damage volume --------------------
-# df_cor_counts_damage <- 
-#   ips_damage_clean %>% 
-#   #dplyr::filter(!ID %in% c(0, 50104, 60613,62705)) %>% # exlude if there is missing data
-#   group_by(trapID,forstrev_1        ) %>% 
-#   dplyr::summarize(spearm_cor_lag0 = cor(damaged_volume_total_m3, sum_ips, 
-#                                            method = "spearman", use = "complete.obs"),
-#                    spearm_cor_lag1 = cor(damaged_volume_total_m3, sum_ips_lag1 , 
-#                                             method = "spearman", use = "complete.obs"),
-#                    spearm_cor_lag2 = cor(damaged_volume_total_m3, sum_ips_lag2 , 
-#                                         method = "spearman", use = "complete.obs"))
-
-
-#### MAP: correlations per district: beetle counts vs RS damage --------------------------
-# merge based on the district ID, subset the data as the traps do not cover the whole 
-# bavaria's districts
-
-# Final table: for RS and for damaged volume ----------------------------------
-
-### Tab for spagetti plot -----------------
-#library(dplyr)
-
-df_full_years_to_spagetti_plot <-  
-  ips_damage_merge %>%  
-  left_join(df_all,
-            by = c("forstrev_1" =   "ID",
-                   "year"       = "year",
-                   "damaged_volume_total_m3" = "damaged_volume_total_m3") )  %>% 
-  mutate(trapID = as.factor(trapID)) %>% 
-  group_by(pairID, year) %>% 
-  dplyr::summarise(sum_ips    = mean(sum_ips, na.rm = T),
-            agg_doy    = mean(agg_doy, na.rm = T),
-            peak_doy   = mean(peak_doy, na.rm = T),
-            peak_diff  = mean(peak_diff, na.rm = T),
-            damage_vol = mean(damaged_volume_total_m3, na.rm = T),
-            RS_wind_beetle = mean(RS_wind_beetle, na.rm = T)#,
-  ) %>%
-  ungroup(.) %>% 
-  mutate(#log_sum_ips = log(sum_ips),
-         RS_wind_beetle_ha = RS_wind_beetle*0.09,  # update values for plotting
-         damage_vol_k = damage_vol/1000) #%>% 
-#  dplyr::filter(!pairID %in% c('Peiting', "Eschenbach_idOPf"))
-
-# Replace or filter out zero values before plotting
-df_full_years_to_spagetti_plot$damage_vol_k <- ifelse(
-  df_full_years_to_spagetti_plot$damage_vol_k <= 0.01, 
-                                                    0.01, 
-                                                    df_full_years_to_spagetti_plot$damage_vol_k)
 
 
 
@@ -586,21 +618,21 @@ df_full_years_to_spagetti_plot$damage_vol_k <- ifelse(
 # keep datasets separated, as RS has lower number of years
 # run analysis for trap vs RS damage
 # trap vs damaged volume
-df_all_lag1 <- df_all %>% 
+df_merged_RS_damage_district_lag1 <- df_merged_RS_damage_district %>% 
   group_by(ID) %>% 
   dplyr::arrange(year, .by_group = TRUE) %>%
   mutate(lag1_RS_wind_beetle  = lag(RS_wind_beetle , n = 1, default = NA)) #%>% 
   
 
 # check if correct:
-df_all_lag1 %>% 
+df_merged_RS_damage_district_lag1 %>% 
   dplyr::filter(ID == 10504) %>% 
   dplyr::select(ID, year, RS_wind_beetle , lag1_RS_wind_beetle) #%>% # sum_ips, sum_ips_lag1
 
 
 df_traps_RS_damage <-  
   ips_damage_clean %>%  
-  left_join(df_all_lag1,
+  left_join(df_merged_RS_damage_district_lag1,
              by = c("forstrev_1" =   "ID",
                     "year"       = "year",
                     "damaged_volume_total_m3" = "damaged_volume_total_m3") ) %>% 
@@ -949,8 +981,7 @@ pacf(residuals, main="ACF of Model Residuals")
 
 # RS model: play with model diagnostics ---------------------------------------
 
-
-
+# filetr outliers, as this likely catches teh windthrow and not beetles
 fin_dat_RS_clean <- fin_dat_RS %>% 
   dplyr::filter(RS_wind_beetle <1700) %>% 
   dplyr::filter(lag1_RS_wind_beetle <1700)
@@ -1034,6 +1065,7 @@ pacf(residuals, main="ACF of Model Residuals")
 # the best model!
 fin.m.RS <- mRS.simpl
 
+# export models tables
 sjPlot::tab_model(fin.m.RS,     file = "outTable/model_trap_RS.doc")
 sjPlot::tab_model(fin.m.damage, file = "outTable/model_trap_damage.doc")
 
@@ -1252,7 +1284,7 @@ ggsave(filename = 'outFigs/observation_vs_traps2.png',
 ##### quick plotting -----------------------------------------------
 
 # create area plots: sum damage per year
-df_sum <- df_all %>% 
+df_sum <- df_merged_RS_damage_district %>% 
   group_by(year) %>%
   dplyr::summarise(RS_harvest = sum(RS_harvest, na.rm = T),
                    RS_wind_beetle  = sum(RS_wind_beetle , na.rm = T),
@@ -1282,7 +1314,7 @@ ggarrange(p1, p2, nrow = 1, ncol = 2, align = 'hv', labels = c('[a]', '[b]'))
 
 
 ## Correlate between RS and volume data m3 ---------------------------------------------------
-df_cor <- df_all %>% 
+df_cor <- df_merged_RS_damage_district %>% 
   dplyr::filter(!ID %in% c(0, 50104, 60613,62705)) %>% # exlude if there is missing data
   group_by(ID) %>% 
   dplyr::summarize(spearm_cor_beetle = cor(damaged_volume_total_m3, RS_wind_beetle, 
@@ -1291,21 +1323,21 @@ df_cor <- df_all %>%
 
 summary(df_cor)
 
-df_all %>% 
+df_merged_RS_damage_district %>% 
   dplyr::filter(RS_wind_beetle < 10000) %>% 
   ggplot(aes(x = RS_wind_beetle, y = damaged_volume_total_m3)) + 
   geom_point() + 
   geom_smooth(method = "lm") + 
-  stat_cor(method = "pearson", label.x = 3000, label.y = max(df_all$damaged_volume_total_m3, na.rm = TRUE))
+  stat_cor(method = "pearson", label.x = 3000, label.y = max(df_merged_RS_damage_district$damaged_volume_total_m3, na.rm = TRUE))
 
 
 cor_shp <- sf_simpled %>% 
   left_join(df_cor, by = c("forstrev_1" = "ID"))
 
 all_shp <- sf_simpled %>% 
-  left_join(df_all, by = c("forstrev_1" = "ID"))
+  left_join(df_merged_RS_damage_district, by = c("forstrev_1" = "ID"))
 
-df_damage_sum <- df_all %>% 
+df_damage_sum <- df_merged_RS_damage_district %>% 
   group_by(ID) %>% 
   summarise(sum_dmg  =sum(damaged_volume_total_m3, na.rm = T),
             sum_RS  =sum(RS_wind_beetle, na.rm = T)) %>% 
@@ -1314,7 +1346,7 @@ df_damage_sum <- df_all %>%
 
 # add data to the full geometry to run teh intersection with the trap data
 #all_shp_complex <- sf_districts_trans %>% 
-#  left_join(df_all, by = c("forstrev_1" = "ID"))
+#  left_join(df_merged_RS_damage_district, by = c("forstrev_1" = "ID"))
 
 dmg_shp <- 
   sf_simpled %>% 
@@ -1610,12 +1642,78 @@ p2<-ggplot(all_shp) +
 ggarrange(p1, p2, labels = c('[a] Damaged volume', '[b] RS Damaged area'))
 
 # plot gam between damage and RS beetle ------------------------------------------
-df_all %>% 
+df_merged_RS_damage_district %>% 
   ggplot(aes(x = log(RS_wind_beetle +1) ,
              y = log(damaged_volume_total_m3) )) +
   geom_point() +
   geom_smooth() + 
   facet_wrap(.~year, scales = 'free')
+
+
+# Summary tables ---------------------------------
+
+## for year & per district --------------------------------------
+
+# Represent results using quantiles, as they are skewed?
+#qntils = c(0, 0.25, 0.5, 0.75, 1)
+df_merged_RS_damage_district %>% 
+  ungroup() %>% 
+  summarize(sum_volume = sum(damaged_volume_total_m3),
+            sum_RS = sum(RS_wind_beetle, na.rm = T)*0.09)
+
+## data per years
+observation_mortality_year <- 
+  df_merged_RS_damage_district %>% 
+  ungroup(.) %>% 
+  filter(year %in% 2015:2021) %>%
+  dplyr::select(ID, year, damaged_volume_total_m3, RS_wind_beetle) %>% 
+  dplyr::mutate(RS_wind_beetle = RS_wind_beetle*0.09) %>% # convert pixels to hectares
+  group_by(year) %>% 
+  dplyr::summarize(mean_dam   = mean(damaged_volume_total_m3  , na.rm = T),
+                   sd_dam     = sd(damaged_volume_total_m3, na.rm = T),
+                   mean_RS   = mean(RS_wind_beetle  , na.rm = T),
+                   sd_RS     = sd(RS_wind_beetle, na.rm = T)) %>% 
+  mutate(Field_volume       = stringr::str_glue("{round(mean_dam,1)}±{round(sd_dam,1)}"),
+         RS_area            = stringr::str_glue("{round(mean_RS,1)}±{round(sd_RS,1)}")) %>% 
+  dplyr::select(year, Field_volume, RS_area) 
+
+
+(observation_mortality_year)
+
+## per drought years 
+observation_mortality_drought <- 
+  df_merged_RS_damage_district %>% 
+  ungroup(.) %>% 
+  filter(year %in% 2015:2021) %>%
+  mutate(drought_status = ifelse(year %in% 2018:2020, "Hotter drought", "Other")) %>% 
+  dplyr::select(ID, drought_status, damaged_volume_total_m3, RS_wind_beetle) %>% 
+  dplyr::mutate(RS_wind_beetle = RS_wind_beetle*0.09) %>% # convert pixels to hectares
+  group_by(drought_status) %>% 
+  dplyr::summarize(mean_dam   = mean(damaged_volume_total_m3  , na.rm = T),
+                   sd_dam     = sd(damaged_volume_total_m3, na.rm = T),
+                   mean_RS   = mean(RS_wind_beetle  , na.rm = T),
+                   sd_RS     = sd(RS_wind_beetle, na.rm = T)) %>% 
+  mutate(Field_volume       = stringr::str_glue("{round(mean_dam,1)}±{round(sd_dam,1)}"),
+         RS_area            = stringr::str_glue("{round(mean_RS,1)}±{round(sd_RS,1)}")) %>% 
+  dplyr::select(drought_status, Field_volume, RS_area) 
+
+
+(observation_mortality_drought)
+
+
+## Export as a nice table in word: ----------------------------------
+
+sjPlot::tab_df(observation_mortality_year,
+               #               col.header = c(as.character(qntils), 'mean'),
+               show.rownames = F,
+               file="outTable/summary_out_observation_damage_year.doc",
+               digits = 0) 
+
+sjPlot::tab_df(observation_mortality_drought,
+               show.rownames = F,
+               file="outTable/summary_out_observation_mortality_drought.doc",
+               digits = 0) 
+
 
 
 
