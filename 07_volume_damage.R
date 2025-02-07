@@ -386,7 +386,7 @@ percent_below <- (num_below_threshold / total_records) * 100
 # Display result
 percent_below
 
-# 42% of records are below this threshold, 50% of teh upper line
+# 42% of records are below this 17.400 threshold, 50% of teh upper line (19.000)
 
 # Extract RS data   -------------------------------------------------------------
 # merge disturbance rasters together; check n of cells 
@@ -458,7 +458,6 @@ df_all <- df_RS %>%
   dplyr::select(!c( AELF_ID, tree_species, unit, pest_species ))# %>%  # keep: AELF_district_name, AELF_name,
 
 
-# export the data
 
 # Get a summary table for year & per district --------------------------------------
 
@@ -949,31 +948,6 @@ pacf(residuals, main="ACF of Model Residuals")
 
 
 # RS model: play with model diagnostics ---------------------------------------
-# use teh most important predictor: sum_ips_lag1
-boxplot(log(fin_dat_RS$RS_wind_beetle + 0.01))
-boxplot(fin_dat_RS$RS_wind_beetle)
-boxplot(log(fin_dat_damage$damage_vol))
-hist(fin_dat_RS$RS_wind_beetle)
-# if using log values, the data do not seems as outliers
-
-plot(x = sum_ips_lag1, y = RS_wind_beetle, data = fin_dat_RS)
-
-fin_dat_RS %>% 
-  ggplot(aes(x = sum_ips_lag1,
-             y = RS_wind_beetle)) + 
-  geom_point()+
-  geom_smooth() +
-  scale_y_log10() +
-  scale_x_log10()
-
-
-fin_dat_damage %>% 
-  ggplot(aes(x = sum_ips,
-             y = damage_vol)) + 
-  geom_point()+
-  geom_smooth() +
-  scale_y_log10() +
-  scale_x_log10()
 
 
 
