@@ -492,7 +492,7 @@ df_full_years_to_spagetti_plot$damage_vol_k <- ifelse(
 # Analysis ------------------------------------------------------------------
 ## Break point analysis ------------------------------------------------------
 
-df_sub_1lag #df_catch_RS_damage_pairID # contains lags (shorter time windows)
+df_sub_1lag 
 
 # make a unique table to have more data points 
 df_sub_1lag_damage <- df_sub_1lag %>% 
@@ -506,7 +506,7 @@ df_sub_1lag_RS <- df_sub_1lag %>%
 
 # replace by from  ips_damage_pairID - contains all 2015-2021 values
 
-### counts vs damage --------------------
+### Break point: counts vs damage --------------------
 plot(damaged_volume_total_m3 ~ sum_ips, df_sub_1lag_damage)
 
 # try on raw data
@@ -527,7 +527,7 @@ breakpoints <- seg_model$psi
 # Plot results
 ggplot(df_sub_1lag_damage, aes(x = sum_ips, y = damaged_volume_total_m3)) +
   geom_point(alpha = 0.5) +
-  #geom_line(aes(y = predict(seg_model)), color = "red", lwd = 1.2) +
+  geom_line(aes(y = predict(seg_model)), color = "red", lwd = 1.2) +
   geom_vline(xintercept = breakpoints[, 2], linetype = "dashed", color = "blue") +
   labs(title = "Breakpoint Analysis: Trap Catch vs. Observed Damage",
        x = "Trap Catch (Beetle Density)",
@@ -548,11 +548,12 @@ seg_model_log <- segmented(lm(log_damage_volume ~ log_sum_ips, data = df_sub_1la
                            psi = list(log_sum_ips = median(df_sub_1lag_damage$log_sum_ips, na.rm = TRUE)))
 
 # Fit new segmented model: lag1
-lmer_model_log_lag1 <- lmer(log_damage_volume_lag1 ~ log_sum_ips_lag1 +  (1 | pairID), data = df_sub_1lag_damage)
-seg_model_log_lag1 <- segmented(lm(log_damage_volume ~ log_sum_ips_lag1, data = df_sub_1lag_damage), 
-                           seg.Z = ~log_sum_ips_lag1, 
-                           psi = list(log_sum_ips_lag1 = median(df_sub_1lag_damage$log_sum_ips_lag1, na.rm = TRUE)))
+# lmer_model_log_lag1 <- lmer(log_damage_volume_lag1 ~ log_sum_ips_lag1 +  (1 | pairID), data = df_sub_1lag_damage)
+# seg_model_log_lag1 <- segmented(lm(log_damage_volume ~ log_sum_ips_lag1, data = df_sub_1lag_damage), 
+#                            seg.Z = ~log_sum_ips_lag1, 
+#                            psi = list(log_sum_ips_lag1 = median(df_sub_1lag_damage$log_sum_ips_lag1, na.rm = TRUE)))
 
+confint_breakpoints_damage <- confint(seg_model_log)
 
 # Check model fit
 summary(seg_model_log_lag1)
@@ -561,13 +562,13 @@ summary(seg_model_log_lag1)
 breakpoints_log <- seg_model_log$psi
 (breakpoints_log)
 
-breakpoints_log_lag1 <- seg_model_log_lag1$psi
-(breakpoints_log_lag1) # very similar results with predicting the next year value, just larger uinterval- stay with current year
+#breakpoints_log_lag1 <- seg_model_log_lag1$psi
+#(breakpoints_log_lag1) # very similar results with predicting the next year value, just larger uinterval- stay with current year
 
 # Plot results
 ggplot(df_sub_1lag_damage, aes(x = log_sum_ips, y = log_damage_volume)) +
   geom_point(alpha = 0.5) +
-  geom_line(aes(y = predict(seg_model)), color = "red", lwd = 1.2) +
+  geom_line(aes(y = predict(seg_model_log)), color = "red", lwd = 1.2) +
   geom_vline(xintercept = breakpoints_log[, 2], linetype = "dashed", color = "blue") +
   labs(title = "Breakpoint Analysis: Trap Catch vs. Observed Damage",
        x = "Trap Catch (Beetle Density)",
@@ -605,10 +606,6 @@ percent_below <- (num_below_threshold / total_records) * 100
 
 # Display result
 percent_below
-
-# 42% of records are below this 17.400 threshold, 50% of teh upper line (19.000)
-
-
 
 
 ### RS ---------------------------------------------------------- 
@@ -655,6 +652,8 @@ seg_model_log <- segmented(lm(log_RS_wind_beetle ~ log_sum_ips, data = df),
 
 # Check model fit
 summary(seg_model_log)
+confint(seg_model_log)
+confint_breakpoints_RS <- confint(seg_model_log)
 
 # Extract detected breakpoints
 breakpoints_log <- seg_model_log$psi
@@ -674,19 +673,17 @@ ggplot(df, aes(x = log_sum_ips, y = log_RS_wind_beetle)) +
 
 AIC(seg_model_log, lmer_model_log, base_model, seg_model) #
 
-# teh log transormation is better, and inclreased my 
-#> (breakpoints_log)
-#Initial    Est.    St.Err
-#psi1.log_sum_ips      NA 9.75956 0.1369689
-
-## Interpret this number: 17.400 beetles/trap - m,ake it visible 
+# get estimates
+est   <- seg_model_log$psi[, "Est."] 
+se    <- seg_model_log$psi[, "St.Err"] 
+## Interpret this number: 17.400 beetles/trap - m,ake it visible
 # Define threshold
-threshold <- exp(9.43)  # Convert log-scale breakpoint to original scale (~17,470)
-se_upper_threshold <- exp(9.43+0.16)
-se_lower_threshold <- exp(9.43-0.16)
+threshold <- exp(est)  # Convert log-scale breakpoint to original scale (~17,470)
+se_upper_threshold <- exp(est+se)
+se_lower_threshold <- exp(est-se)
 
 # Count records where sum_ips < threshold
-num_below_threshold <- sum(df$sum_ips < se_upper_threshold, na.rm = TRUE)
+num_below_threshold <- sum(ips_damage_pairID$sum_ips < se_upper_threshold, na.rm = TRUE)
 
 # Display result
 num_below_threshold
@@ -699,9 +696,6 @@ percent_below <- (num_below_threshold / total_records) * 100
 
 # Display result
 percent_below
-
-# 42% of records are below this threshold, 50% of teh upper line
-
 
 
 
