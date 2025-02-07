@@ -400,47 +400,45 @@ df_merged_RS_damage_district_lag1 %>%
   dplyr::filter(ID == 10504) %>% 
   dplyr::select(ID, year, RS_wind_beetle , lag1_RS_wind_beetle) #%>% # sum_ips, sum_ips_lag1
 
-
-df_traps_RS_damage <-  
+# average all values on pairID level  ----------------------------------------------------------
+# skip also NA values, as I am getting lag 1 and lag2
+df_catch_RS_damage_pairID <-  
   ips_damage_clean %>%  
-  left_join(df_merged_RS_damage_district_lag1,
+  left_join(df_merged_RS_damage_district_lag1, 
             by = c("forstrev_1" =   "ID",
                    "year"       = "year",
                    "damaged_volume_total_m3" = "damaged_volume_total_m3") ) %>% 
-  mutate(trapID = as.factor(trapID)) %>% 
+  #mutate(trapID = as.factor(trapID)) %>% 
   group_by(pairID, year) %>% 
-  summarise(sum_ips    = mean(sum_ips, na.rm = T),
-            agg_doy    = mean(agg_doy, na.rm = T),
-            peak_doy   = mean(peak_doy, na.rm = T),
-            peak_diff  = mean(peak_diff, na.rm = T),
-            damage_vol = mean(damaged_volume_total_m3, na.rm = T),
-            lag1_damage_vol = mean(lag1_damaged_volume_total, na.rm = T),
-            x              = mean(x, na.rm = T),
-            y              = mean(y, na.rm = T),
-            RS_wind_beetle = mean(RS_wind_beetle, na.rm = T),
-            lag1_RS_wind_beetle = mean(lag1_RS_wind_beetle, na.rm = T),
-            sum_ips_lag1  = mean(sum_ips_lag1, na.rm = T),
-            sum_ips_lag2   = mean(sum_ips_lag2, na.rm = T),
-            log_sum_ips_lag1 = mean(log(sum_ips_lag1), na.rm = T),
-            log_sum_ips_lag2 = mean(log(sum_ips_lag2), na.rm = T),
-            agg_doy_lag1     = mean(agg_doy_lag1, na.rm = T),
-            agg_doy_lag2     = mean(agg_doy_lag2, na.rm = T),
-            peak_doy_lag1    = mean(peak_doy_lag1, na.rm = T),
-            peak_doy_lag2    = mean(peak_doy_lag2, na.rm = T),
-            peak_diff_lag1   = mean(peak_diff_lag1, na.rm = T),
-            peak_diff_lag2   = mean(peak_diff_lag2, na.rm = T)
-  ) %>%
-  ungroup(.) %>% 
+  summarise(across(where(is.numeric), ~ mean(.x, na.rm = TRUE)), #.names = "mean_{.col}"),
+            .groups = "drop") %>%
+   ungroup(.) %>% 
   mutate(log_sum_ips = log(sum_ips)) %>% 
   mutate(f_year = as.factor(year))
 
+# have only 1 lag in my predictors to have longer time series for break point analysis  -------------------------------
+df_sub_1lag <- ips_damage_merge %>%  
+  left_join(df_merged_RS_damage_district_lag1, 
+            by = c("forstrev_1" =   "ID",
+                   "year"       = "year",
+                   "damaged_volume_total_m3" = "damaged_volume_total_m3") ) %>% 
+ # mutate(trapID = as.factor(trapID)) %>% 
+  group_by(pairID, year) %>% 
+  summarise(across(where(is.numeric), ~ mean(.x, na.rm = TRUE)), #.names = "mean_{.col}"),
+            .groups = "drop") %>%
+  ungroup(.) %>% 
+  mutate(log_sum_ips = log(sum_ips)) %>% 
+  mutate(f_year = as.factor(year)) %>% 
+  dplyr::select( pairID,   year, sum_ips, sum_ips_lag1, damaged_volume_total_m3,
+                 RS_wind_beetle , lag1_RS_wind_beetle,lag1_damaged_volume_total
+                 )
 
 
-summary(df_traps_RS_damage)
+summary(df_catch_RS_damage_pairID)
 
 ###### create final tables for RS data and volume data 
 
-fin_dat_damage <- df_traps_RS_damage %>% 
+fin_dat_damage <- df_catch_RS_damage_pairID %>% 
   dplyr::select(-RS_wind_beetle) %>% 
   na.omit() 
 
@@ -454,7 +452,7 @@ fin_dat_damage %>%
   geom_smooth()
 
 # do not remove outliers here 
-fin_dat_RS <- df_traps_RS_damage %>% 
+fin_dat_RS <- df_catch_RS_damage_pairID %>% 
   na.omit()
 
 dim(fin_dat_RS)
@@ -463,7 +461,6 @@ dim(fin_dat_RS)
 
 
 ## Tab for spagetti plot -----------------
-
 
 df_full_years_to_spagetti_plot <-  
   ips_damage_merge %>%  
@@ -495,16 +492,30 @@ df_full_years_to_spagetti_plot$damage_vol_k <- ifelse(
 # Analysis ------------------------------------------------------------------
 ## Break point analysis ------------------------------------------------------
 
+df_sub_1lag #df_catch_RS_damage_pairID # contains lags (shorter time windows)
+
+# make a unique table to have more data points 
+df_sub_1lag_damage <- df_sub_1lag %>% 
+  dplyr::select(-RS_wind_beetle, lag1_RS_wind_beetle) %>% 
+  na.omit()
+
+
+df_sub_1lag_RS <- df_sub_1lag %>% 
+  dplyr::select(-damaged_volume_total_m3, lag1_damaged_volume_total) %>% 
+  na.omit()
+
+# replace by from  ips_damage_pairID - contains all 2015-2021 values
+
 ### counts vs damage --------------------
-plot(damaged_volume_total_m3 ~ sum_ips, ips_damage_pairID)
+plot(damaged_volume_total_m3 ~ sum_ips, df_sub_1lag_damage)
 
 # try on raw data
 # Fit a mixed-effects model with sum_ips as a predictor
-base_model <- lmer(damaged_volume_total_m3 ~ sum_ips + (1 | pairID), data = ips_damage_pairID)
+base_model <- lmer(damaged_volume_total_m3 ~ sum_ips + (1 | pairID), data = df_sub_1lag_damage)
 
 # Apply segmented regression to detect breakpoints
-seg_model <- segmented(lm(damaged_volume_total_m3 ~ sum_ips, data = ips_damage_pairID), 
-                       seg.Z = ~sum_ips, psi = list(sum_ips = median(ips_damage_pairID$sum_ips, na.rm = TRUE)))  # Initial guess
+seg_model <- segmented(lm(damaged_volume_total_m3 ~ sum_ips, data = df_sub_1lag_damage), 
+                       seg.Z = ~sum_ips, psi = list(sum_ips = median(df_sub_1lag_damage$sum_ips, na.rm = TRUE)))  # Initial guess
 
 # Summarize results
 summary(seg_model)
@@ -514,39 +525,50 @@ breakpoints <- seg_model$psi
 (breakpoints)
 
 # Plot results
-ggplot(ips_damage_pairID, aes(x = sum_ips, y = damaged_volume_total_m3)) +
+ggplot(df_sub_1lag_damage, aes(x = sum_ips, y = damaged_volume_total_m3)) +
   geom_point(alpha = 0.5) +
-  geom_line(aes(y = predict(seg_model)), color = "red", lwd = 1.2) +
+  #geom_line(aes(y = predict(seg_model)), color = "red", lwd = 1.2) +
   geom_vline(xintercept = breakpoints[, 2], linetype = "dashed", color = "blue") +
   labs(title = "Breakpoint Analysis: Trap Catch vs. Observed Damage",
        x = "Trap Catch (Beetle Density)",
        y = "Tree Damage (m³)") +
   theme_minimal()
 
-## try log transformation for minimise teh variability  ---------------
+## try log transformation for minimise teh variability  
 
 # Log transformation (adding +1 to avoid log(0))
-ips_damage_pairID$log_sum_ips <- log(ips_damage_pairID$sum_ips + 1)
-ips_damage_pairID$log_damage_volume <- log(ips_damage_pairID$damaged_volume_total_m3 + 1)
+df_sub_1lag_damage$log_sum_ips <- log(df_sub_1lag_damage$sum_ips + 1)
+df_sub_1lag_damage$log_damage_volume <- log(df_sub_1lag_damage$damaged_volume_total_m3 + 1)
+df_sub_1lag_damage$log_sum_ips_lag1 <- log(df_sub_1lag_damage$sum_ips_lag1 + 1)
 
-# Fit new segmented model
-lmer_model_log <- lmer(log_damage_volume ~ log_sum_ips +  (1 | pairID), data = ips_damage_pairID)
-seg_model_log <- segmented(lm(log_damage_volume ~ log_sum_ips, data = ips_damage_pairID), 
+# Fit new segmented model: lag0
+lmer_model_log <- lmer(log_damage_volume ~ log_sum_ips +  (1 | pairID), data = df_sub_1lag_damage)
+seg_model_log <- segmented(lm(log_damage_volume ~ log_sum_ips, data = df_sub_1lag_damage), 
                            seg.Z = ~log_sum_ips, 
-                           psi = list(log_sum_ips = median(ips_damage_pairID$log_sum_ips, na.rm = TRUE)))
+                           psi = list(log_sum_ips = median(df_sub_1lag_damage$log_sum_ips, na.rm = TRUE)))
+
+# Fit new segmented model: lag1
+lmer_model_log_lag1 <- lmer(log_damage_volume_lag1 ~ log_sum_ips_lag1 +  (1 | pairID), data = df_sub_1lag_damage)
+seg_model_log_lag1 <- segmented(lm(log_damage_volume ~ log_sum_ips_lag1, data = df_sub_1lag_damage), 
+                           seg.Z = ~log_sum_ips_lag1, 
+                           psi = list(log_sum_ips_lag1 = median(df_sub_1lag_damage$log_sum_ips_lag1, na.rm = TRUE)))
+
 
 # Check model fit
-summary(seg_model_log)
+summary(seg_model_log_lag1)
 
 # Extract detected breakpoints
 breakpoints_log <- seg_model_log$psi
 (breakpoints_log)
 
+breakpoints_log_lag1 <- seg_model_log_lag1$psi
+(breakpoints_log_lag1) # very similar results with predicting the next year value, just larger uinterval- stay with current year
+
 # Plot results
-ggplot(ips_damage_pairID, aes(x = log_sum_ips, y = log_damage_volume)) +
+ggplot(df_sub_1lag_damage, aes(x = log_sum_ips, y = log_damage_volume)) +
   geom_point(alpha = 0.5) +
-  #geom_line(aes(y = predict(seg_model)), color = "red", lwd = 1.2) +
-  geom_vline(xintercept = breakpoints[, 2], linetype = "dashed", color = "blue") +
+  geom_line(aes(y = predict(seg_model)), color = "red", lwd = 1.2) +
+  geom_vline(xintercept = breakpoints_log[, 2], linetype = "dashed", color = "blue") +
   labs(title = "Breakpoint Analysis: Trap Catch vs. Observed Damage",
        x = "Trap Catch (Beetle Density)",
        y = "Tree Damage (m³)") +
@@ -561,11 +583,13 @@ AIC(seg_model_log, lmer_model_log, base_model, seg_model) #
 #Initial    Est.    St.Err
 #psi1.log_sum_ips      NA 9.75956 0.1369689
 
-## Interpret this number: 17.400 beetles/trap - m,ake it visible -----------------
+est   <- seg_model_log$psi[, "Est."] 
+se    <- seg_model_log$psi[, "St.Err"] 
+## Interpret this number: 17.400 beetles/trap - m,ake it visible
 # Define threshold
-threshold <- exp(9.76)  # Convert log-scale breakpoint to original scale (~17,470)
-se_upper_threshold <- exp(9.76+0.13)
-se_lower_threshold <- exp(9.76-0.13)
+threshold <- exp(est)  # Convert log-scale breakpoint to original scale (~17,470)
+se_upper_threshold <- exp(est+se)
+se_lower_threshold <- exp(est-se)
 
 # Count records where sum_ips < threshold
 num_below_threshold <- sum(ips_damage_pairID$sum_ips < se_upper_threshold, na.rm = TRUE)
@@ -589,7 +613,7 @@ percent_below
 
 ### RS ---------------------------------------------------------- 
 
-df <- na.omit(df_full_years_to_spagetti_plot)
+df <- na.omit(df_sub_1lag_RS)
 
 plot(RS_wind_beetle   ~ sum_ips, df)
 # try on raw data
@@ -617,7 +641,7 @@ ggplot(df, aes(x = sum_ips, y = RS_wind_beetle)) +
        y = "Tree Damage (m³)") +
   theme_minimal()
 
-## try log transformation for minimise teh variability  ---------------
+#### try log transformation for minimise teh variability  
 
 # Log transformation (adding +1 to avoid log(0))
 df$log_sum_ips        <- log(df$sum_ips + 1)
@@ -639,7 +663,7 @@ breakpoints_log <- seg_model_log$psi
 # Plot results
 ggplot(df, aes(x = log_sum_ips, y = log_RS_wind_beetle)) +
   geom_point(alpha = 0.5) +
-  #geom_line(aes(y = predict(seg_model)), color = "red", lwd = 1.2) +
+  geom_line(aes(y = predict(seg_model_log)), color = "red", lwd = 1.2) +
   geom_vline(xintercept = breakpoints_log[, 2], linetype = "dashed", color = "blue") +
   labs(title = "Breakpoint Analysis: Trap Catch vs. Observed Damage",
        x = "Trap Catch (Beetle Density)",
@@ -655,7 +679,7 @@ AIC(seg_model_log, lmer_model_log, base_model, seg_model) #
 #Initial    Est.    St.Err
 #psi1.log_sum_ips      NA 9.75956 0.1369689
 
-## Interpret this number: 17.400 beetles/trap - m,ake it visible -----------------
+## Interpret this number: 17.400 beetles/trap - m,ake it visible 
 # Define threshold
 threshold <- exp(9.43)  # Convert log-scale breakpoint to original scale (~17,470)
 se_upper_threshold <- exp(9.43+0.16)
@@ -866,7 +890,7 @@ ggsave(filename = 'outFigs/observation_vs_predictors_lags.png',
 #### Spearman correlation matrix between predictors -------------------------------------------------------
 
 # Extract the relevant columns from the data
-data_selected <- df_traps_RS_damage[selected_predictors]
+data_selected <- df_catch_RS_damage_pairID[selected_predictors]
 
 cor_matrix <- cor(data_selected, use = "pairwise.complete.obs", method = "spearman")
 windows()
@@ -877,13 +901,13 @@ pairs(damage_vol ~  sum_ips + sum_ips_lag1 + #sum_ips_lag2 +
         agg_doy    + agg_doy_lag1 + # agg_doy_lag2  +
         peak_doy +  peak_doy_lag1 + #peak_doy_lag2 +
         peak_diff +  peak_diff_lag1, # + #  peak_diff_lag2, 
-      data = df_traps_RS_damage)
+      data = df_catch_RS_damage_pairID)
 # fin_dat_damage
 
 # check for outliers? -------------------------------------------------------------
 
 # filter outliers from dependent and the predictors variables! 
-ips_damage_clean_no_outliers <- df_traps_RS_damage %>% 
+ips_damage_clean_no_outliers <- df_catch_RS_damage_pairID %>% 
   mutate(log_damage_vol = log(damage_vol + 1)) %>% 
   dplyr::filter(log_damage_vol>5,
                 log_sum_ips > 8.4) #%>% 
