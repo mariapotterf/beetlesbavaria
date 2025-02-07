@@ -60,7 +60,7 @@ library(ggeffects)
 
 library(MASS)
 library(car)     # for VIF
-library(glmmTMB) # many families
+#library(glmmTMB) # many families
 
 
 
@@ -166,7 +166,7 @@ v_districts_simpl <- simplifyGeom(v_districts, tolerance=20, preserveTopology=TR
 v_sum_ips_simpl   <- simplifyGeom(v_sum_ips, tolerance=20, preserveTopology=TRUE, makeValid=TRUE)
 
 
-writeVector(v_sum_ips_simpl, 'outSpatial/XY_beetle_sum_years.gpkg', overwrite=TRUE) 
+#writeVector(v_sum_ips_simpl, 'outSpatial/XY_beetle_sum_years.gpkg', overwrite=TRUE) 
 
 #  does simplification work? yes!!
 plot(v_districts_simpl)
@@ -364,6 +364,7 @@ df_all <- df_RS %>%
   dplyr::select(!c( AELF_ID, tree_species, unit, pest_species ))# %>%  # keep: AELF_district_name, AELF_name,
 
 
+# export the data
 
 # Get a summary table for year & per district --------------------------------------
 
@@ -374,7 +375,7 @@ df_all %>%
   summarize(sum_volume = sum(damaged_volume_total_m3),
             sum_RS = sum(RS_wind_beetle, na.rm = T)*0.09)
 
-# data per years ----------------------------------------------------------------
+## data per years ----------------------------------------------------------------
 observation_mortality_year <- 
   df_all %>% 
   ungroup(.) %>% 
@@ -402,7 +403,7 @@ sjPlot::tab_df(observation_mortality_year,
                digits = 0) 
 
 
-# per drought years ---------------------------------------------
+## per drought years ---------------------------------------------
 observation_mortality_drought <- 
   df_all %>% 
   ungroup(.) %>% 
@@ -1212,10 +1213,7 @@ ggarrange(p1, p2, nrow = 1, ncol = 2, align = 'hv', labels = c('[a]', '[b]'))
 
 
 
-
-##### merge damage data to geometry data ----------------------------------
-
-# Correlate between RS and volume data m3 ---------------------------------------------------
+## Correlate between RS and volume data m3 ---------------------------------------------------
 df_cor <- df_all %>% 
   dplyr::filter(!ID %in% c(0, 50104, 60613,62705)) %>% # exlude if there is missing data
   group_by(ID) %>% 
