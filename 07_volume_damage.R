@@ -60,7 +60,7 @@ library(ggeffects)
 
 library(MASS)
 library(car)     # for VIF
-#library(glmmTMB) # many families
+library(glmmTMB) # many families
 
 
 
@@ -243,8 +243,7 @@ district_ID <- terra::extract(rast(grid_sel_ras),
                               df = TRUE, bind = TRUE )
 
 #### Link beetle counts vs damage volume per department -------------------------------------------------------
-ips_damage_district <- 
-  district_ID %>% 
+ips_damage_district <- district_ID %>% 
   as.data.frame() %>% 
   dplyr::rename(., forstrev_1 = layer)
 
@@ -278,7 +277,8 @@ ips_damage_merge <-
   mutate(pairID = as.factor(pairID),
          trapID = as.factor(trapID)) #%>% 
     
-  
+
+
 
 # Check if lags are correct!!!! YES!!!
 
@@ -292,6 +292,71 @@ ips_damage_merge  %>%
 # remove NA values
 ips_damage_clean <- na.omit(ips_damage_merge)
 
+
+# Group by pairID and year, then calculate mean for all continuous variables
+ips_damage_pairID <- ips_damage_merge %>%
+  group_by(pairID, year) %>%
+  summarise(across(where(is.numeric), \(x) mean(x, na.rm = TRUE)), .groups = "drop") %>% 
+  mutate(across(where(is.numeric), ~ifelse(is.nan(.), NA, .))) 
+
+
+# break point analysis: counts vs observed damage --------------------
+plot(damaged_volume_total_m3 ~ sum_ips, ips_damage_pairID)
+
+# Fit a mixed-effects model with sum_ips as a predictor
+base_model <- lmer(damaged_volume_total_m3 ~ sum_ips + (1 | pairID), data = ips_damage_pairID)
+
+# Apply segmented regression to detect breakpoints
+seg_model <- segmented(lm(damaged_volume_total_m3 ~ sum_ips, data = ips_damage_pairID), 
+                       seg.Z = ~sum_ips, psi = list(sum_ips = median(ips_damage_pairID$sum_ips, na.rm = TRUE)))  # Initial guess
+
+# Summarize results
+summary(seg_model)
+
+# Extract detected breakpoints
+breakpoints <- seg_model$psi
+
+# Plot results
+ggplot(ips_damage_pairID, aes(x = sum_ips, y = damaged_volume_total_m3)) +
+  geom_point(alpha = 0.5) +
+  geom_line(aes(y = predict(seg_model)), color = "red", lwd = 1.2) +
+  geom_vline(xintercept = breakpoints[, 2], linetype = "dashed", color = "blue") +
+  labs(title = "Breakpoint Analysis: Trap Catch vs. Observed Damage",
+       x = "Trap Catch (Beetle Density)",
+       y = "Tree Damage (m³)") +
+  theme_minimal()
+
+
+
+# multivariate analysis -------------------
+# Step 1: Fit a mixed-effects model with environmental covariates
+base_model <- lmer(damaged_volume_total_m3 ~ sum_ips + #veg_tmp +  spei12 + 
+                     lag1_damaged_volume_total + (1 | pairID), data = ips_damage_pairID)
+summary(base_model)
+# Step 2: Apply segmented regression to detect breakpoints for sum_ips
+seg_model <- segmented(lm(damaged_volume_total_m3 ~ sum_ips +#  veg_tmp + spei12 + 
+                            lag1_damaged_volume_total, data = ips_damage_pairID), 
+                       seg.Z = ~sum_ips, 
+                       psi = list(sum_ips = median(ips_damage_pairID$sum_ips, na.rm = TRUE)))  # Initial guess
+
+# Summarize results
+summary(seg_model)
+
+# Extract estimated breakpoint
+breakpoints <- seg_model$psi
+
+breakpoints
+
+# Step 3: Visualization of Breakpoint Analysis
+ggplot(ips_damage_pairID, aes(x = sum_ips, y = damaged_volume_total_m3)) +
+  geom_point(alpha = 0.5) +
+  geom_line(aes(y = predict(seg_model)), color = "red", size = 1.2) #+
+  geom_vline(xintercept = breakpoints[, 2], linetype = "dashed", color = "blue") +
+  labs(title = "Multivariate Breakpoint Analysis: Trap Catch vs. Observed Damage",
+       subtitle = "Including Environmental Factors and Past Damage",
+       x = "Trap Catch (Beetle Density)",
+       y = "Tree Damage (m³)") +
+  theme_minimal()
 
 
 # Extract RS data   -------------------------------------------------------------
@@ -570,7 +635,7 @@ dim(fin_dat_RS)
 
 
 # Find lags and predictors -------------------------------------------------------
-##### Find lags: damage volume  -------------
+## Find lags: damage volume  -------------
 dependent_damage <-  c("damage_vol")
 
 # Initialize a data frame to store AIC values and deviance explained
@@ -623,7 +688,7 @@ for (dep in dependent_damage) {
 
 
 
-####### Find predicors  lags: RS   -------------
+## Find predicors  lags: RS   -------------
 dependent_RS <-  c("RS_wind_beetle")
 
 # Initialize a data frame to store AIC values and deviance explained
@@ -670,7 +735,7 @@ model_lag_counts_damage_RS <- rbind(model_metrics_RS,
   distinct()
 
 
-####  Export as a nice table in word: ------------------------------------------
+##  Export as a nice table in word: ------------------------------------------
 sjPlot::tab_df(model_lag_counts_damage_RS,
                #col.header = c(as.character(qntils), 'mean'),
                show.rownames = FALSE,
