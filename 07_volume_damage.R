@@ -1030,9 +1030,6 @@ AIC(mRS.simpl, mRS.simpl.lag1)
 summary(mRS.simpl)
 summary(mRS.simpl.lag1)
 
-
-
-m<-mRS.simpl.lag1
 m<-mRS.simpl
 
 summary(m)
