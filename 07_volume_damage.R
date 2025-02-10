@@ -494,7 +494,7 @@ df_full_years_to_spagetti_plot$damage_vol_k <- ifelse(
 
 df_sub_1lag 
 
-# make a unique table to have more data points 
+# make a unique table to have more data points  f0r ground survey
 df_sub_1lag_damage <- df_sub_1lag %>% 
   dplyr::select(-RS_wind_beetle, lag1_RS_wind_beetle) %>% 
   na.omit()
@@ -543,10 +543,11 @@ df_sub_1lag_damage$log_sum_ips_lag1 <- log(df_sub_1lag_damage$sum_ips_lag1 + 1)
 
 # Fit new segmented model: lag0
 lmer_model_log <- lmer(log_damage_volume ~ log_sum_ips +  (1 | pairID), data = df_sub_1lag_damage)
-seg_model_log <- segmented(lm(log_damage_volume ~ log_sum_ips, data = df_sub_1lag_damage), 
+seg_model_log_damage <- segmented(lm(log_damage_volume ~ log_sum_ips, data = df_sub_1lag_damage), 
                            seg.Z = ~log_sum_ips, 
                            psi = list(log_sum_ips = median(df_sub_1lag_damage$log_sum_ips, na.rm = TRUE)))
 
+summary(seg_model_log_damage)
 # Fit new segmented model: lag1
 # lmer_model_log_lag1 <- lmer(log_damage_volume_lag1 ~ log_sum_ips_lag1 +  (1 | pairID), data = df_sub_1lag_damage)
 # seg_model_log_lag1 <- segmented(lm(log_damage_volume ~ log_sum_ips_lag1, data = df_sub_1lag_damage), 
@@ -566,7 +567,7 @@ breakpoints_log <- seg_model_log$psi
 #(breakpoints_log_lag1) # very similar results with predicting the next year value, just larger uinterval- stay with current year
 
 # Plot results
-ggplot(df_sub_1lag_damage, aes(x = log_sum_ips, y = log_damage_volume)) +
+p_break_point_damage <- ggplot(df_sub_1lag_damage, aes(x = log_sum_ips, y = log_damage_volume)) +
   geom_point(alpha = 0.5) +
   geom_line(aes(y = predict(seg_model_log)), color = "red", lwd = 1.2) +
   geom_vline(xintercept = breakpoints_log[, 2], linetype = "dashed", color = "blue") +
@@ -631,7 +632,7 @@ breakpoints <- seg_model$psi
 # Plot results
 ggplot(df, aes(x = sum_ips, y = RS_wind_beetle)) +
   geom_point(alpha = 0.5) +
-  #geom_line(aes(y = predict(seg_model)), color = "red", lwd = 1.2) +
+  geom_line(aes(y = predict(seg_model)), color = "red", lwd = 1.2) +
   geom_vline(xintercept = breakpoints[, 2], linetype = "dashed", color = "blue") +
   labs(title = "Breakpoint Analysis: Trap Catch vs. RS Damage",
        x = "Trap Catch (Beetle Density)",
@@ -646,18 +647,18 @@ df$log_RS_wind_beetle <- log(df$RS_wind_beetle + 1)
 
 # Fit new segmented model
 lmer_model_log <- lmer(log_RS_wind_beetle ~ log_sum_ips +  (1 | pairID), data = df)
-seg_model_log <- segmented(lm(log_RS_wind_beetle ~ log_sum_ips, data = df), 
+seg_model_log_RS <- segmented(lm(log_RS_wind_beetle ~ log_sum_ips, data = df), 
                            seg.Z = ~log_sum_ips, 
                            psi = list(log_sum_ips = median(df$log_sum_ips, na.rm = TRUE)))
 
 # Check model fit
-summary(seg_model_log)
-confint(seg_model_log)
-confint_breakpoints_RS <- confint(seg_model_log)
+summary(seg_model_log_RS)
+confint(seg_model_log_RS)
+confint_breakpoints_RS <- confint(seg_model_log_RS)
 
 # Extract detected breakpoints
-breakpoints_log <- seg_model_log$psi
-(breakpoints_log)
+breakpoints_RS_log <- seg_model_log_RS$psi
+(breakpoints_RS_log)
 
 # Plot results
 ggplot(df, aes(x = log_sum_ips, y = log_RS_wind_beetle)) +
@@ -674,7 +675,7 @@ ggplot(df, aes(x = log_sum_ips, y = log_RS_wind_beetle)) +
 AIC(seg_model_log, lmer_model_log, base_model, seg_model) #
 
 # get estimates
-est   <- seg_model_log$psi[, "Est."] 
+est   <- seg_model_log_RS$psi[, "Est."] 
 se    <- seg_model_log$psi[, "St.Err"] 
 ## Interpret this number: 17.400 beetles/trap - m,ake it visible
 # Define threshold
@@ -991,21 +992,6 @@ pacf(residuals, main="ACF of Model Residuals")
 fin_dat_RS_clean <- fin_dat_RS %>% 
   dplyr::filter(RS_wind_beetle <1700) %>% 
   dplyr::filter(lag1_RS_wind_beetle <1700)
-
-
-# Calculate correlation
-cor_results <- fin_dat_RS %>%
-  summarise(
-    pearson_sum_ips = cor(sum_ips, RS_wind_beetle, use = "complete.obs", method = "pearson"),
-    spearman_sum_ips = cor(sum_ips, RS_wind_beetle, use = "complete.obs", method = "spearman"),
-    pearson_sum_ips_lag1 = cor(sum_ips_lag1, RS_wind_beetle, use = "complete.obs", method = "pearson"),
-    spearman_sum_ips_lag1 = cor(sum_ips_lag1, RS_wind_beetle, use = "complete.obs", method = "spearman")
-  )
-
-# Print results
-print(cor_results)
-
-
 
 
 # PREVIOUS RS --------------------------------------
