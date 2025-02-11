@@ -524,16 +524,6 @@ summary(seg_model)
 breakpoints <- seg_model$psi
 (breakpoints)
 
-# Plot results
-ggplot(df_sub_1lag_damage, aes(x = sum_ips, y = damaged_volume_total_m3)) +
-  geom_point(alpha = 0.5) +
-  geom_line(aes(y = predict(seg_model)), color = "red", lwd = 1.2) +
-  geom_vline(xintercept = breakpoints[, 2], linetype = "dashed", color = "blue") +
-  labs(title = "Breakpoint Analysis: Trap Catch vs. Observed Damage",
-       x = "Trap Catch (Beetle Density)",
-       y = "Tree Damage (m³)") +
-  theme_minimal()
-
 ## try log transformation for minimise teh variability  
 
 # Log transformation (adding +1 to avoid log(0))
@@ -568,11 +558,11 @@ breakpoints_damage_log <- seg_model_log_damage$psi
 p_break_point_damage <- ggplot(df_sub_1lag_damage, aes(x = log_sum_ips, y = log_damage_volume)) +
   geom_point(alpha = 0.5) +
   geom_line(aes(y = predict(seg_model_log_damage)), color = "red", lwd = 1.2) +
-  geom_vline(xintercept = breakpoints_log[, 2], linetype = "dashed", color = "blue") +
-  labs(title = "Breakpoint Analysis: Trap Catch vs. Observed Damage",
+  geom_vline(xintercept = breakpoints_damage_log[, 2], linetype = "dashed", color = "blue") +
+  labs(title = "Field Observed",
        x = "Trap Catch (Beetle Density)",
-       y = "Tree Damage (m³)") +
-  theme_minimal()
+       y = "Tree Mortality (m³)") +
+  theme_classic2()
 
 p_break_point_damage
 
@@ -617,49 +607,23 @@ confint(seg_model_log_RS)
 confint_breakpoints_RS <- confint(seg_model_log_RS)
 
 # Extract detected breakpoints
-breakpoints_RS_log <- seg_model_log_RS$psi
-(breakpoints_RS_log)
+breakpoints_log_RS <- seg_model_log_RS$psi
+(breakpoints_log_RS)
 
 # Plot results
-ggplot(df, aes(x = log_sum_ips, y = log_RS_wind_beetle)) +
+p_break_point_RS <- ggplot(df, aes(x = log_sum_ips, y = log_RS_wind_beetle)) +
   geom_point(alpha = 0.5) +
-  geom_line(aes(y = predict(seg_model_log)), color = "red", lwd = 1.2) +
-  geom_vline(xintercept = breakpoints_log[, 2], linetype = "dashed", color = "blue") +
-  labs(title = "Breakpoint Analysis: Trap Catch vs. Observed Damage",
+  geom_line(aes(y = predict(seg_model_log_RS)), color = "red", lwd = 1.2) +
+  geom_vline(xintercept = breakpoints_log_RS[, 2], linetype = "dashed", color = "blue") +
+  labs(title = "RS Observed",
        x = "Trap Catch (Beetle Density)",
-       y = "Tree Damage (m³)") +
-  theme_minimal()
+       y = "RS Tree Mortality (log m2)") +
+  theme_classic2()
 
 
-
-AIC(seg_model_log, lmer_model_log, base_model, seg_model) #
-
-# get estimates
-est   <- seg_model_log_RS$psi[, "Est."] 
-se    <- seg_model_log$psi[, "St.Err"] 
-## Interpret this number: 17.400 beetles/trap - m,ake it visible
-# Define threshold
-threshold <- exp(est)  # Convert log-scale breakpoint to original scale (~17,470)
-se_upper_threshold <- exp(est+se)
-se_lower_threshold <- exp(est-se)
-
-# Count records where sum_ips < threshold
-num_below_threshold <- sum(ips_damage_pairID$sum_ips < se_upper_threshold, na.rm = TRUE)
-
-# Display result
-num_below_threshold
-
-# Total number of records
-total_records <- nrow(ips_damage_pairID)
-
-# Percentage below threshold
-percent_below <- (num_below_threshold / total_records) * 100
-
-# Display result
-percent_below
-
-
-
+# 
+ggarrange(p_break_point_damage, p_break_point_RS, ncol = 2, nrow = 1,
+          labels = c("[a]", "[b]"))
 
 # Find lags and predictors -------------------------------------------------------
 ## Find lags: damage volume  -------------
@@ -1141,11 +1105,14 @@ breakpoint_ci <- confint_breakpoints_damage
 lower_ci <- breakpoint_ci[1, "CI(95%).low"]  # Lower bound
 upper_ci <- breakpoint_ci[1, "CI(95%).up"]  # Upper bound
 
-# convert logs to counts
-est_breakpoint <- exp(confint(seg_model_log)[,"Est."]) /1000      # Estimated breakpoint
+# convert logs to counts and divide by 1000 to fit my scale
+est_breakpoint <- exp(confint_breakpoints_damage[,"Est."]) /1000      # Estimated breakpoint
 lower_ci <- exp(lower_ci)/1000             # Lower CI
 upper_ci <- exp(upper_ci)/1000             # Upper CI
 
+print(est_breakpoint)
+print(lower_ci)
+print(upper_ci)
 
 
 p1.damage <- 
