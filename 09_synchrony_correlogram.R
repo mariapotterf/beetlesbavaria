@@ -54,6 +54,24 @@ dat_pairID <- dat_clean %>%
   summarise(across(where(is.numeric), mean, na.rm = TRUE))
 
 
+
+
+# Correlogram ---------------------------------------------
+# run on pair level
+dat_slice = dat_pairID %>% 
+  dplyr::filter(year == 2018)
+# Check unique years ----------------------------------------
+unique_years <- unique(dat_slice$year)
+print(unique_years)  # Ensure you have 7 years
+
+# Extract required variables
+x_coords <- dat_slice$x
+y_coords <- dat_slice$y
+time_var <- dat_slice$year
+sum_ips_values <- dat_slice$sum_ips
+
+
+
 # what is teh average distance between two traps? 
 # Compute pairwise Euclidean distances
 distance_matrix <- as.matrix(dist(cbind(x_coords, y_coords), method = "euclidean"))
@@ -79,22 +97,6 @@ average_nn_distance <- mean(nearest_distances)
 
 average_nn_distance
 # 23 km
-
-
-
-# Correlogram ---------------------------------------------
-# run on pair level
-dat_slice = dat_pairID %>% 
-  dplyr::filter(year == 2018)
-# Check unique years ----------------------------------------
-unique_years <- unique(dat_slice$year)
-print(unique_years)  # Ensure you have 7 years
-
-# Extract required variables
-x_coords <- dat_slice$x
-y_coords <- dat_slice$y
-time_var <- dat_slice$year
-sum_ips_values <- dat_slice$sum_ips
 
 
 
@@ -236,7 +238,7 @@ correlog_results <- map_dfr(variables, ~ compute_correlogram(dat_clean, .x, year
 
 corr_data_drought_avg <- correlog_results %>%
   dplyr::filter(distance < 160000) %>% 
-  mutate(drought_status = ifelse(year %in% drought_years, "Drought", "Non-Drought")) %>% 
+  mutate(drought_status = ifelse(year %in% drought_years, "Hotter drought", "Other")) %>% 
   group_by(variable, drought_status, row_number) %>%
   summarise(
     year = mean(year, na.rm = TRUE),
@@ -262,70 +264,36 @@ corr_data_drought_avg <- corr_data_drought_avg %>%
 
 
 # Define the color scheme based on extracted colors
-color_palette <- c("Drought" = "#8b0000", "Non-Drought" = "#b0b0b0")  # Red & Gray
-fill_palette <- c("Drought" = "#8b0000", "Non-Drought" = "#b0b0b0")   # Same for ribbon shading
+color_palette <- c("Hotter drought" = "#8b0000", "Other" = "#b0b0b0")  # Red & Gray
+fill_palette <- c("Hotter drought" = "#8b0000", "Other" = "#b0b0b0")   # Same for ribbon shading
 
-# Plot using ggplot with facets for each variable ------------------------------
-windows()
-p_correlograms_ribbons <- corr_data_drought_avg %>% 
-  ggplot(aes(x = distance/1000, y = mean_corr, fill = drought_status)) +
-  #geom_ribbon(aes(ymin = mean_corr-sd_corr , 
-  #                ymax = mean_corr+sd_corr ), alpha = 0.2) +  # Confidence bands
-  geom_ribbon(aes(ymin = lower_ci, ymax = upper_ci), alpha = 0.2) +  # Confidence bands
-  geom_line(aes(color = drought_status), lwd = 0.8) +  # Line plot
-  geom_point(color = 'white', size = 1.5) +  # Points with size for significance
-  
-  geom_point(aes(shape = significant, color = drought_status),  size = 1) +  # Points with size for significance
-  # geom_point(aes(color = drought_status)) +  # Points with size for significance
-  scale_color_manual(values = color_palette) +  # Apply extracted colors to lines and points
-  scale_fill_manual(values = fill_palette) +  # Apply extracted colors to shaded CIs
-  scale_shape_manual(values = c("Yes" = 16, "No" = 1)) +  # 16 = closed circle, 1 = open circle 
-  geom_hline(yintercept = 0, lty = 'dashed', col = 'grey') +
-  facet_wrap(~ variable) +  # Facet by variable , scales = "free_y"
-  labs(title = "",
-       x = "Distance [km]",
-       y = "Spatial Correlation",
-       fill = "Drought Status",
-       color = "Drought Status",
-       size = "Significance") +
-  # theme_bw() +
-  #theme(legend.position = "bottom")  + # Move legend to the right
-  theme_classic(base_size = 8) +
-  theme(
-    aspect.ratio = 1, 
-    axis.ticks.y = element_line(),
-    axis.ticks.x = element_line(),
-    panel.grid.major = element_blank(), 
-    panel.grid.minor = element_blank(),
-    #panel.background = element_rect(fill = NA, colour = "black"),
-    #panel.background = element_rect(fill = "white", colour = "black"),
-    legend.position = "bottom",
-    #axis.title.y = element_blank(),
-    plot.title = element_text(size = 10) # Set the plot title size to 10
-  ) 
-p_correlograms_ribbons
 
+
+# Create a vector with custom facet labels
+facet_labels <- c(
+  "Population level [#]" = "[a] Population level [#]", # lab_popul_level = paste("[a] ", lab_popul_level),
+  "Aggregation timing [DOY]" = "[b] Aggregation timing [DOY]",
+  "Peak sw. timing [DOY]" = "[c] Peak sw. timing [DOY]",
+  "Peak sw. intensity [#]" = "[d] Peak sw. intensity [#]"
+)
 p_correlograms_lines <- corr_data_drought_avg %>% 
   ggplot(aes(x = distance/1000, y = mean_corr, fill = drought_status)) +
-  #geom_ribbon(aes(ymin = mean_corr-sd_corr , 
-  #                ymax = mean_corr+sd_corr ), alpha = 0.2) +  # Confidence bands
-  #geom_ribbon(aes(ymin = lower_ci, ymax = upper_ci), alpha = 0.2) +  # Confidence bands
   geom_line(aes(color = drought_status), lwd = 0.8) +  # Line plot
   geom_point(color = 'white', size = 2) +  # Points with size for significance
   
    geom_point(aes(shape = significant, color = drought_status),  size = 1) +  # Points with size for significance
- # geom_point(aes(color = drought_status)) +  # Points with size for significance
   scale_color_manual(values = color_palette) +  # Apply extracted colors to lines and points
   scale_fill_manual(values = fill_palette) +  # Apply extracted colors to shaded CIs
   scale_shape_manual(values = c("Yes" = 16, "No" = 1)) +  # 16 = closed circle, 1 = open circle 
   geom_hline(yintercept = 0, lty = 'dashed', col = 'grey') +
-   facet_wrap(~ variable) +  # Facet by variable , scales = "free_y"
+  facet_wrap(~ variable, labeller = labeller(variable = facet_labels)) + 
+  # facet_wrap(~ variable) +  # Facet by variable , scales = "free_y"
   labs(title = "",
        x = "Distance [km]",
        y = "Spatial Correlation",
        fill = "Drought Status",
        color = "Drought Status",
-       size = "Significance") +
+       shape = "Significance") +
  # theme_bw() +
   #theme(legend.position = "bottom")  + # Move legend to the right
   theme_classic(base_size = 8) +
@@ -335,22 +303,25 @@ p_correlograms_lines <- corr_data_drought_avg %>%
     axis.ticks.x = element_line(),
     panel.grid.major = element_blank(), 
     panel.grid.minor = element_blank(),
+    strip.background = element_blank(),
+    strip.text = element_text(size = 8, face = "plain"),  # Adjusts facet title text styling
     #panel.background = element_rect(fill = NA, colour = "black"),
-    #panel.background = element_rect(fill = "white", colour = "black"),
-    legend.position = "bottom",
+    panel.background = element_rect(fill = "white", colour = "black"),
+    legend.position = "right",
+    legend.key = element_blank(),
     #axis.title.y = element_blank(),
-    plot.title = element_text(size = 10) # Set the plot title size to 10
+    plot.title = element_text(size = 8) # Set the plot title size to 10
   ) 
 p_correlograms_lines
-p_correlograms_ribbons
+#p_correlograms_ribbons
 ggsave(filename = 'outFigs/p_correlograms_lines.png', plot = p_correlograms_lines, 
        width = 5, height = 5, dpi = 300, 
        bg = 'white')
 
-ggsave(filename = 'outFigs/p_correlograms_ribbons.png', 
-       plot = p_correlograms_ribbons, 
-       width = 5, height = 5, dpi = 300, 
-       bg = 'white')
+# ggsave(filename = 'outFigs/p_correlograms_ribbons.png', 
+#        plot = p_correlograms_ribbons, 
+#        width = 5, height = 5, dpi = 300, 
+#        bg = 'white')
 
 # pairwise correlation beetle-beetle: DOY -------------------------------------------
 
