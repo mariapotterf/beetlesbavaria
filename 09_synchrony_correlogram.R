@@ -262,7 +262,7 @@ corr_data_drought_avg <- corr_data_drought_avg %>%
                                       lab_peak_time, 
                                       lab_peak_growth)))
 
-
+fwrite(corr_data_drought_avg, 'outTable/spatial_correlogram_drougth.csv')
 # Define the color scheme based on extracted colors
 color_palette <- c("Hotter drought" = "#8b0000", "Other" = "#b0b0b0")  # Red & Gray
 fill_palette <- c("Hotter drought" = "#8b0000", "Other" = "#b0b0b0")   # Same for ribbon shading
@@ -318,10 +318,6 @@ ggsave(filename = 'outFigs/p_correlograms_lines.png', plot = p_correlograms_line
        width = 5, height = 5, dpi = 300, 
        bg = 'white')
 
-# ggsave(filename = 'outFigs/p_correlograms_ribbons.png', 
-#        plot = p_correlograms_ribbons, 
-#        width = 5, height = 5, dpi = 300, 
-#        bg = 'white')
 
 # pairwise correlation beetle-beetle: DOY -------------------------------------------
 
