@@ -1457,24 +1457,6 @@ ggplot(cor_shp) +
 ### RS plots -----------------------------------------------------------------
 
 
-df_damage %>%
-  ggplot(aes(x = Year, 
-             y = damaged_volume_total_m3/10000, 
-             group = Year,
-             fill = factor(Year))) + 
-  # geom_violin() +
-  geom_boxplot()
-
-
-df_damage %>%
-  ggplot(aes(x = Year, 
-             y = damaged_volume_total_m3)) + 
-  geom_point() + 
-  geom_smooth(method = "gam", formula = y ~ s(x, k = 4))
-
-
-
-
 #### show spearman correlation coefficient  -------
 # between volume damage and RS observation (wind, beetle)
 
