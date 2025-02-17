@@ -7,8 +7,10 @@
 
 library(readr)
 library(dplyr)
+library(tidyr)
 library(ncf)
 library(ggplot2)
+library(purrr)
 
 source("my_functions.R")
 
@@ -238,7 +240,7 @@ correlog_results <- map_dfr(variables, ~ compute_correlogram(dat_clean, .x, year
 
 corr_data_drought_avg <- correlog_results %>%
   dplyr::filter(distance < 160000) %>% 
-  mutate(drought_status = ifelse(year %in% drought_years, "Hotter drought", "Other")) %>% 
+  mutate(drought_status = ifelse(year %in% drought_years, "Hotter drought", "No Drought")) %>% 
   group_by(variable, drought_status, row_number) %>%
   summarise(
     year = mean(year, na.rm = TRUE),
@@ -264,8 +266,8 @@ corr_data_drought_avg <- corr_data_drought_avg %>%
 
 fwrite(corr_data_drought_avg, 'outTable/spatial_correlogram_drougth.csv')
 # Define the color scheme based on extracted colors
-color_palette <- c("Hotter drought" = "#8b0000", "Other" = "#b0b0b0")  # Red & Gray
-fill_palette <- c("Hotter drought" = "#8b0000", "Other" = "#b0b0b0")   # Same for ribbon shading
+color_palette <- c("Hotter drought" = "#8b0000", "No Drought" = "#b0b0b0")  # Red & Gray
+fill_palette <- c("Hotter drought" = "#8b0000", "No Drought" = "#b0b0b0")   # Same for ribbon shading
 
 
 
@@ -314,9 +316,61 @@ p_correlograms_lines <- corr_data_drought_avg %>%
   ) 
 p_correlograms_lines
 #p_correlograms_ribbons
-ggsave(filename = 'outFigs/p_correlograms_lines.png', plot = p_correlograms_lines, 
-       width = 5, height = 5, dpi = 300, 
+ggsave(filename = 'outFigs/p_correlograms_lines2.png', plot = p_correlograms_lines,
+       width = 5, height = 5, dpi = 300,
        bg = 'white')
+
+
+# for graphical abstract ----------------------------------
+
+color_palette <- c("Hotter drought" = "#d40000ff", "No Drought" = "#00ccffff")  # Red & Gray
+fill_palette <- c("Hotter drought" = "#d40000ff", "No Drought" = "#00ccffff")   # Same for ribbon shading
+
+
+p_correlograms_graph_abstr <- corr_data_drought_avg %>% 
+  dplyr::filter(variable == "Population level [#]") %>% 
+  ggplot(aes(x = distance/1000, y = mean_corr, fill = drought_status)) +
+  geom_line(aes(color = drought_status), lwd = 0.8) +  # Line plot
+  geom_point(color = 'white', size = 2) +  # Points with size for significance
+  
+  geom_point(aes(shape = significant, color = drought_status),  size = 1) +  # Points with size for significance
+  scale_color_manual(values = color_palette) +  # Apply extracted colors to lines and points
+  scale_fill_manual(values = fill_palette) +  # Apply extracted colors to shaded CIs
+  scale_shape_manual(values = c("Yes" = 16, "No" = 1)) +  # 16 = closed circle, 1 = open circle 
+  geom_hline(yintercept = 0, lty = 'dashed', col = 'grey') +
+  facet_wrap(~ variable, labeller = labeller(variable = facet_labels)) + 
+  # facet_wrap(~ variable) +  # Facet by variable , scales = "free_y"
+  labs(title = "",
+       x = "Distance [km]",
+       y = "Spatial Correlation",
+       fill = "Drought Status",
+       color = "Drought Status",
+       shape = "Significance") +
+  # theme_bw() +
+  #theme(legend.position = "bottom")  + # Move legend to the right
+  theme_classic(base_size = 8) +
+  theme(
+    aspect.ratio = 1, 
+    axis.ticks.y = element_line(),
+    axis.ticks.x = element_line(),
+    panel.grid.major = element_blank(), 
+    panel.grid.minor = element_blank(),
+    strip.background = element_blank(),
+    strip.text = element_text(size = 8, face = "plain"),  # Adjusts facet title text styling
+    #panel.background = element_rect(fill = NA, colour = "black"),
+    panel.background = element_rect(fill = "white", colour = "black"),
+    legend.position = "right",
+    legend.key = element_blank(),
+    #axis.title.y = element_blank(),
+    plot.title = element_text(size = 8) # Set the plot title size to 10
+  ) 
+p_correlograms__graph_abstr
+#p_correlograms_ribbons
+library(svglite)
+ggsave(filename = 'outFigs/p_correlograms_graph_abstract.svg', plot = p_correlograms_graph_abstr,
+       width = 5, height = 5, #dpi = 300,
+       bg = 'white',
+       device = "svg")
 
 
 # pairwise correlation beetle-beetle: DOY -------------------------------------------
