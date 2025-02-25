@@ -24,7 +24,7 @@ xy2       <- terra::project(xy, crs(germany))  # coordinate system from the DWD 
 xy2 <- st_as_sf(xy2)
 
 
-forest   <- rast("C:/Users/ge45lep/Documents/2022_BarkBeetles_Bavaria/outSpatial/bav_fortype_ext30_int2u_LZW.tif") # read trap location
+#forest   <- rast("C:/Users/ge45lep/Documents/2022_BarkBeetles_Bavaria/outSpatial/bav_fortype_ext30_int2u_LZW.tif") # read trap location
 #forest2  <- terra::project(forest, crs(germany))  # coordinate system from the DWD data: Germany
 #forest2  <- raster::raster(forest)  # coordinate system from the DWD data: Germany
 size(forest)
