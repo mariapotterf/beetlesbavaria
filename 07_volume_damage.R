@@ -1252,6 +1252,7 @@ ggarrange(p1, p2, nrow = 1, ncol = 2, align = 'hv', labels = c('[a]', '[b]'))
 
 
 
+# MAPS -----------------------------------------------------------------------------------
 
 ## Correlate between RS and volume data m3 ---------------------------------------------------
 df_cor <- df_merged_RS_damage_district %>% 
@@ -1341,7 +1342,6 @@ df_sum_ips_years <- sum_ips %>%
  
  hist(df_sum_ips_years_sf$sum)
  
-# MAPS -----------------------------------------------------------------------------------
  bav_shp <- st_read('rawData/outline_bavaria.gpkg')
  bav_3035 <- st_transform(bav_shp, crs(dmg_shp))
  
@@ -1349,7 +1349,7 @@ df_sum_ips_years <- sum_ips %>%
  
  
 # ad damage data to district geometry
-# MAP: plot correlation with beetle counts & tree damage ----------------------------------
+## MAP: plot correlation with beetle counts & tree damage ----------------------------------
 # Extract colors from RColorBrewer's YlOrRd palette
 colors <- rev(brewer.pal(9,  "RdYlBu" )) # "YlOrRd"  "RdYlBu"
 
@@ -1365,12 +1365,18 @@ map.damage <-
     geom_sf(data = df_sum_ips_years_sf,
             aes(color = sum_cap/1000), size = 2) +
   scale_color_gradientn(
-    name = "Beetle catch [#*1000]",
+    name = expression("Beetle catch [#*1000]"^" "),
+  #  name = expression("Beetle catch [1000 m"^" "*"]"),
+  #  name = expression("Beetle catch [1000 m"^3*"]"),  # working
+   # name = expression("Beetle catch [#*1000]"^" "), 
+   # name = "Beetle catch [#*1000]",
     colors = colors,
     guide = guide_colorbar(title.position = "top", title.hjust = 0.5)
   )  +
     scale_fill_gradientn(
-    name = bquote(Tree~mortality~('1000'~m^3)), #expression(Tree~mortality~('1000'm^3)) , #"Tree mortality [m3]",
+      name = expression("Tree mortality [1000 m"^3*"]"), 
+      #name = bquote("Tree mortality [1000 m"^3*"]"), 
+    #name ="Tree mortality [1000 m3]", # bquote(Tree~mortality~('1000'~m^3)), #expression(Tree~mortality~('1000'm^3)) , #"Tree mortality [m3]",
     colors = colors,
     guide = guide_colorbar(title.position = "top", title.hjust = 0.5)
   )  +
@@ -1380,13 +1386,21 @@ map.damage <-
     legend.position = "bottom",
     legend.title = element_text(angle = 0, size = 8),  # Smaller title
     legend.text = element_text(size =8),              # Smaller text
-    legend.key.width = unit(0.5, "cm"),                  # Adjust width
+    legend.box = "horizontal",  
+     legend.key.width = unit(0.5, "cm"),                  # Adjust width
     legend.key.height = unit(0.2, "cm"),               # Adjust height
+    legend.justification = "center",  # Ensures the legend is fully centered
     plot.title = element_text(hjust = 0, size = 8 )             # Center title
-  ) #+
+  )
+
   #annotation_scale(location = "bl", width_hint = 0.5) +  # Add scale bar at bottom left
   #annotation_north_arrow(location = "tl", which_north = "true", style = north_arrow_fancy_orienteering)  # Add north arrow at top left
 map.damage
+
+
+
+
+
 
 
 
@@ -1428,6 +1442,16 @@ damage_maps
 ggsave(filename = 'outFigs/damage_maps_R1.png', 
        plot = damage_maps, width = 7, 
        height = 5, dpi = 300, bg = 'white')
+
+
+#p_correlograms_ribbons
+library(svglite)
+
+ggsave(filename = 'outFigs/damage_maps.svg', plot = damage_maps,
+       width = 7, height = 5, dpi = 300,
+       bg = 'white',
+       device = "svg")
+
 
 
 
