@@ -365,6 +365,7 @@ p_correlograms_graph_abstr <- corr_data_drought_avg %>%
     plot.title = element_text(size = 8) # Set the plot title size to 10
   ) 
 p_correlograms__graph_abstr
+
 #p_correlograms_ribbons
 library(svglite)
 ggsave(filename = 'outFigs/p_correlograms_graph_abstract.svg', plot = p_correlograms_graph_abstr,
