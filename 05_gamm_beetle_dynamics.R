@@ -951,6 +951,10 @@ p3 <- adjust_predictions_counts(p3, divisor_population)
 my_colors_interaction <- c("#A50026", "#3366CC" ) # "#FDAE61"
 #my_colors_interaction <- c("#A50026", "#FDAE61" )
 
+# color palette for graphical abstract
+my_colors_interaction_graph_abstract <- c("#d40000ff","#00ccffff")  # Red & Gray
+
+
 
 p0.count <- create_effect_previous_year(data = p0, 
                               avg_data = avg_data_filt_lagged_plotting,
@@ -1002,6 +1006,23 @@ ggarrange(p0.count,p1.count,p2.count, p3.count,
           font.label = list(size = 8, face = "plain"))
 
 
+p3.count.graph.abst <- plot_effect_interactions(data = p3, 
+                                     avg_data = avg_data_filt_lagged_plotting, 
+                                     x_col = "tmp_lag0", 
+                                     y_col = "sum_ips", 
+                                     temp_label = temp_label, 
+                                     y_title = paste(lab_popul_level, '*1000'),
+                                     x_annotate = 15,
+                                     lab_annotate = p_val_int)  +
+  scale_color_manual(values = my_colors_interaction_graph_abstract, name = "SPEI") +
+  scale_fill_manual(values = my_colors_interaction_graph_abstract, name = "SPEI") #+
+
+#p_correlograms_ribbons
+library(svglite)
+ggsave(filename = 'outFigs/p3.count.graph.abst.svg', plot = p3.count.graph.abst,
+       width = 5, height = 5, #dpi = 300,
+       bg = 'white',
+       device = "svg")
 
 
 ##### PLOT DOY aggregation ---------------------------------------------------------
@@ -1087,6 +1108,31 @@ p3.agg <- plot_effect_interactions(p3,
 (p3.agg)
 
 
+
+
+p3.agg.graph.abst <- plot_effect_interactions(data = p3, 
+                                              avg_data = filter(avg_data_filt_lagged_plotting, agg_doy < 200),
+                                              x_col = "tmp_lag0", 
+                                              y_col = "agg_doy", 
+                                               temp_label = temp_label, 
+                                              y_title = lab_colonization_time,
+                                               x_annotate = 15,
+                                               lab_annotate = p_val_int)  +
+  scale_color_manual(values = my_colors_interaction_graph_abstract, name = "SPEI") +
+  scale_fill_manual(values = my_colors_interaction_graph_abstract, name = "SPEI") #+
+
+#p_correlograms_ribbons
+library(svglite)
+p_grap_abstr <- ggarrange(p3.agg.graph.abst, p3.count.graph.abst, ncol = 2)
+ggsave(filename = 'outFigs/p_grap_abstr.svg', plot = p_grap_abstr,
+       width = 10, height = 5, #dpi = 300,
+       bg = 'white',
+       device = "svg")
+
+
+
+
+
 #### PLOT: Peak DOY  ------------------------------------------------------------
 summary(fin.m.peak.doy.gamma)
 
@@ -1159,6 +1205,8 @@ p3.peak <- plot_effect_interactions(p3,
   scale_fill_manual(values = my_colors_interaction, name = "SPEI") #+
 
 (p3.peak)
+
+
 
 
 
